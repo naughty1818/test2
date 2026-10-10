@@ -10,10 +10,11 @@
 - বাংলা category filter ও title/description search
 - Video watch page, share link, view count ও account-based like
 - Display name, unique handle ও bio-সহ editable public channel profile
+- ClipNest-inspired responsive UI: featured home banner, channel discovery, search, watch, profile ও mobile navigation
 - Private ভিডিও কেবল uploader দেখতে পারবেন
 - পুরনো Video Hub metadata-র ভিডিও legacy public item হিসেবে দেখা যাবে
 
-YouTube upload ও comments এই সংস্করণে নেই।
+YouTube upload ও backend comments এই সংস্করণে নেই; upload সরাসরি Cloudflare R2-তে হয়।
 
 ## যা লাগবে
 
