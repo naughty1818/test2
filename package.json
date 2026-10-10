@@ -1,7 +1,7 @@
 {
   "name": "video-hub-r2",
   "version": "1.0.0",
-  "description": "Video upload website: browser uploads directly to Cloudflare R2. Ready for Render.",
+  "description": "Bengali video hub with Google OAuth, channel profiles, privacy controls, and direct Cloudflare R2 uploads.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

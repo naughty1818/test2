@@ -1,208 +1,230 @@
 <!doctype html>
 <html lang="bn">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Video Hub</title>
-<style>
-  :root {
-    --bg: #0f0f10; --panel: #1a1a1c; --panel-2: #232326; --text: #f1f1f1;
-    --muted: #a0a0a8; --accent: #ff4e45; --ok: #3ecf8e; --err: #ff6b6b; --radius: 12px;
-  }
-  @media (prefers-color-scheme: light) {
-    :root { --bg:#f6f6f7; --panel:#fff; --panel-2:#efeff1; --text:#16161a; --muted:#6b6b76; }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  header { padding: 14px 24px; border-bottom: 1px solid var(--panel-2); background: var(--panel);
-    position: sticky; top: 0; z-index: 5; }
-  header h1 { margin: 0; font-size: 20px; }
-  header h1 span { color: var(--accent); }
-  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
-  section { margin-bottom: 40px; }
-  h2 { font-size: 18px; margin: 0 0 14px; }
-  .card { background: var(--panel); border-radius: var(--radius); padding: 20px; }
-  form { display: grid; gap: 14px; }
-  label { display: grid; gap: 6px; font-size: 14px; color: var(--muted); }
-  input[type=text], input[type=password], textarea {
-    background: var(--panel-2); border: 1px solid transparent; color: var(--text);
-    border-radius: 8px; padding: 10px 12px; font: inherit; width: 100%; }
-  input:focus, textarea:focus { outline: none; border-color: var(--accent); }
-  textarea { min-height: 80px; resize: vertical; }
-  .drop { border: 2px dashed var(--panel-2); border-radius: var(--radius); padding: 28px;
-    text-align: center; color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s; }
-  .drop.over, .drop:hover { border-color: var(--accent); background: var(--panel-2); }
-  .drop strong { color: var(--text); word-break: break-all; }
-  .drop input { display: none; }
-  button { background: var(--accent); color: #fff; border: 0; border-radius: 8px;
-    padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer; }
-  button:disabled { opacity: .5; cursor: not-allowed; }
-  .progress { height: 8px; background: var(--panel-2); border-radius: 99px; overflow: hidden; display: none; }
-  .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .15s; }
-  #status { font-size: 14px; min-height: 22px; }
-  #status.ok { color: var(--ok); }
-  #status.err { color: var(--err); }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
-  .video { background: var(--panel); border-radius: var(--radius); overflow: hidden; }
-  .video video { width: 100%; aspect-ratio: 16/9; background: #000; display: block; }
-  .video .meta { padding: 12px 14px 14px; }
-  .video h3 { margin: 0 0 4px; font-size: 15px; line-height: 1.35; word-break: break-word; }
-  .video p { margin: 0; font-size: 13px; color: var(--muted); }
-  .empty { color: var(--muted); }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111820">
+  <title>আড্ডা ভিডিও · আপনার ভিডিও হাব</title>
+  <style>
+    :root {
+      --bg: #0b1117;
+      --bg-soft: #101a22;
+      --surface: #15222c;
+      --surface-2: #1c2c37;
+      --surface-3: #233642;
+      --line: rgba(210, 231, 239, .13);
+      --text: #edf7f8;
+      --muted: #9bb0b8;
+      --accent: #57d6b0;
+      --accent-strong: #2bbf97;
+      --accent-ink: #072a22;
+      --yellow: #ffd36a;
+      --danger: #ff8c8c;
+      --shadow: 0 18px 50px rgba(0,0,0,.22);
+      --radius: 18px;
+      --max: 1180px;
+    }
+    @media (prefers-color-scheme: light) {
+      :root { --bg:#f4f8f8; --bg-soft:#eef4f3; --surface:#fff; --surface-2:#edf4f3; --surface-3:#e2eeeb; --line:rgba(16,43,48,.14); --text:#122329; --muted:#597079; --shadow:0 16px 40px rgba(42,72,75,.12); }
+    }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; background:radial-gradient(circle at 76% -10%, rgba(71,150,145,.18), transparent 30rem), var(--bg); color:var(--text); font:16px/1.55 system-ui,-apple-system,"Noto Sans Bengali","Segoe UI",sans-serif; min-height:100vh; }
+    a { color:inherit; text-decoration:none; }
+    button, input, textarea, select { font:inherit; }
+    button { cursor:pointer; }
+    button:disabled { cursor:not-allowed; opacity:.55; }
+    :focus-visible { outline:3px solid var(--yellow); outline-offset:3px; }
+    .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+    .shell { max-width:var(--max); margin:auto; padding:0 22px; }
+    .topbar { position:sticky; top:0; z-index:20; border-bottom:1px solid var(--line); background:color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter:blur(18px); }
+    .topbar-inner { height:76px; display:flex; align-items:center; gap:22px; }
+    .brand { display:inline-flex; align-items:center; gap:11px; font-size:1.2rem; font-weight:850; letter-spacing:-.03em; white-space:nowrap; }
+    .brand-mark { width:36px; height:36px; border-radius:12px 12px 12px 4px; display:grid; place-items:center; color:var(--accent-ink); background:var(--accent); font-size:1rem; box-shadow:0 7px 18px rgba(87,214,176,.25); }
+    .brand em { color:var(--accent); font-style:normal; }
+    .main-nav { display:flex; align-items:center; gap:4px; }
+    .nav-link { color:var(--muted); font-size:.94rem; padding:9px 12px; border-radius:10px; }
+    .nav-link:hover, .nav-link.active { color:var(--text); background:var(--surface-2); }
+    .searchbar { flex:1; max-width:410px; margin-left:auto; position:relative; }
+    .searchbar input { width:100%; border:1px solid var(--line); background:var(--surface); color:var(--text); border-radius:999px; padding:11px 44px 11px 18px; }
+    .searchbar button { position:absolute; right:5px; top:5px; border:0; border-radius:50%; width:34px; height:34px; background:var(--surface-3); color:var(--text); }
+    .account { position:relative; }
+    .account-toggle { display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); background:var(--surface); color:var(--text); border-radius:999px; padding:6px 12px 6px 6px; }
+    .avatar { width:30px; height:30px; display:inline-grid; place-items:center; border-radius:50%; background:var(--accent); color:var(--accent-ink); font-size:.78rem; font-weight:850; }
+    .menu { display:none; position:absolute; right:0; top:calc(100% + 10px); min-width:220px; padding:8px; background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); }
+    .menu.open { display:block; }
+    .menu button, .menu a { display:block; width:100%; border:0; background:transparent; color:var(--text); text-align:left; border-radius:9px; padding:10px 12px; }
+    .menu button:hover, .menu a:hover { background:var(--surface-2); }
+    .menu .menu-note { padding:8px 12px 6px; color:var(--muted); font-size:.82rem; border-bottom:1px solid var(--line); margin-bottom:4px; }
+    .mobile-toggle { display:none; border:0; border-radius:9px; background:var(--surface-2); color:var(--text); padding:9px 11px; }
+    main { min-height:calc(100vh - 76px); padding:42px 0 80px; }
+    .hero { display:grid; grid-template-columns:1.15fr .85fr; gap:34px; align-items:center; padding:28px 0 44px; }
+    .eyebrow { display:inline-flex; align-items:center; gap:8px; color:var(--accent); font-size:.82rem; letter-spacing:.08em; font-weight:800; text-transform:uppercase; }
+    .eyebrow::before { content:""; width:24px; height:2px; background:var(--accent); }
+    h1,h2,h3,p { margin-top:0; }
+    h1 { margin-bottom:16px; max-width:650px; font-size:clamp(2.1rem,5vw,4.5rem); line-height:1.03; letter-spacing:-.06em; }
+    h1 .highlight { color:var(--accent); }
+    .hero-copy { color:var(--muted); max-width:600px; font-size:1.05rem; }
+    .hero-card { position:relative; min-height:250px; border:1px solid var(--line); border-radius:28px; overflow:hidden; background:linear-gradient(135deg, var(--surface), #183d3b); box-shadow:var(--shadow); }
+    .hero-card::before, .hero-card::after { content:""; position:absolute; border-radius:50%; filter:blur(2px); }
+    .hero-card::before { width:210px; height:210px; background:rgba(87,214,176,.22); right:-26px; top:-38px; }
+    .hero-card::after { width:135px; height:135px; background:rgba(255,211,106,.18); left:-30px; bottom:-35px; }
+    .hero-spark { position:absolute; z-index:1; inset:30px; display:flex; flex-direction:column; justify-content:flex-end; }
+    .hero-spark strong { font-size:1.7rem; max-width:250px; line-height:1.15; }
+    .hero-spark span { margin-top:9px; color:#c9e8df; font-size:.9rem; }
+    .section-head { display:flex; align-items:end; justify-content:space-between; gap:18px; margin:12px 0 19px; }
+    .section-head h2 { margin:0; font-size:1.4rem; letter-spacing:-.03em; }
+    .section-head p { margin:4px 0 0; color:var(--muted); font-size:.9rem; }
+    .filters { display:flex; align-items:center; flex-wrap:wrap; gap:9px; margin-bottom:24px; }
+    .chip { border:1px solid var(--line); color:var(--muted); background:var(--surface); padding:8px 14px; border-radius:999px; }
+    .chip:hover, .chip.selected { border-color:var(--accent); color:var(--accent-ink); background:var(--accent); }
+    .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px; }
+    .video-card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; box-shadow:0 6px 20px rgba(0,0,0,.08); transition:transform .18s ease, border-color .18s ease; }
+    .video-card:hover { transform:translateY(-3px); border-color:rgba(87,214,176,.5); }
+    .thumb { display:flex; align-items:center; justify-content:center; aspect-ratio:16/9; background:linear-gradient(145deg,#19323c,#0d2528); position:relative; }
+    .thumb::after { content:""; position:absolute; inset:14px; border:1px solid rgba(255,255,255,.08); border-radius:12px; }
+    .play { width:52px; height:52px; display:grid; place-items:center; padding-left:3px; border:0; border-radius:50%; background:var(--accent); color:var(--accent-ink); font-size:1.15rem; z-index:1; box-shadow:0 8px 26px rgba(0,0,0,.2); }
+    .duration { position:absolute; bottom:11px; right:11px; z-index:1; border-radius:5px; padding:2px 6px; background:rgba(0,0,0,.58); color:#fff; font-size:.75rem; }
+    .card-body { padding:15px 16px 17px; }
+    .card-title { overflow:hidden; margin-bottom:7px; font-size:1.01rem; line-height:1.3; white-space:nowrap; text-overflow:ellipsis; }
+    .card-description { min-height:24px; margin-bottom:12px; color:var(--muted); overflow:hidden; font-size:.85rem; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+    .card-meta, .channel-line { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:.8rem; }
+    .card-meta .dot { width:3px; height:3px; border-radius:50%; background:var(--muted); }
+    .mini-avatar { width:22px; height:22px; display:inline-grid; place-items:center; flex:0 0 auto; border-radius:50%; background:var(--surface-3); color:var(--accent); font-size:.65rem; font-weight:800; }
+    .empty { border:1px dashed var(--line); border-radius:var(--radius); padding:42px 22px; color:var(--muted); text-align:center; grid-column:1/-1; }
+    .loading { color:var(--muted); padding:30px 0; }
+    .load-more { display:block; margin:26px auto 0; }
+    .btn { border:1px solid transparent; border-radius:11px; padding:10px 17px; font-weight:750; }
+    .btn-primary { color:var(--accent-ink); background:var(--accent); }
+    .btn-primary:hover { background:#7be2c3; }
+    .btn-ghost { color:var(--text); background:var(--surface); border-color:var(--line); }
+    .btn-ghost:hover { background:var(--surface-2); border-color:var(--accent); }
+    .btn-danger { color:var(--danger); background:transparent; border-color:rgba(255,140,140,.4); }
+    .btn-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .watch-layout { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(270px,.6fr); gap:28px; }
+    .watch-player { width:100%; max-height:69vh; aspect-ratio:16/9; border-radius:18px; background:#000; display:block; }
+    .watch-title { margin:22px 0 8px; font-size:clamp(1.45rem,3vw,2.4rem); letter-spacing:-.04em; }
+    .watch-description { white-space:pre-wrap; color:var(--muted); }
+    .watch-actions { display:flex; align-items:center; gap:10px; padding:14px 0 18px; border-bottom:1px solid var(--line); }
+    .watch-stats { color:var(--muted); font-size:.87rem; margin-left:auto; }
+    .watch-side { align-self:start; padding:22px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); }
+    .watch-side h3 { margin-bottom:13px; font-size:1rem; }
+    .watch-side p { color:var(--muted); font-size:.9rem; }
+    .profile-hero { display:flex; justify-content:space-between; align-items:center; gap:20px; padding:24px; margin-bottom:30px; border:1px solid var(--line); background:linear-gradient(120deg,var(--surface),var(--bg-soft)); border-radius:var(--radius); }
+    .profile-main { display:flex; align-items:center; gap:17px; min-width:0; }
+    .profile-avatar { width:74px; height:74px; display:grid; place-items:center; border-radius:22px 22px 22px 5px; background:var(--accent); color:var(--accent-ink); font-size:1.65rem; font-weight:900; }
+    .profile-main h1 { margin:0 0 2px; font-size:clamp(1.45rem,4vw,2.4rem); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .handle { color:var(--accent); }
+    .profile-bio { margin:7px 0 0; color:var(--muted); max-width:600px; white-space:pre-wrap; }
+    .profile-edit { display:none; margin-bottom:30px; }
+    .profile-edit.open { display:block; }
+    .panel { padding:23px; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); }
+    .panel h2 { margin-bottom:17px; font-size:1.25rem; }
+    .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .field { display:grid; gap:7px; }
+    .field.full { grid-column:1/-1; }
+    .field label { font-size:.88rem; font-weight:700; }
+    .field small, .hint { color:var(--muted); font-size:.78rem; }
+    input[type="text"], input[type="search"], textarea, select { width:100%; color:var(--text); background:var(--surface-2); border:1px solid var(--line); border-radius:10px; padding:11px 13px; }
+    textarea { min-height:110px; resize:vertical; }
+    .upload-card { max-width:780px; margin:0 auto; }
+    .dropzone { min-height:154px; display:grid; place-items:center; text-align:center; padding:25px; border:2px dashed var(--line); border-radius:15px; background:var(--bg-soft); color:var(--muted); cursor:pointer; }
+    .dropzone:hover, .dropzone.over { border-color:var(--accent); background:var(--surface-2); }
+    .dropzone strong { display:block; color:var(--text); margin-bottom:4px; word-break:break-word; }
+    .dropzone input { position:absolute; width:1px; height:1px; opacity:0; }
+    .visibility { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+    .visibility label { display:flex; align-items:flex-start; gap:8px; min-height:74px; padding:12px; border:1px solid var(--line); border-radius:11px; cursor:pointer; }
+    .visibility label:has(input:checked) { border-color:var(--accent); background:rgba(87,214,176,.09); }
+    .visibility b { display:block; font-size:.88rem; }
+    .visibility span { display:block; color:var(--muted); font-size:.75rem; }
+    .progress-wrap { display:none; gap:7px; color:var(--muted); font-size:.83rem; }
+    .progress-wrap.show { display:grid; }
+    progress { width:100%; height:9px; accent-color:var(--accent); }
+    .notice { min-height:24px; color:var(--muted); font-size:.87rem; }
+    .notice.ok { color:var(--accent); }
+    .notice.error { color:var(--danger); }
+    .auth-card { max-width:530px; margin:20px auto; padding:36px 28px; text-align:center; border:1px solid var(--line); background:var(--surface); border-radius:var(--radius); }
+    .auth-card h1 { margin:0 auto 12px; font-size:2rem; }
+    .auth-card p { color:var(--muted); }
+    footer { border-top:1px solid var(--line); padding:24px 0 90px; color:var(--muted); font-size:.82rem; }
+    .toast { position:fixed; right:20px; bottom:22px; z-index:30; max-width:min(380px,calc(100vw - 40px)); padding:13px 16px; border:1px solid var(--line); border-radius:11px; background:var(--surface); box-shadow:var(--shadow); transform:translateY(20px); opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; }
+    .toast.show { transform:translateY(0); opacity:1; }
+    @media (max-width:900px) { .grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .watch-layout { grid-template-columns:1fr; } .watch-side { order:-1; } }
+    @media (max-width:720px) {
+      .shell { padding:0 15px; } .topbar-inner { height:66px; gap:10px; } .brand { margin-right:auto; } .main-nav { display:none; position:absolute; top:66px; left:0; right:0; padding:10px 15px; flex-direction:column; align-items:stretch; background:var(--surface); border-bottom:1px solid var(--line); } .main-nav.open { display:flex; } .mobile-toggle { display:block; } .searchbar { order:5; position:absolute; top:76px; left:15px; right:15px; max-width:none; } main { padding-top:65px; } .hero { grid-template-columns:1fr; padding-top:20px; } h1 { font-size:clamp(2.1rem,12vw,3.5rem); } .hero-card { min-height:190px; } .section-head { align-items:flex-start; flex-direction:column; gap:4px; } .grid { grid-template-columns:1fr; } .profile-hero { align-items:flex-start; flex-direction:column; } .profile-main { width:100%; } .profile-edit .form-grid, .form-grid { grid-template-columns:1fr; } .field.full { grid-column:auto; } .visibility { grid-template-columns:1fr; } .watch-actions { flex-wrap:wrap; } .watch-stats { width:100%; margin-left:0; } footer { padding-bottom:110px; }
+    }
+    @media (prefers-reduced-motion:reduce) { *, *::before, *::after { scroll-behavior:auto !important; transition-duration:.01ms !important; animation-duration:.01ms !important; } .video-card:hover { transform:none; } }
+  </style>
 </head>
 <body>
-<header><h1>Video<span>Hub</span></h1></header>
-
-<main>
-  <section>
-    <h2>Video upload koro</h2>
-    <div class="card">
-      <form id="uploadForm">
-        <label class="drop" id="drop">
-          <input type="file" id="file" accept="video/*" required>
-          <div id="dropText"><strong>Video file select koro</strong> ba ekhane drag &amp; drop koro</div>
-        </label>
-        <label>Title
-          <input type="text" id="title" maxlength="100" placeholder="Video er naam">
-        </label>
-        <label>Description
-          <textarea id="description" maxlength="5000" placeholder="Optional"></textarea>
-        </label>
-        <label>Upload password
-          <input type="password" id="password" required autocomplete="current-password">
-        </label>
-        <div class="progress" id="progress"><div id="bar"></div></div>
-        <div id="status"></div>
-        <div><button type="submit" id="submitBtn">Upload</button></div>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a class="brand" href="/" data-route aria-label="আড্ডা ভিডিও হোম"><span class="brand-mark" aria-hidden="true">▶</span><span>আড্ডা <em>ভিডিও</em></span></a>
+      <nav class="main-nav" id="mainNav" aria-label="প্রধান নেভিগেশন">
+        <a class="nav-link" href="/" data-route data-nav="home">হোম</a>
+        <a class="nav-link" href="/upload" data-route data-nav="upload">আপলোড</a>
+      </nav>
+      <form class="searchbar" id="searchForm" role="search">
+        <label class="sr-only" for="globalSearch">ভিডিও খুঁজুন</label>
+        <input id="globalSearch" type="search" placeholder="ভিডিও খুঁজুন…" autocomplete="off">
+        <button type="submit" aria-label="খুঁজুন">⌕</button>
       </form>
+      <button class="mobile-toggle" id="mobileToggle" aria-expanded="false" aria-controls="mainNav" aria-label="মেনু খুলুন">☰</button>
+      <div class="account" id="accountArea"></div>
     </div>
-  </section>
+  </header>
+  <main id="app" class="shell" tabindex="-1"></main>
+  <footer><div class="shell">আপনার গল্প, আপনার কণ্ঠ—নিরাপদে শেয়ার করুন। · আড্ডা ভিডিও</div></footer>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <section>
-    <h2>Videos</h2>
-    <div class="grid" id="videos"><p class="empty">Loading...</p></div>
-  </section>
-</main>
-
-<script>
-const $ = (id) => document.getElementById(id);
-const form = $('uploadForm'), fileInput = $('file'), drop = $('drop');
-let maxFileMb = 500;
-
-function fmtSize(b) { return b > 1e9 ? (b / 1e9).toFixed(2) + ' GB' : (b / 1e6).toFixed(1) + ' MB'; }
-function setStatus(text, cls = '') { const s = $('status'); s.textContent = text; s.className = cls; }
-
-fetch('/api/config').then((r) => r.json()).then((c) => { maxFileMb = c.maxFileMb; }).catch(() => {});
-try { $('password').value = sessionStorage.getItem('pw') || ''; } catch {}
-
-// ---- file select / drag & drop ----
-fileInput.addEventListener('change', () => {
-  const f = fileInput.files[0];
-  if (!f) return;
-  $('dropText').innerHTML = '<strong></strong> · ' + fmtSize(f.size);
-  $('dropText').querySelector('strong').textContent = f.name;
-  if (!$('title').value) $('title').value = f.name.replace(/\.[^.]+$/, '');
-});
-['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
-['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
-drop.addEventListener('drop', (e) => {
-  if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; fileInput.dispatchEvent(new Event('change')); }
-});
-
-// ---- helpers ----
-async function api(path, password, body) {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-app-password': password },
-    body: JSON.stringify(body)
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Request fail hoyeche (' + res.status + ')');
-  return data;
-}
-
-function putToStorage(url, file, onProgress) {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('PUT', url);
-    xhr.setRequestHeader('Content-Type', file.type);
-    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300)
-      ? resolve()
-      : reject(new Error('R2 upload fail (' + xhr.status + '). Bucket er CORS setting ta check koro.'));
-    xhr.onerror = () => reject(new Error('Network/CORS error. README er CORS step ta kora hoyeche to?'));
-    xhr.send(file);
-  });
-}
-
-// ---- upload flow ----
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const f = fileInput.files[0];
-  const password = $('password').value;
-  if (!f) return;
-  if (!f.type.startsWith('video/')) return setStatus('Eta video file na, ba browser format ta chine na.', 'err');
-  if (f.size > maxFileMb * 1024 * 1024) return setStatus('File ' + maxFileMb + 'MB er beshi hoite parbe na.', 'err');
-
-  $('submitBtn').disabled = true;
-  $('progress').style.display = 'block';
-  $('bar').style.width = '0';
-  try {
-    setStatus('Upload link nichhi...');
-    const { uploadUrl, objectName } = await api('/api/upload-url', password, {
-      filename: f.name, contentType: f.type, size: f.size
-    });
-    try { sessionStorage.setItem('pw', password); } catch {}
-
-    await putToStorage(uploadUrl, f, (pct) => {
-      $('bar').style.width = pct + '%';
-      setStatus('Upload hocche... ' + pct + '%');
-    });
-
-    setStatus('Shesh kortechi...');
-    await api('/api/finish', password, {
-      objectName, title: $('title').value || f.name, description: $('description').value
-    });
-
-    setStatus('Upload hoye geche ✔', 'ok');
-    form.reset();
-    $('password').value = password;
-    $('dropText').innerHTML = '<strong>Video file select koro</strong> ba ekhane drag &amp; drop koro';
-    loadVideos();
-  } catch (err) {
-    setStatus(err.message, 'err');
-  } finally {
-    $('submitBtn').disabled = false;
-    $('progress').style.display = 'none';
-  }
-});
-
-// ---- video list ----
-async function loadVideos() {
-  const box = $('videos');
-  try {
-    const res = await fetch('/api/videos');
-    const list = await res.json();
-    if (!res.ok) throw new Error(list.error || 'Load kora jay nai');
-    if (!list.length) { box.innerHTML = '<p class="empty">Ekhono kono video nai.</p>'; return; }
-    box.innerHTML = '';
-    for (const v of list) {
-      const el = document.createElement('article');
-      el.className = 'video';
-      el.innerHTML = '<video controls preload="metadata"></video><div class="meta"><h3></h3><p></p></div>';
-      el.querySelector('video').src = v.url;
-      el.querySelector('h3').textContent = v.title;
-      el.querySelector('p').textContent = fmtSize(v.size) + ' · ' + new Date(v.created).toLocaleDateString();
-      box.appendChild(el);
-    }
-  } catch (err) {
-    box.innerHTML = '<p class="empty"></p>';
-    box.firstChild.textContent = 'Videos load hoy nai: ' + err.message;
-  }
-}
-loadVideos();
-</script>
+  <script>
+    'use strict';
+    const app = document.getElementById('app');
+    const accountArea = document.getElementById('accountArea');
+    const mainNav = document.getElementById('mainNav');
+    const mobileToggle = document.getElementById('mobileToggle');
+    const searchForm = document.getElementById('searchForm');
+    const globalSearch = document.getElementById('globalSearch');
+    const toast = document.getElementById('toast');
+    const state = { config: { maxFileMb: 500, googleLoginEnabled: false }, session: { user: null, profile: null }, category: '', query: '', homeOffset: 0, routeToken: 0, toastTimer: null };
+    const categories = [
+      { value:'', label:'সব ভিডিও' }, { value:'ভ্রমণ', label:'ভ্রমণ' }, { value:'রান্না', label:'রান্না' }, { value:'ক্রিয়েটর', label:'ক্রিয়েটর' }, { value:'গল্প', label:'গল্প' }, { value:'শেখা', label:'শেখা' }, { value:'অন্যান্য', label:'অন্যান্য' }
+    ];
+    const $ = (tag, props, children) => { const el = document.createElement(tag); if (props) Object.keys(props).forEach((key) => { if (key === 'class') el.className = props[key]; else if (key === 'text') el.textContent = props[key]; else if (key === 'htmlFor') el.htmlFor = props[key]; else if (key.startsWith('on')) el.addEventListener(key.slice(2).toLowerCase(), props[key]); else if (key === 'dataset') Object.assign(el.dataset, props[key]); else el.setAttribute(key, props[key]); }); (children || []).forEach((child) => el.append(child)); return el; };
+    const text = (value, fallback='') => value === null || value === undefined ? fallback : String(value);
+    const initials = (value) => text(value, 'আ').trim().slice(0, 1).toUpperCase() || 'আ';
+    const fmtSize = (bytes) => { const n = Number(bytes) || 0; if (n >= 1073741824) return (n / 1073741824).toFixed(1) + ' GB'; if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB'; if (n >= 1024) return (n / 1024).toFixed(0) + ' KB'; return n + ' B'; };
+    const fmtDate = (date) => { if (!date) return 'তারিখ অজানা'; try { return new Intl.DateTimeFormat('bn-BD', { day:'numeric', month:'short', year:'numeric' }).format(new Date(date)); } catch (_) { return text(date); } };
+    const getHandle = (profile, user) => text(profile && profile.handle, text(user && (user.handle || user.name), 'member')).replace(/^@/, '');
+    const getName = (profile, user) => text(profile && profile.displayName, text(user && (user.name || user.email), 'ভিডিও নির্মাতা'));
+    const escapePath = (part) => encodeURIComponent(text(part));
+    function notify(message, kind='') { toast.textContent = message; toast.className = 'toast show'; if (kind === 'error') toast.style.borderColor = 'var(--danger)'; else toast.style.borderColor = ''; clearTimeout(state.toastTimer); state.toastTimer = setTimeout(() => { toast.className = 'toast'; }, 3600); }
+    function setNotice(el, message, kind='') { if (!el) return; el.textContent = message; el.className = 'notice' + (kind ? ' ' + kind : ''); }
+    async function jsonFetch(url, options={}) { const opts = { credentials:'same-origin', ...options, headers: { Accept:'application/json', ...(options.headers || {}) } }; if (opts.body && typeof opts.body !== 'string') { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(opts.body); } const response = await fetch(url, opts); const data = await response.json().catch(() => ({})); if (!response.ok) { const error = new Error(text(data.error, text(data.message, 'অনুরোধটি সম্পন্ন করা যায়নি।'))); error.status = response.status; throw error; } return data; }
+    function updateNav(route) { document.querySelectorAll('[data-nav]').forEach((link) => link.classList.toggle('active', route === link.dataset.nav)); }
+    function navigate(path) { if (location.pathname + location.search !== path) history.pushState({}, '', path); closeMobile(); renderRoute(); }
+    function closeMobile() { mainNav.classList.remove('open'); mobileToggle.setAttribute('aria-expanded', 'false'); }
+    function button(label, cls='btn btn-ghost', handler=null) { return $('button', { class:cls, type:'button', text:label, ...(handler ? { onClick:handler } : {}) }); }
+    function linkButton(label, path, cls='btn btn-primary') { return $('a', { class:cls, href:path, 'data-route':'', text:label }); }
+    function setPage(children) { app.replaceChildren(...children); app.focus({ preventScroll:true }); }
+    function loadingPage(message='লোড হচ্ছে…') { setPage([$ ('p', { class:'loading', text:message })]); }
+    function renderAccount() { accountArea.replaceChildren(); const profile = state.session.profile; if (!state.session.user) { const wrap = $('div', { class:'account' }); const login = button('গুগল দিয়ে লগইন', 'btn btn-primary', () => { if (state.config.googleLoginEnabled) location.href = '/auth/google'; else notify('Google লগইন এখনো কনফিগার করা হয়নি।', 'error'); }); if (!state.config.googleLoginEnabled) login.title = 'সার্ভারে Google OAuth কনফিগার করা নেই'; wrap.append(login); accountArea.append(wrap); return; } const toggle = $('button', { class:'account-toggle', type:'button', 'aria-expanded':'false', 'aria-haspopup':'true' }, [$('span', { class:'avatar', text:initials(getName(profile, state.session.user)) }), $('span', { text:getName(profile, state.session.user) })]); const menu = $('div', { class:'menu' }, [$('div', { class:'menu-note', text:'আপনার অ্যাকাউন্ট' })]); const channel = $('a', { href:'/channel/' + escapePath(getHandle(profile, state.session.user)), 'data-route':'', text:'আমার চ্যানেল' }); const upload = $('a', { href:'/upload', 'data-route':'', text:'নতুন ভিডিও আপলোড' }); const logout = button('লগআউট', 'btn-menu', async () => { try { await jsonFetch('/auth/logout', { method:'POST', body:{} }); state.session = { user:null, profile:null }; menu.classList.remove('open'); renderAccount(); notify('আপনি লগআউট করেছেন।'); renderRoute(); } catch (err) { notify(err.message, 'error'); } }); menu.append(channel, upload, logout); toggle.addEventListener('click', () => { const open = menu.classList.toggle('open'); toggle.setAttribute('aria-expanded', String(open)); }); const wrap = $('div', { class:'account' }, [toggle, menu]); accountArea.append(wrap); }
+    function renderFilters(onChange) { const wrap = $('div', { class:'filters', role:'list', 'aria-label':'ক্যাটাগরি ফিল্টার' }); categories.forEach((category) => { const chip = button(category.label, 'chip' + (state.category === category.value ? ' selected' : ''), () => onChange(category.value)); chip.setAttribute('aria-pressed', String(state.category === category.value)); wrap.append(chip); }); return wrap; }
+    function videoCard(video) { const owner = text(video.ownerName, text(video.ownerHandle, 'ভিডিও নির্মাতা')); const card = $('article', { class:'video-card' }); const thumb = $('div', { class:'thumb', role:'img', 'aria-label':'ভিডিও চালানোর জন্য খুলুন' }); const play = button('▶', 'play', () => navigate('/watch/' + escapePath(video.id))); thumb.append(play); if (video.duration) thumb.append($('span', { class:'duration', text:video.duration })); const body = $('div', { class:'card-body' }); const title = $('h3', { class:'card-title', text:text(video.title, 'শিরোনামহীন ভিডিও'), title:text(video.title) }); title.addEventListener('click', () => navigate('/watch/' + escapePath(video.id))); title.style.cursor = 'pointer'; body.append(title, $('p', { class:'card-description', text:text(video.description, 'এই ভিডিওটির কোনো বিবরণ নেই।') })); const meta = $('div', { class:'card-meta' }, [$('span', { class:'mini-avatar', text:initials(owner) }), $('span', { text:owner }), $('span', { class:'dot' }), $('span', { text:fmtDate(video.created) })]); body.append(meta); card.append(thumb, body); return card; }
+    function cardGrid(videos, emptyMessage='এখনো কোনো ভিডিও পাওয়া যায়নি।') { const grid = $('div', { class:'grid' }); if (!Array.isArray(videos) || videos.length === 0) grid.append($('div', { class:'empty', text:emptyMessage })); else videos.forEach((video) => { if (video.visibility && video.visibility !== 'Public') return; grid.append(videoCard(video)); }); return grid; }
+    async function renderHome() { updateNav('home'); const hero = $('section', { class:'hero' }, [$('div', {}, [$('span', { class:'eyebrow', text:'আপনার গল্প, আপনার জায়গা' }), $('h1', {}, [document.createTextNode('দেখুন। শেয়ার করুন। '), $('span', { class:'highlight', text:'জুড়ে থাকুন।' })]), $('p', { class:'hero-copy', text:'আড্ডা ভিডিওতে পাবলিক ভিডিও আবিষ্কার করুন, নিজের চ্যানেল তৈরি করুন, আর আপনার সৃজনশীলতা এক ক্লিকে ভাগ করে নিন।' })]), $('div', { class:'hero-card', 'aria-hidden':'true' }, [$('div', { class:'hero-spark' }, [$('strong', { text:'আজকের নতুন গল্পগুলো আপনার অপেক্ষায়।' }), $('span', { text:'ছোট স্ক্রিনে, বড় কমিউনিটি।' })])])]); const heading = $('div', { class:'section-head' }, [$('div', {}, [$('h2', { text:'সাম্প্রতিক পাবলিক ভিডিও' }), $('p', { text:'কমিউনিটি থেকে সবশেষে যোগ হওয়া ভিডিও' })])]); const query = new URLSearchParams(location.search).get('query'); if (query !== null) { state.query = query; globalSearch.value = query; } const section = $('section'); section.append(heading); section.append(renderFilters(async (category) => { state.category = category; state.homeOffset = 0; await renderHome(); })); let currentGrid = cardGrid([]); currentGrid.replaceChildren($('div', { class:'loading', text:'ভিডিও খোঁজা হচ্ছে…' })); section.append(currentGrid); setPage([hero, section]); try { const data = await jsonFetch('/api/videos?query=' + encodeURIComponent(state.query) + '&category=' + encodeURIComponent(state.category) + '&limit=24&offset=' + state.homeOffset); const videos = Array.isArray(data.videos) ? data.videos : []; const loadedGrid = cardGrid(videos, state.query ? 'এই খোঁজে কোনো ভিডিও পাওয়া যায়নি।' : 'এখনো কোনো পাবলিক ভিডিও নেই।'); currentGrid.replaceWith(loadedGrid); currentGrid = loadedGrid; if (data.hasMore) { const more = button('আরও ভিডিও দেখুন', 'btn btn-ghost load-more', async () => { more.disabled = true; state.homeOffset += 24; try { const next = await jsonFetch('/api/videos?query=' + encodeURIComponent(state.query) + '&category=' + encodeURIComponent(state.category) + '&limit=24&offset=' + state.homeOffset); const nextGrid = cardGrid(next.videos || []); nextGrid.querySelectorAll('.video-card').forEach((card) => currentGrid.append(card)); if (!next.hasMore) more.remove(); else more.disabled = false; } catch (err) { more.disabled = false; notify(err.message, 'error'); } }); section.append(more); } } catch (err) { currentGrid.replaceWith($('div', { class:'empty', text:'ভিডিও লোড করা যায়নি: ' + err.message })); } }
+    async function renderWatch(id) { updateNav(''); loadingPage('ভিডিওর বিস্তারিত আনা হচ্ছে…'); const token = ++state.routeToken; try { const data = await jsonFetch('/api/videos/' + encodeURIComponent(id)); if (token !== state.routeToken) return; const video = data.video || {}; const owner = text(video.ownerName, text(video.ownerHandle, 'ভিডিও নির্মাতা')); const left = $('div'); const player = $('video', { class:'watch-player', controls:'', preload:'metadata', playsinline:'', src:text(video.url) }); player.setAttribute('aria-label', text(video.title, 'ভিডিও প্লেয়ার')); left.append(player, $('h1', { class:'watch-title', text:text(video.title, 'শিরোনামহীন ভিডিও') })); const byline = $('div', { class:'channel-line' }, [$('span', { class:'mini-avatar', text:initials(owner) }), $('a', { href:'/channel/' + escapePath(video.ownerHandle), 'data-route':'', text:owner })]); left.append(byline, $('div', { class:'watch-actions' }, [button(data.liked ? '♥ পছন্দ হয়েছে' : '♡ পছন্দ', 'btn btn-ghost', async (event) => { if (!state.session.user) { notify('লাইক দিতে আগে লগইন করুন।', 'error'); return; } const target = event.currentTarget; target.disabled = true; try { const result = await jsonFetch('/api/videos/' + encodeURIComponent(id) + '/like', { method:'POST', body:{} }); target.textContent = result.liked ? '♥ পছন্দ হয়েছে' : '♡ পছন্দ'; stats.textContent = text(result.likesCount, 0) + ' লাইক · ' + text(data.viewsCount, 0) + ' ভিউ'; } catch (err) { notify(err.message, 'error'); } finally { target.disabled = false; } }), button('↗ শেয়ার', 'btn btn-ghost', async () => { try { await navigator.clipboard.writeText(location.href); notify('লিংক কপি হয়েছে।'); } catch (_) { notify('লিংক কপি করা যায়নি—ব্রাউজারের ঠিকানা থেকে কপি করুন।', 'error'); } }), $('span', { class:'watch-stats', text:text(data.likesCount, 0) + ' লাইক · ' + text(data.viewsCount, 0) + ' ভিউ' })])); const stats = left.querySelector('.watch-stats'); left.append($('p', { class:'watch-description', text:text(video.description, 'এই ভিডিওটির কোনো বিবরণ নেই।') })); if (state.session.profile && getHandle(state.session.profile, state.session.user) === text(video.ownerHandle)) left.append(button('ভিডিও মুছে ফেলুন', 'btn btn-danger', async () => { if (!confirm('এই ভিডিওটি স্থায়ীভাবে মুছে ফেলবেন?')) return; try { await jsonFetch('/api/videos/' + encodeURIComponent(id), { method:'DELETE' }); notify('ভিডিও মুছে ফেলা হয়েছে।'); navigate('/channel/' + escapePath(getHandle(state.session.profile, state.session.user))); } catch (err) { notify(err.message, 'error'); } })); const side = $('aside', { class:'watch-side' }, [$('h3', { text:'ভিডিও সম্পর্কে' }), $('p', { text:'ক্যাটাগরি · ' + text(video.category, 'অন্যান্য') }), $('p', { text:'প্রকাশিত · ' + fmtDate(video.created) }), $('p', { text:'ফাইলের আকার · ' + fmtSize(video.size) })]); setPage([$ ('div', { class:'watch-layout' }, [left, side])]); try { await jsonFetch('/api/videos/' + encodeURIComponent(id) + '/views', { method:'POST', body:{} }); } catch (_) {} } catch (err) { setPage([$ ('div', { class:'empty' }, [$('h2', { text:'ভিডিওটি পাওয়া যায়নি' }), $('p', { text:err.message }), linkButton('হোমে ফিরুন', '/')])]); } }
+    function renderAuthMessage(message) { setPage([$ ('div', { class:'auth-card' }, [$('div', { class:'brand-mark', text:'▶' }), $('h1', { text:'লগইন দরকার' }), $('p', { text:message }), state.config.googleLoginEnabled ? button('গুগল দিয়ে লগইন', 'btn btn-primary', () => { location.href='/auth/google'; }) : $('p', { class:'notice error', text:'Google OAuth এখনো সার্ভারে কনফিগার করা নেই।' }), linkButton('হোমে ফিরুন', '/', 'btn btn-ghost')])]); }
+    async function renderChannel(handle) { updateNav(''); loadingPage('চ্যানেল লোড হচ্ছে…'); try { const data = await jsonFetch('/api/channels/' + encodeURIComponent(handle)); const profile = data.profile || {}; const videos = Array.isArray(data.videos) ? data.videos : []; const own = state.session.profile && getHandle(state.session.profile, state.session.user).toLowerCase() === text(handle).toLowerCase(); const hero = $('section', { class:'profile-hero' }); const profileMain = $('div', { class:'profile-main' }, [$('div', { class:'profile-avatar', text:initials(profile.displayName || profile.handle) }), $('div', {}, [$('h1', { text:text(profile.displayName, text(profile.handle, 'চ্যানেল')) }), $('div', { class:'handle', text:'@' + text(profile.handle, handle) }), $('p', { class:'profile-bio', text:text(profile.bio, 'এই চ্যানেলের কোনো পরিচিতি নেই।') })])]); hero.append(profileMain); if (own) hero.append(button('প্রোফাইল সম্পাদনা', 'btn btn-ghost', () => { edit.classList.toggle('open'); if (edit.classList.contains('open')) edit.scrollIntoView({ behavior:'smooth', block:'start' }); })); const edit = $('section', { class:'profile-edit' }); if (own) { const form = $('form', { class:'panel' }); form.append($('h2', { text:'প্রোফাইল সম্পাদনা' })); const fields = $('div', { class:'form-grid' }); const nameField = $('div', { class:'field' }, [$('label', { htmlFor:'profileName', text:'ডিসপ্লে নাম' }), $('input', { id:'profileName', type:'text', maxlength:'80', required:'', value:text(state.session.profile.displayName, '') })]); const handleField = $('div', { class:'field' }, [$('label', { htmlFor:'profileHandle', text:'ইউনিক হ্যান্ডেল' }), $('input', { id:'profileHandle', type:'text', maxlength:'30', pattern:'[A-Za-z0-9._\\-]+', required:'', value:text(state.session.profile.handle, '') }), $('small', { text:'শুধু ইংরেজি অক্ষর, সংখ্যা, ., _ বা - ব্যবহার করুন।' })]); const bioField = $('div', { class:'field full' }, [$('label', { htmlFor:'profileBio', text:'বায়ো' }), $('textarea', { id:'profileBio', maxlength:'280', text:text(state.session.profile.bio, '') })]); const note = $('div', { class:'field full' }); const notice = $('p', { class:'notice' }); const save = button('পরিবর্তন সংরক্ষণ করুন', 'btn btn-primary'); form.append(fields); fields.append(nameField, handleField, bioField); form.append(note, notice, save); form.addEventListener('submit', async (event) => { event.preventDefault(); save.disabled = true; setNotice(notice, 'সংরক্ষণ হচ্ছে…'); try { const result = await jsonFetch('/api/me/profile', { method:'POST', body:{ displayName:nameField.querySelector('input').value.trim(), handle:handleField.querySelector('input').value.trim(), bio:bioField.querySelector('textarea').value.trim() } }); state.session.profile = result.profile || { displayName:nameField.querySelector('input').value, handle:handleField.querySelector('input').value, bio:bioField.querySelector('textarea').value }; setNotice(notice, 'প্রোফাইল আপডেট হয়েছে।', 'ok'); renderAccount(); if (getHandle(state.session.profile, state.session.user).toLowerCase() !== text(handle).toLowerCase()) navigate('/channel/' + escapePath(getHandle(state.session.profile, state.session.user))); else renderChannel(handle); } catch (err) { setNotice(notice, err.message, 'error'); } finally { save.disabled = false; } }); edit.append(form); } const heading = $('div', { class:'section-head' }, [$('div', {}, [$('h2', { text:'এই চ্যানেলের ভিডিও' }), $('p', { text:videos.length + 'টি ভিডিও' })])]); const content = $('section'); content.append(heading, cardGrid(videos, 'এই চ্যানেলে এখনো কোনো পাবলিক ভিডিও নেই।')); setPage([hero, edit, content]); } catch (err) { setPage([$ ('div', { class:'empty' }, [$('h2', { text:'চ্যানেল পাওয়া যায়নি' }), $('p', { text:err.message }), linkButton('হোমে ফিরুন', '/')])]); } }
+    function renderUpload() { updateNav('upload'); if (!state.session.user) { renderAuthMessage('ভিডিও আপলোড করতে আপনার একটি অ্যাকাউন্ট দরকার।'); return; } const section = $('section', { class:'upload-card' }); const panel = $('div', { class:'panel' }); panel.append($('div', { class:'eyebrow', text:'নতুন ভিডিও' }), $('h1', { text:'আপনার ভিডিও আপলোড করুন' }), $('p', { class:'hint', text:'সর্বোচ্চ ফাইল সাইজ: ' + state.config.maxFileMb + ' MB · ভিডিও ফাইলের ফরম্যাট আপনার ব্রাউজার সমর্থিত হতে হবে।' })); const form = $('form'); const drop = $('label', { class:'dropzone', htmlFor:'uploadFile' }); const fileInput = $('input', { id:'uploadFile', type:'file', accept:'video/*', required:'' }); const dropCopy = $('span'); dropCopy.append($('strong', { text:'ভিডিও বেছে নিন বা এখানে টেনে আনুন' }), $('span', { text:'MP4, WebM বা আপনার ব্রাউজারের সমর্থিত ভিডিও' })); drop.append(fileInput, dropCopy); const fileState = { file:null }; const chooseFile = (file) => { if (!file) return; fileState.file = file; dropCopy.replaceChildren($('strong', { text:file.name }), $('span', { text:fmtSize(file.size) })); if (!titleInput.value) titleInput.value = file.name.replace(/\.[^.]+$/, ''); }; fileInput.addEventListener('change', () => chooseFile(fileInput.files[0])); ['dragenter','dragover'].forEach((eventName) => drop.addEventListener(eventName, (event) => { event.preventDefault(); drop.classList.add('over'); })); ['dragleave','drop'].forEach((eventName) => drop.addEventListener(eventName, (event) => { event.preventDefault(); drop.classList.remove('over'); })); drop.addEventListener('drop', (event) => chooseFile(event.dataTransfer.files[0])); const titleInput = $('input', { id:'uploadTitle', type:'text', maxlength:'100', required:'' }); const description = $('textarea', { id:'uploadDescription', maxlength:'5000', placeholder:'ভিডিওটি সম্পর্কে কিছু বলুন…' }); const category = $('select', { id:'uploadCategory' }); categories.slice(1).forEach((item) => category.append($('option', { value:item.value, text:item.label }))); const visibility = $('div', { class:'visibility' }); [['Public','পাবলিক','সবাই দেখতে পারবে'],['Unlisted','আনলিস্টেড','লিংক থাকলে দেখতে পারবে'],['Private','প্রাইভেট','শুধু আপনি দেখতে পারবেন']].forEach((item, index) => { const radio = $('input', { type:'radio', name:'visibility', value:item[0], ...(item[0] === 'Private' ? { checked:'' } : {}) }); visibility.append($('label', {}, [radio, $('span', {}, [$('b', { text:item[1] }), $('span', { text:item[2] })])])); }); const grid = $('div', { class:'form-grid' }); const field = (label, input, full=false) => $('div', { class:'field' + (full ? ' full' : '') }, [$('label', { htmlFor:input.id, text:label }), input]); grid.append(field('শিরোনাম', titleInput, false), field('ক্যাটাগরি', category, false), field('বিবরণ', description, true)); form.append(drop, grid, $('div', { class:'field full' }, [$('span', { class:'field-label', text:'দৃশ্যমানতা' }), visibility])); const progressWrap = $('div', { class:'progress-wrap' }); const progress = $('progress', { max:'100', value:'0' }); const progressText = $('span', { text:'আপলোড প্রস্তুত হচ্ছে…' }); progressWrap.append(progressText, progress); const notice = $('p', { class:'notice' }); const submit = button('আপলোড শুরু করুন', 'btn btn-primary'); form.append(progressWrap, notice, submit); panel.append(form); section.append(panel); setPage([section]); form.addEventListener('submit', async (event) => { event.preventDefault(); const file = fileState.file || fileInput.files[0]; if (!file) { setNotice(notice, 'আগে একটি ভিডিও ফাইল বেছে নিন।', 'error'); return; } if (!file.type.startsWith('video/')) { setNotice(notice, 'এটি ভিডিও ফাইল নয় বা ফাইলের ধরন বোঝা যাচ্ছে না।', 'error'); return; } if (file.size > state.config.maxFileMb * 1024 * 1024) { setNotice(notice, 'ফাইলটি ' + state.config.maxFileMb + ' MB-এর চেয়ে বড়।', 'error'); return; } const chosenVisibility = form.querySelector('input[name="visibility"]:checked').value; submit.disabled = true; progressWrap.classList.add('show'); progress.value = 0; try { setNotice(notice, 'নিরাপদ আপলোড লিংক নেওয়া হচ্ছে…'); const preflight = await jsonFetch('/api/upload-url', { method:'POST', body:{ filename:file.name, contentType:file.type, size:file.size, title:titleInput.value.trim(), description:description.value.trim(), category:category.value, visibility:chosenVisibility } }); await putFile(preflight.uploadUrl, file, (percent) => { progress.value = percent; progressText.textContent = 'আপলোড হচ্ছে… ' + percent + '%'; }); setNotice(notice, 'ভিডিও সম্পূর্ণ হচ্ছে…'); await jsonFetch('/api/finish', { method:'POST', body:{ objectName:preflight.objectName, id:preflight.id, title:titleInput.value.trim(), description:description.value.trim(), category:category.value, visibility:chosenVisibility } }); setNotice(notice, 'আপলোড সফল হয়েছে।', 'ok'); notify('ভিডিও আপলোড হয়েছে।'); form.reset(); fileState.file = null; dropCopy.replaceChildren($('strong', { text:'ভিডিও বেছে নিন বা এখানে টেনে আনুন' }), $('span', { text:'MP4, WebM বা আপনার ব্রাউজারের সমর্থিত ভিডিও' })); setTimeout(() => navigate('/watch/' + escapePath(preflight.id)), 450); } catch (err) { setNotice(notice, 'আপলোড ব্যর্থ: ' + err.message + ' আবার চেষ্টা করুন।', 'error'); } finally { submit.disabled = false; } }); }
+    function putFile(url, file, onProgress) { return new Promise((resolve, reject) => { const xhr = new XMLHttpRequest(); xhr.open('PUT', url); xhr.setRequestHeader('Content-Type', file.type); xhr.upload.onprogress = (event) => { if (event.lengthComputable) onProgress(Math.round(event.loaded / event.total * 100)); }; xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error('স্টোরেজ আপলোডে সমস্যা হয়েছে (HTTP ' + xhr.status + ')।')); xhr.onerror = () => reject(new Error('নেটওয়ার্ক বা CORS সমস্যায় আপলোড থেমে গেছে।')); xhr.send(file); }); }
+    async function renderRoute() { const path = location.pathname.replace(/\/+$/, '') || '/'; const matchWatch = path.match(/^\/watch\/([^/]+)$/); const matchChannel = path.match(/^\/channel\/([^/]+)$/); if (path === '/') { await renderHome(); return; } if (path === '/upload') { renderUpload(); return; } if (matchWatch) { await renderWatch(decodeURIComponent(matchWatch[1])); return; } if (matchChannel) { await renderChannel(decodeURIComponent(matchChannel[1])); return; } navigate('/'); }
+    document.addEventListener('click', (event) => { const routeLink = event.target.closest('a[data-route]'); if (!routeLink || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; const url = new URL(routeLink.href, location.origin); if (url.origin !== location.origin) return; event.preventDefault(); navigate(url.pathname + url.search); });
+    searchForm.addEventListener('submit', (event) => { event.preventDefault(); const query = globalSearch.value.trim(); navigate('/' + (query ? '?query=' + encodeURIComponent(query) : '')); });
+    mobileToggle.addEventListener('click', () => { const open = mainNav.classList.toggle('open'); mobileToggle.setAttribute('aria-expanded', String(open)); });
+    window.addEventListener('popstate', renderRoute);
+    async function boot() { try { const config = await jsonFetch('/api/config'); state.config = { ...state.config, ...config }; } catch (_) {} try { state.session = await jsonFetch('/auth/me'); } catch (_) { state.session = { user:null, profile:null }; } renderAccount(); await renderRoute(); }
+    boot();
+  </script>
 </body>
 </html>
