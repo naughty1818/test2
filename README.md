@@ -1,100 +1,121 @@
-# Video Hub R2
+# ClipNest — বাংলা ভিডিও প্ল্যাটফর্ম
 
-বাংলা-প্রথম ভিডিও শেয়ারিং ওয়েব অ্যাপ। Node.js/Express সার্ভার Google sign-in, signed upload/download link এবং metadata পরিচালনা করে; ভিডিও ফাইল সরাসরি private Cloudflare R2 bucket-এ যায়। আলাদা SQL database লাগে না—ভিডিও, প্রোফাইল ও interaction marker-ও R2-তে থাকে।
+Node.js/Express-ভিত্তিক বাংলা-first video sharing site। ClipNest-এর নিজস্ব coral/cream design রেখে পরিচিত video-platform patterns—discovery feed, creator subscriptions, comments, playlists, watch history এবং live interaction counts—যোগ করা হয়েছে। Layout ও branding নিজস্ব; কোনো existing platform-এর হুবহু UI কপি নয়।
 
-## ফিচার
+## Feature set
 
-- Google OAuth sign-in এবং প্রতি ব্যবহারকারীর চ্যানেল
-- Drag-and-drop ভিডিও আপলোড, progress bar ও configurable file-size limit
-- Public / Unlisted / Private visibility
-- বাংলা category filter ও title/description search
-- Video watch page, share link, view count ও account-based like
-- Display name, unique handle ও bio-সহ editable public channel profile
-- ClipNest-inspired responsive UI: featured home banner, channel discovery, search, watch, profile ও mobile navigation
-- Private ভিডিও কেবল uploader দেখতে পারবেন
-- পুরনো Video Hub metadata-র ভিডিও legacy public item হিসেবে দেখা যাবে
+- Google OAuth sign-in, Neon-এ user/profile/session data এবং public creator channel
+- Direct-to-Cloudflare R2 video upload with progress, signed URLs, Private/Unlisted/Public visibility
+- Neon-এ video metadata, likes, unique visitor views, comments/replies, creator subscriptions, playlists, Watch Later, watch history ও upload intents
+- Socket.IO দিয়ে video page-এ live like/view/comment counts এবং channel-এ live subscriber count
+- Home/discovery feed, category/search, subscription feed, recommendations, channel pages, history ও playlists
+- Responsive Bengali UI, mobile navigation, share link ও owner-only video deletion
 
-YouTube upload ও backend comments এই সংস্করণে নেই; upload সরাসরি Cloudflare R2-তে হয়।
+## কোথায় কোন ডেটা থাকে
+
+| ডেটা | অবস্থান |
+|---|---|
+| ভিডিও ফাইল/বড় media object | Private Cloudflare R2 bucket |
+| User account ID, email, profile ও channel handle | Neon PostgreSQL |
+| Session hash/expiry, video title/description/category/visibility | Neon PostgreSQL |
+| Likes, views, comments, subscriptions, playlists ও watch history | Neon PostgreSQL |
+| Upload intent এবং interaction counters | Neon PostgreSQL |
+| Site code, ClipNest UI assets | GitHub repository |
+
+R2-তে পুরনো JSON metadata থাকলে migration command সেগুলো **copy/import** করবে; source R2 object মুছবে না। Video binary R2-তেই থাকবে।
 
 ## যা লাগবে
 
 - Node.js 18+
-- Cloudflare R2 bucket এবং bucket-এ সীমাবদ্ধ Object Read & Write API token
-- Google Cloud OAuth 2.0 **Web application** client
-- Render বা অন্য Node.js hosting-এ environment variables সেট করার সুযোগ
+- Neon PostgreSQL project (hosted app-এর জন্য Neon-এর pooled connection string সুপারিশ করা হয়)
+- Cloudflare R2 private bucket ও ওই bucket-এ সীমিত Object Read & Write token
+- Google Cloud OAuth 2.0 Web application client
+- Render বা অন্য Node.js host-এ environment variables
 
-## Cloudflare R2 সেটআপ
+## Neon ও পুরনো ডেটা migration
 
-1. একটি R2 bucket তৈরি করে **private** রাখুন।
-2. ওই bucket-টির জন্যই Object Read & Write permission-সহ API token তৈরি করুন।
-3. Bucket Settings → CORS Policy-তে নিচের policy দিন। নিজের production site origin এবং local development origin বসান। `*` origin ব্যবহার করবেন না।
+1. Neon-এ PostgreSQL project/database তৈরি করুন। Neon dashboard-এর **pooled connection string** নিন এবং `DATABASE_URL` হিসেবে hosting environment-এ দিন। Connection string গোপন রাখুন; browser/client code বা Git-এ দেবেন না।
+2. Local `.env`-এ `DATABASE_URL`, R2 credentials এবং কমপক্ষে 32-character `SESSION_SECRET` দিন। `.env.example` template হিসেবে ব্যবহার করুন।
+3. নতুন backend deploy করার আগে/সাথে পুরনো R2 JSON data একবার import করুন:
 
-```json
-[
-  {
-    "AllowedOrigins": ["https://YOUR-SITE.example", "http://localhost:3000"],
-    "AllowedMethods": ["GET", "PUT", "HEAD"],
-    "AllowedHeaders": ["Content-Type"],
-    "ExposeHeaders": ["ETag"],
-    "MaxAgeSeconds": 3600
-  }
-]
-```
+   ```bash
+   npm install
+   npm run migrate:r2
+   ```
 
-## Google OAuth সেটআপ
+   Migration idempotent: সফল হলে `storage_migrations`-এ marker রাখে এবং পরের run-এ duplicate import করে না। `meta/`, `profiles/`, active sessions, likes ও views থেকে relational records তৈরি হয়। Original R2 objects untouched থাকে। `npm run migrate:r2` সম্পন্ন না হওয়া পর্যন্ত existing app-এর পুরনো metadata নতুন UI-তে আসবে না।
+4. Migration success হলে GitHub থেকে নতুন app deploy করুন। Startup-এ server idempotently database tables/indexes তৈরি/নিশ্চিত করবে।
 
-1. Google Cloud Console-এ project বেছে নিয়ে OAuth consent screen configure করুন। Testing অবস্থায় প্রয়োজনীয় test user যোগ করুন; সাধারণ ব্যবহারকারীর জন্য চালুর আগে Google-এর publication/verification নিয়ম অনুসরণ করুন।
-2. OAuth Client ID তৈরি করার সময় **Web application** বেছে নিন।
-3. Authorized redirect URI হিসেবে একদম হুবহু callback যোগ করুন:
-   - Local: `http://localhost:3000/auth/google/callback`
-   - Production: `https://YOUR-SITE.example/auth/google/callback`
-4. একই URI `GOOGLE_REDIRECT_URI` environment variable-এ দিন।
-5. Sign-in-এর scope হলো `openid`, `email`, `profile`। Client secret শুধু server-side environment-এ রাখুন—কখনো frontend, `public/` বা Git commit-এ নয়।
+## Cloudflare R2 ও browser upload
 
-R2 ও SESSION_SECRET দিয়ে public browsing চালাতে পারবেন; Google OAuth-এর GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI তিনটি variable না দিলে login ও upload বন্ধ থাকবে। OAuth চালু করতে তিনটিই সেট করুন। কোডে কোনো credentials বা user secret অন্তর্ভুক্ত নেই.
+1. একটি R2 bucket তৈরি করে private রাখুন। Bucket-scoped Object Read & Write API token ব্যবহার করুন।
+2. Bucket Settings → CORS Policy-তে production site origin ও local origin দিন। `*` origin ব্যবহার করবেন না:
+
+   ```json
+   [
+     {
+       "AllowedOrigins": ["https://YOUR-SITE.example", "http://localhost:3000"],
+       "AllowedMethods": ["GET", "PUT", "HEAD"],
+       "AllowedHeaders": ["Content-Type"],
+       "ExposeHeaders": ["ETag"],
+       "MaxAgeSeconds": 3600
+     }
+   ]
+   ```
+
+Only the video/media bytes remain in R2 as normal new app data; new accounts and application records are written to Neon.
+
+## Google OAuth
+
+1. Google Cloud Console-এ OAuth consent screen configure করুন; Testing mode হলে test user যোগ করুন।
+2. OAuth Client ID-তে **Web application** বেছে নিন।
+3. Authorized redirect URI-তে callback URI একদম হুবহু দিন: `https://YOUR-SITE.example/auth/google/callback`। Local development হলে `http://localhost:3000/auth/google/callback` যোগ করুন।
+4. একই URI `GOOGLE_REDIRECT_URI`-তে দিন। `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` ও `GOOGLE_REDIRECT_URI` তিনটিই set করুন; client secret শুধু server-side environment-এ থাকবে।
 
 ## লোকালি চালানো
 
 ```bash
 cp .env.example .env
-# .env-এ R2 ও Google OAuth মান দিন; SESSION_SECRET তৈরি করুন:
-openssl rand -hex 32
+# .env-এ DATABASE_URL, R2 values ও Google OAuth values দিন
+openssl rand -hex 32   # output-টি SESSION_SECRET হিসেবে দিন
 npm install
 npm start
 ```
 
-তারপর `http://localhost:3000` খুলুন। `.env` commit করবেন না; `.gitignore`-এ এটি বাদ দেওয়া আছে।
+তারপর `http://localhost:3000` খুলুন। Socket.IO একই Express service-এ চালু হয়; আলাদা Socket.IO server লাগে না।
 
 ## Render-এ deploy
 
-1. GitHub repository থেকে Node Web Service তৈরি করুন।
-2. Build command: `npm install`; Start command: `npm start`।
-3. `.env.example`-এর variable-গুলো Render Environment-এ যোগ করুন। `NODE_ENV=production`, `GOOGLE_REDIRECT_URI=https://YOUR-SITE.example/auth/google/callback` এবং নতুন random `SESSION_SECRET` দিন।
-4. Google OAuth client-এর Authorized redirect URI ও R2 CORS-এ production URL-গুলো যোগ করুন।
+1. GitHub repository থেকে Node Web Service তৈরি করুন; build command `npm install`, start command `npm start`।
+2. Render Environment-এ `.env.example`-এর variables দিন—বিশেষ করে `DATABASE_URL`, সব R2 credential, `SESSION_SECRET`, `NODE_ENV=production`, `GOOGLE_REDIRECT_URI` ও `APP_ORIGIN`। `APP_ORIGIN`-এ শুধু site origin দিন, যেমন `https://YOUR-SITE.example`।
+3. Google OAuth redirect URI এবং R2 CORS-এ production URL মিলিয়ে দিন।
+4. পুরনো app-এর data থাকলে migration সম্পন্ন/যাচাই করে তারপর deploy দিন।
 
-সব video/media এবং app metadata R2-তে থাকার কারণে সাধারণ stateless web-service restart-এ app data হারায় না। R2 bucket private রাখুন; access key browser code-এ দেবেন না।
+Render Free web service 15 মিনিট inbound traffic না থাকলে sleep করে এবং পরের request-এ wake হতে সময় নেয়; sleep/redeploy-এ live socket connections disconnect হবে, তারপর client reconnect করবে। নিরবচ্ছিন্ন realtime-এর জন্য always-on web service দরকার। একাধিক server instance-এ scale করলে Socket.IO Redis adapter যোগ করতে হবে; বর্তমান setup single Render service/process-এর জন্য।
 
 ## Environment variables
 
 | নাম | দরকার? | কাজ |
 |---|---|---|
 | `PORT` | না | HTTP port; default `3000` |
-| `NODE_ENV` | না | Production-এ `production` দিন; secure cookie চালু করে |
+| `NODE_ENV` | production-এ | Secure cookie ও production behavior |
+| `DATABASE_URL` | হ্যাঁ | Neon PostgreSQL connection string; secret |
+| `PG_POOL_MAX` | না | PostgreSQL pool size; default `5` |
 | `MAX_FILE_MB` | না | সর্বোচ্চ upload size; default `500` MB |
 | `R2_ACCOUNT_ID` | হ্যাঁ | Cloudflare account ID |
-| `R2_BUCKET` | হ্যাঁ | Private bucket-এর নাম |
+| `R2_BUCKET` | হ্যাঁ | Private media bucket |
 | `R2_ACCESS_KEY_ID` | হ্যাঁ | Bucket-scoped access key |
 | `R2_SECRET_ACCESS_KEY` | হ্যাঁ | Bucket-scoped secret |
 | `GOOGLE_CLIENT_ID` | Login-এর জন্য | Google OAuth Web client ID |
-| `GOOGLE_CLIENT_SECRET` | Login-এর জন্য | Google OAuth Web client secret |
-| `GOOGLE_REDIRECT_URI` | Login-এর জন্য | Authorized callback URL |
-| `APP_ORIGIN` | না | Login শেষে redirect; default `/` |
-| `SESSION_SECRET` | হ্যাঁ | Session ও visitor cookie signing secret |
+| `GOOGLE_CLIENT_SECRET` | Login-এর জন্য | Google OAuth client secret |
+| `GOOGLE_REDIRECT_URI` | Login-এর জন্য | Authorized callback URI |
+| `APP_ORIGIN` | Production-এ সুপারিশকৃত | OAuth redirect ও Socket.IO allowed origin |
+| `SESSION_SECRET` | হ্যাঁ | Signed session/viewer cookies; অন্তত 32 characters |
 
-## Privacy ও পুরনো আপলোড
+## নিরাপত্তা ও privacy
 
-- OAuth/session signing secret, R2 keys ও Google client secret কেবল hosting environment-এ রাখুন; `.env.example`-এ কোনো আসল secret দেবেন না।
-- Video link সময়সীমাবদ্ধ signed URL। Public ভিডিও feed/search-এ আসে; Unlisted ভিডিও link থাকলে দেখা যায়; Private ভিডিও uploader-এর জন্য সীমিত।
-- Like দিতে Google account-এ login করতে হয়। View count first-party visitor cookie-ভিত্তিক এবং আনুমানিক; cookie মুছলে বা অন্য browser ব্যবহার করলে আবার count হতে পারে।
-- আগের single-password Video Hub-এর metadata-তে owner/visibility না থাকলে পুরনো ভিডিও legacy public item হিসেবে থাকবে। সেগুলো নতুন Private/Unlisted নিয়মে স্বয়ংক্রিয়ভাবে বদলায় না; প্রয়োজন হলে R2 metadata migration বা access review করুন।
-- ভিডিও ও ব্যক্তিগত তথ্য প্রকাশে প্রযোজ্য copyright, privacy ও data-protection নিয়ম মানুন।
+- Neon/R2/Google secrets কেবল hosting environment বা local `.env`-এ রাখুন; `.env` commit করবেন না।
+- Session token browser cookie-তে signed থাকে; database-এ raw token নয়, hash সংরক্ষিত হয়। Google email ও account data frontend-এ প্রকাশ করা হয় না।
+- Public feed-এ শুধু Public videos আসে। Unlisted ভিডিও direct link-এ দেখা যায়; Private ভিডিও uploader ছাড়া দেখা যায় না। Signed media URL মেয়াদসীমাবদ্ধ।
+- Like/comment/subscribe এবং playlist পরিবর্তনে লগইন লাগে। Video view browser-ভিত্তিক signed first-party cookie দিয়ে deduplicate হয়; cookie মুছলে/অন্য browser ব্যবহার করলে count আবার হতে পারে।
+- R2-to-Neon migration source objects মুছে না। Neon data যাচাই না করে পুরনো R2 JSON নিজে থেকে delete করবেন না।

@@ -550,3 +550,114 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 @media(max-width:760px) {
   .channels-grid { grid-template-columns:1fr; }
 }
+
+
+/* ClipNest creator-and-viewer features: familiar video patterns, original coral/cream visual identity. */
+.creator-avatar-link { flex: 0 0 auto; display: grid; place-items: center; }
+.creator-avatar img,.channel-avatar img,.comment-avatar img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
+.video-card { transition: transform .16s ease; }
+.video-card:hover { transform: translateY(-2px); }
+.video-thumb { border: 1px solid #20252008; }
+.video-meta { flex-wrap: wrap; }
+.video-duration { max-width: 90%; overflow: hidden; text-overflow: ellipsis; }
+.card-actions { opacity: 1; }
+.card-icon { min-width: 30px; }
+.card-save,.card-remove { font-size: 14px; }
+.card-remove:hover { color: #c34139; background: #fff0ef; }
+.load-more { margin: 24px auto 0 !important; display: flex !important; justify-content: center; }
+
+.player-stage { background: #151817; }
+.player-stage-has-video { aspect-ratio: 16/9; }
+.player-media { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: contain; background: #090a09; }
+.player-stage::after { z-index: 2; }
+.watch-creator-row { align-items: center; }
+.watch-creator-text { min-width: 120px; }
+.watch-creator-text .subscriber-count { display: block; margin-top: 3px; color: #858a83; font-size: 10px; }
+.follow-button { min-height: 38px; padding: 0 16px; border: 0; border-radius: 999px; color: #fff; background: var(--primary); font-size: 11px; font-weight: 750; white-space: nowrap; transition: background .15s, transform .15s; }
+.follow-button:hover { transform: translateY(-1px); background: #d94c37; }
+.follow-button-active { color: #444a43; background: #eeede8; }
+.follow-button-active:hover { color: #b44433; background: #f8e9e4; }
+.follow-button:disabled { opacity: .6; cursor: wait; }
+.video-description { display: block; margin: 17px 0 23px; padding: 13px 15px; border: 1px solid #ece9e2; border-radius: 12px; background: #f0efeb; color: #4f554e; font-size: 11px; line-height: 1.75; }
+.video-description summary { color: #424941; font-size: 11px; font-weight: 700; cursor: pointer; }
+.video-description p { margin: 10px 0 5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.video-description>span { color: #9a9d96; font-size: 9px; }
+.discussion { margin-top: 24px; }
+.comments-heading { display: flex; align-items: baseline; gap: 11px; margin: 0 0 13px; }
+.comments-heading h2 { margin: 0; color: #292e29; font-size: 18px; letter-spacing: -.02em; }
+.comment-count { color: #8d928b; font-size: 10px; }
+.comment-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.comment-form textarea { width: 100%; min-height: 50px; resize: vertical; padding: 11px 13px; border: 1px solid #e3e1da; border-radius: 10px; background: #fff; color: #333831; font-size: 11px; line-height: 1.65; }
+.comment-form textarea:focus { outline: 0; border-color: #e9a196; box-shadow: 0 0 0 3px #f05a4311; }
+.comment-form textarea:disabled { background: #f3f2ee; cursor: not-allowed; }
+.comment-form-footer { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.comment-submit { min-height: 34px; padding: 0 14px; font-size: 10px; }
+.comment-cancel { border: 0; background: transparent; color: #848a82; font-size: 10px; }
+.comment-cancel:hover,.comment-reply:hover { color: var(--primary); }
+.reply-notice { padding: 7px 10px; border-radius: 8px; color: #a34839; background: #fff0eb; font-size: 10px; }
+.comments-list { display: flex; flex-direction: column; gap: 15px; }
+.comment-item { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.comment-avatar { flex: 0 0 auto; display: grid; place-items: center; width: 31px; height: 31px; overflow: hidden; border-radius: 50%; color: white; font-size: 11px; font-weight: 700; }
+.comment-body { min-width: 0; flex: 1; }
+.comment-meta { display: flex; align-items: baseline; gap: 8px; }
+.comment-meta strong { color: #343a34; font-size: 10px; }
+.comment-meta span { color: #989d96; font-size: 9px; }
+.comment-body p { margin: 5px 0; color: #525850; font-size: 11px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.comment-reply { padding: 3px 0; border: 0; color: #8a8f88; background: transparent; font-size: 9px; font-weight: 650; }
+.comment-replies { display: flex; flex-direction: column; gap: 11px; margin: 12px 0 2px 8px; padding-left: 13px; border-left: 2px solid #f0e2dc; }
+.comment-replies .comment-avatar { width: 25px; height: 25px; font-size: 9px; }
+.comment-reply-body .comment-meta strong { color: #656b63; }
+
+.library-page { min-width: 0; }
+.library-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.library-heading .outline-cta { margin-left: auto; }
+.playlist-create-form { display: grid; grid-template-columns: minmax(160px,1fr) minmax(160px,1fr) auto auto; align-items: center; gap: 10px; margin: 17px 0 22px; padding: 15px; border: 1px solid #ece8df; border-radius: 13px; background: #fff; }
+.playlist-create-form>input { min-width: 0; height: 39px; padding: 0 10px; border: 1px solid #e4e1d9; border-radius: 8px; color: #343934; background: #fff; font-size: 10px; }
+.playlist-create-form>input:focus { outline: 0; border-color: #e9a196; }
+.playlist-create-form .primary-cta { height: 38px; padding: 0 12px; font-size: 10px; white-space: nowrap; }
+.playlist-public-toggle { display: flex; align-items: center; gap: 6px; color: #747a72; font-size: 9px; white-space: nowrap; }
+.playlist-public-toggle input { accent-color: var(--primary); }
+.playlist-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.playlist-card { min-width: 0; min-height: 94px; display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid #e9e6de; border-radius: 13px; background: #fff; transition: border-color .15s,transform .15s,box-shadow .15s; }
+.playlist-card:hover { transform: translateY(-2px); border-color: #edc0b4; box-shadow: 0 8px 20px #33271d0a; }
+.playlist-art { flex: 0 0 auto; width: 52px; height: 52px; display: grid; place-items: center; border-radius: 12px; color: #bd4b39; background: #fff0eb; font-size: 24px; }
+.playlist-card-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.playlist-card-copy strong { overflow: hidden; color: #303630; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.playlist-card-copy small { color: #8b9189; font-size: 9px; line-height: 1.5; }
+.playlist-arrow { color: #b4b7b0; }
+.playlist-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: -4px 0 12px 49px; padding: 10px; border: 1px solid #ece7df; border-radius: 10px; background: #fff; }
+.playlist-picker-item { min-height: 30px; padding: 0 11px; border: 1px solid #e8e4dc; border-radius: 999px; color: #656b64; background: #faf9f6; font-size: 10px; }
+.playlist-picker-item:hover { border-color: #edb5a9; color: #b84634; background: #fff3ef; }
+.playlist-picker>.text-link { padding: 6px; }
+
+@media (max-width: 1100px) {
+  .playlist-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .playlist-create-form { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 760px) {
+  .watch-creator-row { gap: 9px; }
+  .watch-creator-row .follow-button { margin-left: 0; }
+  .watch-actions { flex-basis: 100%; margin-left: 0; }
+  .watch-actions .watch-stats { width: 100%; }
+  .video-description { margin-top: 13px; padding: 11px 12px; }
+  .discussion { margin-top: 19px; }
+  .comments-heading h2 { font-size: 16px; }
+  .comment-form textarea { font-size: 11px; }
+  .playlist-grid { grid-template-columns: 1fr; }
+  .playlist-create-form { grid-template-columns: 1fr; align-items: stretch; }
+  .playlist-public-toggle { min-height: 28px; }
+  .playlist-create-form .primary-cta { width: 100%; }
+  .library-heading { align-items: flex-start; flex-direction: column; }
+  .library-heading .outline-cta { margin: 0; }
+  .channel-profile .channel-avatar img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
+  .card-actions { opacity: 1; }
+  .playlist-picker { margin-left: 0; }
+}
+
+.hero-image { z-index: 0; }
+.hero-shade { z-index: 1; }
+.hero-copy { position: relative; z-index: 2; }
+.hero-caption,.hero-progress { z-index: 2; }
+#app:focus { outline: none; }
+
+@media (min-width: 761px) { .mobile-menu-trigger { display: none !important; } }

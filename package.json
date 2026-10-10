@@ -1,10 +1,11 @@
 {
   "name": "video-hub-r2",
   "version": "1.0.0",
-  "description": "Bengali video hub with Google OAuth, channel profiles, privacy controls, and direct Cloudflare R2 uploads.",
+  "description": "Bengali video platform with Neon PostgreSQL, Socket.IO updates, creator channels, playlists, comments, and direct Cloudflare R2 uploads.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "migrate:r2": "node scripts/migrate-r2-json.js"
   },
   "engines": {
     "node": ">=18"
@@ -13,6 +14,8 @@
     "@aws-sdk/client-s3": "^3.750.0",
     "@aws-sdk/s3-request-presigner": "^3.750.0",
     "dotenv": "^16.4.5",
-    "express": "^4.21.0"
+    "express": "^4.21.0",
+    "pg": "^8.16.3",
+    "socket.io": "^4.8.1"
   }
 }

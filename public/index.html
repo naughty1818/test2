@@ -33,12 +33,17 @@
         <nav aria-label="প্রধান নেভিগেশন">
           <a href="/" data-route data-nav="home" class="nav-item"><span aria-hidden="true">⌂</span><span>হোম</span></a>
           <a href="/search" data-route data-nav="search" class="nav-item"><span aria-hidden="true">⌕</span><span>খুঁজে দেখো</span></a>
-          <a href="/channels" data-route data-nav="channels" class="nav-item"><span aria-hidden="true">▤</span><span>চ্যানেল</span></a>
+          <a href="/subscriptions" data-route data-nav="subscriptions" class="nav-item"><span aria-hidden="true">▤</span><span>সাবস্ক্রিপশন</span></a>
+          <a href="/channels" data-route data-nav="channels" class="nav-item"><span aria-hidden="true">◉</span><span>চ্যানেল</span></a>
         </nav>
         <div class="sidebar-divider"></div>
-        <div class="sidebar-label">তোমার জায়গা</div>
-        <a href="/channel/me" data-route data-nav="my-channel" class="nav-item"><span aria-hidden="true">♡</span><span>আমার চ্যানেল</span></a>
-        <a href="/upload" data-route data-nav="upload" class="nav-item"><span aria-hidden="true">↑</span><span>ভিডিও আপলোড</span></a>
+        <div class="sidebar-label">তোমার লাইব্রেরি</div>
+        <nav aria-label="ব্যক্তিগত লাইব্রেরি">
+          <a href="/history" data-route data-nav="history" class="nav-item"><span aria-hidden="true">◷</span><span>দেখার ইতিহাস</span></a>
+          <a href="/playlists" data-route data-nav="playlists" class="nav-item"><span aria-hidden="true">▣</span><span>প্লেলিস্ট ও পরে দেখব</span></a>
+          <a href="/channel/me" data-route data-nav="my-channel" class="nav-item"><span aria-hidden="true">♡</span><span>আমার চ্যানেল</span></a>
+          <a href="/upload" data-route data-nav="upload" class="nav-item"><span aria-hidden="true">↑</span><span>ভিডিও আপলোড</span></a>
+        </nav>
         <div class="sidebar-note">
           <div class="sidebar-note-icon"><span aria-hidden="true">▷</span></div>
           <p>তোমার গল্প, তোমার কণ্ঠে।</p>
@@ -51,11 +56,12 @@
     <nav class="mobile-bottom-nav" aria-label="মোবাইল নেভিগেশন">
       <a href="/" data-route data-mobile-nav="home"><span>⌂</span><span>হোম</span></a>
       <a href="/search" data-route data-mobile-nav="search"><span>⌕</span><span>খুঁজে দেখো</span></a>
-      <a href="/upload" data-route data-mobile-nav="upload"><span class="mobile-upload">＋</span><span>আপলোড</span></a>
-      <a href="/channel/me" data-route data-mobile-nav="channel"><span>♡</span><span>চ্যানেল</span></a>
+      <a href="/subscriptions" data-route data-mobile-nav="subscriptions"><span>▤</span><span>সাবস্ক্রিপশন</span></a>
+      <a href="/playlists" data-route data-mobile-nav="playlists"><span>▣</span><span>লাইব্রেরি</span></a>
     </nav>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/socket.io/socket.io.js"></script>
   <script>
   'use strict';
   const app = document.getElementById('app');
@@ -65,24 +71,23 @@
   const searchForm = document.getElementById('searchForm');
   const globalSearch = document.getElementById('globalSearch');
   const toast = document.getElementById('toast');
+  const socket = typeof io === 'function' ? io({ transports: ['websocket', 'polling'] }) : null;
   const state = {
     config: { maxFileMb: 500, googleLoginEnabled: false },
     session: { user: null, profile: null },
-    category: '', query: '', routeToken: 0, toastTimer: null
+    category: '', query: '', routeToken: 0, toastTimer: null,
+    currentVideoId: null, currentChannelHandle: null, commentNodes: new Map()
   };
   const categories = [
-    { value: '', label: 'সব ভিডিও' },
-    { value: 'ভ্রমণ', label: 'ভ্রমণ' }, { value: 'রান্না', label: 'রান্না' },
-    { value: 'ক্রিয়েটর', label: 'ক্রিয়েটর' }, { value: 'গল্প', label: 'গল্প' },
-    { value: 'শেখা', label: 'শেখা' }, { value: 'অন্যান্য', label: 'অন্যান্য' }
+    { value: '', label: 'সব ভিডিও' }, { value: 'ভ্রমণ', label: 'ভ্রমণ' },
+    { value: 'রান্না', label: 'রান্না' }, { value: 'ক্রিয়েটর', label: 'ক্রিয়েটর' },
+    { value: 'গল্প', label: 'গল্প' }, { value: 'শেখা', label: 'শেখা' },
+    { value: 'অন্যান্য', label: 'অন্যান্য' }
   ];
   const thumbnailByCategory = {
-    'ভ্রমণ': '/assets/clipnest-sylhet-hills.webp',
-    'রান্না': '/assets/clipnest-khichuri.webp',
-    'ক্রিয়েটর': '/assets/clipnest-creator-studio.webp',
-    'গল্প': '/assets/clipnest-river-boat.webp',
-    'শেখা': '/assets/clipnest-creator-studio.webp',
-    'অন্যান্য': '/assets/clipnest-river-boat.webp'
+    'ভ্রমণ': '/assets/clipnest-sylhet-hills.webp', 'রান্না': '/assets/clipnest-khichuri.webp',
+    'ক্রিয়েটর': '/assets/clipnest-creator-studio.webp', 'গল্প': '/assets/clipnest-river-boat.webp',
+    'শেখা': '/assets/clipnest-creator-studio.webp', 'অন্যান্য': '/assets/clipnest-river-boat.webp'
   };
   const avatarColors = ['#e97855', '#ce825c', '#536f8e', '#5f8c70'];
   function $(tag, props = {}, children = []) {
@@ -93,6 +98,7 @@
       else if (key === 'htmlFor') el.htmlFor = value;
       else if (key.startsWith('on')) el.addEventListener(key.slice(2).toLowerCase(), value);
       else if (key === 'value') el.value = value;
+      else if (key === 'disabled') el.disabled = Boolean(value);
       else if (key === 'checked') { el.checked = Boolean(value); el.defaultChecked = Boolean(value); }
       else if (key === 'hidden') el.hidden = Boolean(value);
       else if (key === 'style' && typeof value === 'object') Object.assign(el.style, value);
@@ -105,21 +111,24 @@
   const escapePath = value => encodeURIComponent(text(value));
   const initials = value => text(value, 'C').trim().slice(0, 1).toLocaleUpperCase('bn-BD') || 'C';
   const number = value => (Number(value) || 0).toLocaleString('bn-BD');
-  const fmtSize = bytes => {
-    const n = Number(bytes) || 0;
-    if (n >= 1073741824) return (n / 1073741824).toFixed(1) + ' GB';
-    if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
-    if (n >= 1024) return Math.round(n / 1024) + ' KB';
-    return n + ' B';
-  };
-  const fmtDate = date => {
-    if (!date) return 'তারিখ অজানা';
-    try { return new Intl.DateTimeFormat('bn-BD', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(date)); }
-    catch (_) { return text(date); }
-  };
+  const thumbFor = category => thumbnailByCategory[category] || thumbnailByCategory['অন্যান্য'];
   const getName = (profile, user) => text(profile && profile.displayName, text(user && (user.name || user.email), 'ভিডিও নির্মাতা'));
   const getHandle = (profile, user) => text(profile && profile.handle, text(user && (user.handle || user.name), 'member')).replace(/^@/, '');
-  const thumbFor = category => thumbnailByCategory[category] || thumbnailByCategory['অন্যান্য'];
+  function fmtDate(date) {
+    if (!date) return 'তারিখ অজানা';
+    const age = Math.max(0, Date.now() - new Date(date).getTime());
+    if (age < 60 * 60 * 1000) return Math.max(1, Math.floor(age / 60000)) + ' মিনিট আগে';
+    if (age < 24 * 60 * 60 * 1000) return Math.floor(age / 3600000) + ' ঘণ্টা আগে';
+    if (age < 30 * 24 * 60 * 60 * 1000) return Math.floor(age / 86400000) + ' দিন আগে';
+    try { return new Intl.DateTimeFormat('bn-BD', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(date)); }
+    catch (_) { return text(date); }
+  }
+  function fmtSize(bytes) {
+    const n = Number(bytes) || 0;
+    if (n >= 1073741824) return (n / 1073741824).toFixed(1) + ' GB';
+    if (n >= 1048576) return Math.round(n / 1048576) + ' MB';
+    return Math.round(n / 1024) + ' KB';
+  }
   function notify(message, kind = '') {
     toast.textContent = message;
     toast.className = 'toast show' + (kind === 'error' ? ' toast-error' : '');
@@ -131,62 +140,50 @@
     if (opts.body && typeof opts.body !== 'string') { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(opts.body); }
     const response = await fetch(url, opts);
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const error = new Error(text(data.error, text(data.message, 'অনুরোধটি সম্পন্ন করা যায়নি।')));
-      error.status = response.status;
-      throw error;
-    }
+    if (!response.ok) { const error = new Error(text(data.error, text(data.message, 'অনুরোধটি সম্পন্ন করা যায়নি।'))); error.status = response.status; throw error; }
     return data;
   }
-  function button(label, cls = '', handler = null) {
-    return $('button', { type: 'button', class: cls, text: label, ...(handler ? { onClick: handler } : {}) });
-  }
-  function linkButton(label, path, cls = 'primary-cta') {
-    return $('a', { href: path, 'data-route': '', class: cls, text: label });
-  }
+  function button(label, cls = '', handler = null) { return $('button', { type: 'button', class: cls, text: label, ...(handler ? { onClick: handler } : {}) }); }
+  function linkButton(label, path, cls = 'primary-cta') { return $('a', { href: path, 'data-route': '', class: cls, text: label }); }
   function setPage(children) { app.replaceChildren(...children); app.focus({ preventScroll: true }); }
-  function loadingPage(message = 'লোড হচ্ছে…') {
-    setPage([$ ('div', { class: 'empty-state' }, [$('span', { class: 'empty-state-icon', text: '…' }), $('h3', { text: message })])]);
-  }
+  function loadingPage(message = 'লোড হচ্ছে…') { setPage([$ ('div', { class: 'empty-state' }, [$('span', { class: 'empty-state-icon', text: '…' }), $('h3', { text: message })])]); }
   function closeMobile() { sidebar.classList.remove('sidebar-open'); mobileToggle.setAttribute('aria-expanded', 'false'); }
+  function leaveRealtimeRooms() {
+    if (socket && state.currentVideoId) socket.emit('video:leave', state.currentVideoId);
+    if (socket && state.currentChannelHandle) socket.emit('channel:leave', state.currentChannelHandle);
+    state.currentVideoId = null; state.currentChannelHandle = null; state.commentNodes.clear();
+    window.__addClipNestComment = null;
+  }
   function navigate(path) {
-    state.routeToken++;
     if (location.pathname + location.search !== path) history.pushState({}, '', path);
-    closeMobile();
-    renderRoute();
+    closeMobile(); renderRoute();
   }
   function updateNav(path) {
     document.querySelectorAll('[data-nav]').forEach(link => {
       const target = link.dataset.nav;
-      const active = target === 'home' ? path === '/' : target === 'search' ? path.startsWith('/search') : target === 'upload' ? path === '/upload' : target === 'channels' ? path.startsWith('/channels') || (path.startsWith('/channel/') && path !== '/channel/me') : target === 'my-channel' ? path.startsWith('/channel/') : false;
+      const active = target === 'home' ? path === '/' : target === 'search' ? path.startsWith('/search') : target === 'upload' ? path === '/upload' : target === 'subscriptions' ? path.startsWith('/subscriptions') : target === 'history' ? path.startsWith('/history') : target === 'playlists' ? path.startsWith('/playlists') || path.startsWith('/playlist/') : target === 'channels' ? path.startsWith('/channels') || (path.startsWith('/channel/') && path !== '/channel/me') : target === 'my-channel' ? path === '/channel/me' : false;
       link.classList.toggle('nav-item-active', active);
     });
     document.querySelectorAll('[data-mobile-nav]').forEach(link => {
       const target = link.dataset.mobileNav;
-      const active = target === 'home' ? path === '/' : target === 'search' ? path.startsWith('/search') : target === 'upload' ? path === '/upload' : target === 'channel' ? path.startsWith('/channel/') : false;
+      const active = target === 'home' ? path === '/' : target === 'search' ? path.startsWith('/search') : target === 'subscriptions' ? path.startsWith('/subscriptions') : target === 'playlists' ? path.startsWith('/playlists') || path.startsWith('/playlist/') : false;
       link.classList.toggle('mobile-nav-active', active);
     });
   }
   function renderAccount() {
     accountArea.replaceChildren();
     if (!state.session.user) {
-      const login = button('লগইন', 'login-button', () => {
-        if (state.config.googleLoginEnabled) location.href = '/auth/google';
-        else notify('Google OAuth hosting-এ সেটআপ করা হয়নি।', 'error');
-      });
+      const login = button('লগইন', 'login-button', () => state.config.googleLoginEnabled ? location.assign('/auth/google') : notify('Google OAuth hosting-এ সেটআপ করা হয়নি।', 'error'));
       login.setAttribute('aria-label', 'Google দিয়ে লগইন');
       if (!state.config.googleLoginEnabled) login.title = 'Google OAuth credentials configure করা নেই';
-      accountArea.append(login);
-      return;
+      accountArea.append(login); return;
     }
-    const profile = state.session.profile;
-    const name = getName(profile, state.session.user);
+    const name = getName(state.session.profile, state.session.user);
     const avatar = $('span', { class: 'user-avatar', text: initials(name) });
     const toggle = $('button', { type: 'button', class: 'account-toggle', 'aria-expanded': 'false', 'aria-label': 'অ্যাকাউন্ট মেনু' }, [avatar, $('span', { class: 'account-name', text: name }), $('span', { class: 'chevron', text: '⌄' })]);
     const menu = $('div', { class: 'account-menu' });
     menu.append($('div', { class: 'menu-note', text: name }));
-    menu.append($('a', { href: '/channel/me', 'data-route': '', text: 'আমার চ্যানেল' }));
-    menu.append($('a', { href: '/upload', 'data-route': '', text: 'ভিডিও আপলোড' }));
+    [['আমার চ্যানেল', '/channel/me'], ['সাবস্ক্রিপশন', '/subscriptions'], ['প্লেলিস্ট', '/playlists'], ['ভিডিও আপলোড', '/upload']].forEach(([label, href]) => menu.append($('a', { href, 'data-route': '', text: label })));
     menu.append($('button', { type: 'button', class: 'logout-item', text: 'লগআউট', onClick: async () => {
       try { await jsonFetch('/auth/logout', { method: 'POST', body: {} }); state.session = { user: null, profile: null }; renderAccount(); notify('লগআউট হয়েছে।'); renderRoute(); }
       catch (error) { notify(error.message, 'error'); }
@@ -204,34 +201,41 @@
     const strip = $('div', { class: className, role: 'tablist', 'aria-label': 'ভিডিও বিভাগ' });
     categories.forEach(item => {
       const chip = button(item.label, 'category-chip' + (active === item.value ? ' category-chip-active' : ''), () => onChoose(item.value));
-      chip.setAttribute('role', 'tab');
-      chip.setAttribute('aria-selected', String(active === item.value));
-      strip.append(chip);
+      chip.setAttribute('role', 'tab'); chip.setAttribute('aria-selected', String(active === item.value)); strip.append(chip);
     });
     return strip;
   }
-  function videoCard(video, featured = false) {
-    const card = $('article', { class: 'video-card' + (featured ? ' video-card-featured' : '') });
-    const thumbLink = $('a', { href: '/watch/' + escapePath(video.id), 'data-route': '', class: 'video-thumb-link', 'aria-label': text(video.title, 'ভিডিও দেখো') });
+  function avatar(name, url, className = 'creator-avatar') {
+    const node = $('span', { class: className, style: { background: avatarColors[Math.abs(text(name).length) % avatarColors.length] }, text: initials(name) });
+    if (url) {
+      const img = $('img', { src: url, alt: '', referrerpolicy: 'no-referrer', loading: 'lazy' });
+      img.addEventListener('error', () => img.remove()); node.replaceChildren(img);
+    }
+    return node;
+  }
+  function videoCard(video, options = {}) {
+    const card = $('article', { class: 'video-card' + (options.featured ? ' video-card-featured' : '') });
+    const watchPath = '/watch/' + escapePath(video.id);
+    const thumbLink = $('a', { href: watchPath, 'data-route': '', class: 'video-thumb-link', 'aria-label': text(video.title, 'ভিডিও দেখো') });
     const thumb = $('div', { class: 'video-thumb', style: { '--thumb-accent': avatarColors[Math.abs(text(video.category).length) % avatarColors.length] } });
     const img = $('img', { src: thumbFor(video.category), alt: '', loading: 'lazy' });
-    img.addEventListener('error', () => { img.remove(); });
-    thumb.append(img, $('span', { class: 'thumb-overlay' }), $('span', { class: 'thumb-play' }, [$('span', { class: 'play-glyph' })]), $('span', { class: 'video-duration', text: fmtSize(video.size) }));
+    img.addEventListener('error', () => img.remove());
+    thumb.append(img, $('span', { class: 'thumb-overlay' }), $('span', { class: 'thumb-play' }, [$('span', { class: 'play-glyph' })]), $('span', { class: 'video-duration', text: text(video.category, 'ClipNest') }));
     thumbLink.append(thumb);
     const body = $('div', { class: 'video-card-body' });
     const ownerName = text(video.ownerName, 'ClipNest নির্মাতা');
     const ownerHandle = text(video.ownerHandle, '');
-    const avatar = $('a', { href: ownerHandle ? '/channel/' + escapePath(ownerHandle) : '/channel/me', 'data-route': '', class: 'creator-avatar', style: { background: avatarColors[Math.abs(ownerName.length) % avatarColors.length] }, text: initials(ownerName), 'aria-label': ownerName });
+    const creatorLink = ownerHandle ? '/channel/' + escapePath(ownerHandle) : '/channels';
+    const creator = $('a', { href: creatorLink, 'data-route': '', class: 'creator-avatar-link', 'aria-label': ownerName }, [avatar(ownerName, video.ownerAvatar)]);
     const copy = $('div', { class: 'video-copy' });
-    copy.append($('a', { href: '/watch/' + escapePath(video.id), 'data-route': '', class: 'video-title', text: text(video.title, 'শিরোনামহীন ভিডিও') }));
-    copy.append($('a', { href: ownerHandle ? '/channel/' + escapePath(ownerHandle) : '/channel/me', 'data-route': '', class: 'creator-name', text: ownerName }));
+    copy.append($('a', { href: watchPath, 'data-route': '', class: 'video-title', text: text(video.title, 'শিরোনামহীন ভিডিও') }));
+    copy.append($('a', { href: creatorLink, 'data-route': '', class: 'creator-name', text: ownerName }));
     const meta = $('div', { class: 'video-meta' });
     meta.append($('span', { text: number(video.viewsCount) + ' ভিউ' }), $('span', { class: 'meta-dot' }), $('span', { text: fmtDate(video.created) }));
     copy.append(meta);
     const actions = $('div', { class: 'card-actions' });
-    const liked = Boolean(video.liked);
-    const likeButton = $('button', { type: 'button', class: 'card-icon' + (liked ? ' card-icon-liked' : ''), 'aria-label': 'লাইক দাও' });
-    likeButton.append($('span', { class: 'heart-icon', text: liked ? '♥' : '♡' }), $('span', { class: 'card-like-count', text: number(video.likesCount) }));
+    const likeButton = $('button', { type: 'button', class: 'card-icon' + (video.liked ? ' card-icon-liked' : ''), 'aria-label': video.liked ? 'লাইক সরাও' : 'লাইক দাও' });
+    likeButton.append($('span', { class: 'heart-icon', text: video.liked ? '♥' : '♡' }), $('span', { class: 'card-like-count', text: number(video.likesCount) }));
     likeButton.addEventListener('click', async event => {
       event.preventDefault(); event.stopPropagation();
       if (!state.session.user) { notify('লাইক দিতে আগে Google দিয়ে লগইন করো।'); navigate('/login'); return; }
@@ -239,307 +243,229 @@
       try {
         const result = await jsonFetch('/api/videos/' + encodeURIComponent(video.id) + '/like', { method: 'POST', body: {} });
         video.liked = result.liked; video.likesCount = result.likesCount;
-        likeButton.classList.toggle('card-icon-liked', result.liked);
-        likeButton.querySelector('.heart-icon').textContent = result.liked ? '♥' : '♡';
-        likeButton.querySelector('.card-like-count').textContent = number(result.likesCount);
-        likeButton.setAttribute('aria-label', result.liked ? 'লাইক সরাও' : 'লাইক দাও');
-      } catch (error) { notify(error.message, 'error'); }
-      finally { likeButton.disabled = false; }
+        likeButton.classList.toggle('card-icon-liked', result.liked); likeButton.querySelector('.heart-icon').textContent = result.liked ? '♥' : '♡';
+        likeButton.querySelector('.card-like-count').textContent = number(result.likesCount); likeButton.setAttribute('aria-label', result.liked ? 'লাইক সরাও' : 'লাইক দাও');
+      } catch (error) { notify(error.message, 'error'); } finally { likeButton.disabled = false; }
     });
     actions.append(likeButton);
-    body.append(avatar, copy, actions);
-    card.append(thumbLink, body);
-    return card;
+    const save = button(video.watchLater ? '▣' : '＋', 'card-icon card-save', async event => {
+      if (!state.session.user) { notify('পরে দেখার তালিকায় রাখতে লগইন করো।'); navigate('/login'); return; }
+      save.disabled = true;
+      try { const result = await jsonFetch('/api/me/watch-later/' + encodeURIComponent(video.id), { method: 'POST', body: {} }); video.watchLater = result.saved; save.textContent = result.saved ? '▣' : '＋'; notify(result.saved ? 'পরে দেখার তালিকায় যোগ হয়েছে।' : 'তালিকা থেকে সরানো হয়েছে।'); }
+      catch (error) { notify(error.message, 'error'); } finally { save.disabled = false; }
+    });
+    save.title = video.watchLater ? 'পরে দেখার তালিকা থেকে সরাও' : 'পরে দেখার জন্য রাখো'; actions.append(save);
+    if (options.playlistId) actions.append(button('×', 'card-icon card-remove', async () => {
+      try { await jsonFetch(`/api/playlists/${encodeURIComponent(options.playlistId)}/videos/${encodeURIComponent(video.id)}`, { method: 'DELETE' }); card.remove(); notify('প্লেলিস্ট থেকে সরানো হয়েছে।'); }
+      catch (error) { notify(error.message, 'error'); }
+    }));
+    body.append(creator, copy, actions); card.append(thumbLink, body); return card;
   }
-  function videoGrid(videos, message = 'এখনো কোনো প্রকাশিত ভিডিও নেই।') {
+  function videoGrid(videos, message = 'এখনো কোনো প্রকাশিত ভিডিও নেই।', options = {}) {
     const grid = $('div', { class: 'video-grid' });
     if (!Array.isArray(videos) || !videos.length) { grid.append(emptyState(message, 'নতুন ভিডিও যোগ হলে এখানে দেখা যাবে।', state.session.user ? 'ভিডিও আপলোড করো' : 'লগইন করে আপলোড করো', state.session.user ? '/upload' : '/login')); return grid; }
-    videos.forEach((video, index) => grid.append(videoCard(video, index === 0 && !state.category)));
+    videos.forEach((video, index) => grid.append(videoCard(video, { featured: index === 0 && !state.category, playlistId: options.playlistId })));
     return grid;
   }
   function queryUrl(query = state.query, category = state.category, offset = 0, limit = 24) {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
-    if (query) params.set('query', query);
-    if (category) params.set('category', category);
+    if (query) params.set('query', query); if (category) params.set('category', category);
     return '/api/videos?' + params.toString();
   }
   function heroPanel(featured) {
     const section = $('section', { class: 'hero-panel' });
     const img = $('img', { class: 'hero-image', src: featured ? thumbFor(featured.category) : '/assets/clipnest-river-boat.webp', alt: '', fetchpriority: 'high' });
-    img.addEventListener('error', () => { img.remove(); });
-    section.append(img, $('div', { class: 'hero-shade' }));
+    img.addEventListener('error', () => img.remove()); section.append(img, $('div', { class: 'hero-shade' }));
     const copy = $('div', { class: 'hero-copy' });
-    copy.append($('span', { class: 'hero-eyebrow', text: '✦ বাংলা ভিডিও, তোমার মতো' }), $('h1', {}, [$('span', { text: 'আজ কী' }), document.createElement('br'), $('em', { text: 'দেখবে?' })]), $('p', { text: 'গল্প, রান্না, ভ্রমণ—নিজের ভাষায়, নিজের মানুষের কাছে।' }));
+    copy.append($('span', { class: 'hero-eyebrow', text: '✦ বাংলা ভিডিও, তোমার মতো' }), $('h1', {}, [$('span', { text: 'আজ কী' }), document.createElement('br'), $('em', { text: 'দেখবে?' })]), $('p', { text: 'নতুন গল্প, পরিচিত মুখ আর নিজের পছন্দের নির্মাতাদের এক ফিডে খুঁজে নাও।' }));
     copy.append(linkButton(featured ? '▷  ভিডিও দেখো  ↗' : '⌕  খুঁজে দেখো  ↗', featured ? '/watch/' + escapePath(featured.id) : '/search', 'hero-cta'));
     const caption = $('div', { class: 'hero-caption' });
-    caption.append($('span', { class: 'hero-caption-kicker', text: featured ? 'সাম্প্রতিক public video' : 'ClipNest · বাংলা ভিডিও' }), $('strong', { text: featured ? text(featured.title, 'নতুন ভিডিও') : 'নিজের গল্প, নিজের ভাষায়' }), $('span', { text: featured ? text(featured.ownerName, 'ClipNest নির্মাতা') + ' · ' + number(featured.viewsCount) + ' ভিউ' : 'তোমার দেখা শুরু হোক এখান থেকেই' }));
-    section.append(copy, caption, $('div', { class: 'hero-progress' }, [$('span')]));
-    return section;
+    caption.append($('span', { class: 'hero-caption-kicker', text: featured ? 'তোমার জন্য বাছাই' : 'ClipNest · বাংলা ভিডিও' }), $('strong', { text: featured ? text(featured.title, 'নতুন ভিডিও') : 'নিজের গল্প, নিজের ভাষায়' }), $('span', { text: featured ? text(featured.ownerName, 'ClipNest নির্মাতা') + ' · ' + number(featured.viewsCount) + ' ভিউ' : 'তোমার দেখা শুরু হোক এখান থেকেই' }));
+    section.append(copy, caption, $('div', { class: 'hero-progress' }, [$('span')])); return section;
   }
   function creatorCallout() {
     const section = $('section', { class: 'creator-callout' });
     section.append($('div', { class: 'creator-callout-mark', text: '▷' }), $('div', {}, [
-      $('span', { class: 'section-kicker', text: 'তুমি কি নির্মাতা?' }),
-      $('h3', { text: 'তোমার ভিডিওর জন্যও এখানে জায়গা আছে' }),
+      $('span', { class: 'section-kicker', text: 'তুমি কি নির্মাতা?' }), $('h3', { text: 'তোমার ভিডিওর জন্যও এখানে জায়গা আছে' }),
       $('p', { text: 'নিজের গল্প শেয়ার করো, তোমার মতো দর্শকের কাছে পৌঁছে দাও।' })
     ]), linkButton('ভিডিও আপলোড  ↗', '/upload', 'outline-cta'));
     return section;
   }
-  async function renderHome(token) {
-    updateNav('/');
-    const feed = $('section', { class: 'feed-section' });
-    const heading = $('div', { class: 'feed-heading' }, [
-      $('div', {}, [$('span', { class: 'section-kicker', text: 'তোমার জন্য' }), $('h2', { text: 'আজকের ভিডিও' })]),
-      linkButton('সব দেখো  ↗', '/search', 'see-all')
-    ]);
-    const chips = categoryChips(state.category, value => { state.category = value; renderRoute(); });
-    const grid = $('div', { class: 'video-grid' }, [emptyState('ভিডিও খুঁজছি…', 'একটু অপেক্ষা করো।')]);
-    feed.append(heading, chips, grid);
-    setPage([heroPanel(null), feed, creatorCallout()]);
-    try {
-      const data = await jsonFetch(queryUrl('', state.category, 0, 24));
-      if (token !== state.routeToken) return;
-      const videos = data.videos || [];
-      app.replaceChildren(heroPanel(videos[0] || null), feed, creatorCallout());
-      chips.replaceWith(categoryChips(state.category, value => { state.category = value; renderRoute(); }));
-      const nextGrid = videoGrid(videos, 'এখনো কোনো public video নেই। প্রথম ভিডিওটি তোমার হতে পারে।');
-      grid.replaceWith(nextGrid);
-      if (data.hasMore) appendLoadMore(feed, nextGrid, '', state.category, 24, token);
-    } catch (error) {
-      if (token === state.routeToken) grid.replaceWith(emptyState('ভিডিও লোড করা যায়নি', error.message, 'আবার চেষ্টা করো', '/'));
-    }
-  }
   function appendLoadMore(section, grid, query, category, offset, token) {
-    const more = button('আরও ভিডিও দেখো', 'outline-cta');
-    more.style.margin = '22px auto 0'; more.style.display = 'flex';
+    const more = button('আরও ভিডিও দেখো', 'outline-cta load-more');
     more.addEventListener('click', async () => {
       more.disabled = true;
-      try {
-        const data = await jsonFetch(queryUrl(query, category, offset, 24));
-        if (token !== state.routeToken) return;
-        (data.videos || []).forEach(video => grid.append(videoCard(video)));
-        if (data.hasMore) { offset += 24; more.disabled = false; }
-        else more.remove();
-      } catch (error) { more.disabled = false; notify(error.message, 'error'); }
+      try { const data = await jsonFetch(queryUrl(query, category, offset, 24)); if (token !== state.routeToken) return; (data.videos || []).forEach(video => grid.append(videoCard(video))); if (data.hasMore) { offset += 24; more.disabled = false; } else more.remove(); }
+      catch (error) { more.disabled = false; notify(error.message, 'error'); }
     });
     section.append(more);
   }
+  async function renderHome(token) {
+    updateNav('/');
+    const feed = $('section', { class: 'feed-section' });
+    const heading = $('div', { class: 'feed-heading' }, [$('div', {}, [$('span', { class: 'section-kicker', text: 'তোমার জন্য' }), $('h2', { text: 'আজকের ভিডিও' })]), linkButton('সব দেখো  ↗', '/search', 'see-all')]);
+    const chips = categoryChips(state.category, value => { state.category = value; renderRoute(); });
+    const grid = $('div', { class: 'video-grid' }, [emptyState('ভিডিও খুঁজছি…', 'একটু অপেক্ষা করো।')]);
+    feed.append(heading, chips, grid); setPage([heroPanel(null), feed, creatorCallout()]);
+    try {
+      const data = await jsonFetch(queryUrl('', state.category, 0, 24)); if (token !== state.routeToken) return;
+      const videos = data.videos || []; app.replaceChildren(heroPanel(videos[0] || null), feed, creatorCallout());
+      chips.replaceWith(categoryChips(state.category, value => { state.category = value; renderRoute(); }));
+      const nextGrid = videoGrid(videos, 'এখনো কোনো public video নেই। প্রথম ভিডিওটি তোমার হতে পারে.'); grid.replaceWith(nextGrid);
+      if (data.hasMore) appendLoadMore(feed, nextGrid, '', state.category, 24, token);
+    } catch (error) { if (token === state.routeToken) grid.replaceWith(emptyState('ভিডিও লোড করা যায়নি', error.message, 'আবার চেষ্টা করো', '/')); }
+  }
   async function renderSearch(token) {
-    updateNav('/search');
-    const params = new URLSearchParams(location.search);
-    state.query = params.get('q') || '';
-    globalSearch.value = state.query;
-    const pageHeading = $('div', { class: 'page-heading search-heading' }, [
-      $('div', {}, [$('span', { class: 'section-kicker', text: 'আবিষ্কার' }), $('h1', { text: 'কী দেখতে ইচ্ছে করছে?' }), $('p', { text: 'বাংলা ভিডিও, চ্যানেল আর গল্প এক জায়গায় খুঁজে দেখো।' })])
-    ]);
+    updateNav('/search'); state.query = new URLSearchParams(location.search).get('q') || ''; globalSearch.value = state.query;
+    const pageHeading = $('div', { class: 'page-heading search-heading' }, [$('div', {}, [$('span', { class: 'section-kicker', text: 'আবিষ্কার' }), $('h1', { text: 'কী দেখতে ইচ্ছে করছে?' }), $('p', { text: 'বাংলা ভিডিও, চ্যানেল আর গল্প এক জায়গায় খুঁজে দেখো।' })])]);
     const input = $('input', { type: 'search', value: state.query, placeholder: 'যেমন: ভ্রমণ, রান্না, গল্প', 'aria-label': 'ভিডিও খুঁজুন' });
     const form = $('form', { class: 'search-large', role: 'search' }, [$('span', { text: '⌕', 'aria-hidden': 'true' }), input, $('button', { type: 'submit', class: 'search-clear', 'aria-label': 'সার্চ করো', text: '⌕' })]);
     form.addEventListener('submit', event => { event.preventDefault(); state.category = ''; state.query = input.value.trim(); navigate('/search' + (state.query ? '?q=' + encodeURIComponent(state.query) : '')); });
     const filters = categoryChips(state.category, value => { state.category = value; renderRoute(); }, 'search-filters');
     const resultHead = $('div', { class: 'results-heading' }, [$('h2', { text: state.query ? '“' + state.query + '”–এর ফলাফল' : 'সব ভিডিও' }), $('span', { text: 'লোড হচ্ছে…' })]);
-    const grid = $('div', { class: 'video-grid' }, [emptyState('ফলাফল খুঁজছি…', 'একটু অপেক্ষা করো।')]);
-    setPage([pageHeading, form, filters, resultHead, grid]);
-    try {
-      const data = await jsonFetch(queryUrl(state.query, state.category, 0, 24));
-      if (token !== state.routeToken) return;
-      resultHead.lastElementChild.textContent = number((data.videos || []).length) + 'টি ভিডিও';
-      const nextGrid = videoGrid(data.videos || [], 'এই খোঁজে কোনো ভিডিও পাওয়া যায়নি।');
-      grid.replaceWith(nextGrid);
-      if (data.hasMore) appendLoadMore(app, nextGrid, state.query, state.category, 24, token);
-    } catch (error) { if (token === state.routeToken) grid.replaceWith(emptyState('খোঁজ সম্পন্ন হয়নি', error.message, 'হোমে ফিরো', '/')); }
+    const grid = $('div', { class: 'video-grid' }, [emptyState('ফলাফল খুঁজছি…', 'একটু অপেক্ষা করো।')]); setPage([pageHeading, form, filters, resultHead, grid]);
+    try { const data = await jsonFetch(queryUrl(state.query, state.category, 0, 24)); if (token !== state.routeToken) return; resultHead.lastElementChild.textContent = number((data.videos || []).length) + 'টি ভিডিও'; const nextGrid = videoGrid(data.videos || [], 'এই খোঁজে কোনো ভিডিও পাওয়া যায়নি।'); grid.replaceWith(nextGrid); if (data.hasMore) appendLoadMore(app, nextGrid, state.query, state.category, 24, token); }
+    catch (error) { if (token === state.routeToken) grid.replaceWith(emptyState('খোঁজ সম্পন্ন হয়নি', error.message, 'হোমে ফিরো', '/')); }
   }
   function renderLogin(message = '') {
-    updateNav('/login');
-    const panel = $('div', { class: 'login-panel' });
-    panel.append($('span', { class: 'login-symbol', text: '▷' }), $('span', { class: 'section-kicker', text: 'ClipNest-এ যোগ দাও' }), $('h1', {}, [$('span', { text: 'তোমার গল্প' }), document.createElement('br'), $('span', { text: 'দেখা হোক।' })]), $('p', { text: 'চ্যানেল তৈরি করো, ভিডিও খুঁজে দেখো, নিজের পছন্দের গল্পগুলোতে লাইক দাও।' }));
+    updateNav('/login'); const panel = $('div', { class: 'login-panel' });
+    panel.append($('span', { class: 'login-symbol', text: '▷' }), $('span', { class: 'section-kicker', text: 'ClipNest-এ যোগ দাও' }), $('h1', {}, [$('span', { text: 'তোমার গল্প' }), document.createElement('br'), $('span', { text: 'দেখা হোক।' })]), $('p', { text: 'চ্যানেল তৈরি করো, নির্মাতাদের সাবস্ক্রাইব করো, ভিডিওতে আলোচনা করো আর নিজের দেখার তালিকা গুছিয়ে রাখো।' }));
     if (message) panel.append($('div', { class: 'notice notice-warn', text: message }));
-    const login = button(state.config.googleLoginEnabled ? 'Google account দিয়ে লগইন' : 'Google login সেটআপ দরকার', 'primary-cta login-wide', () => {
-      if (state.config.googleLoginEnabled) location.href = '/auth/google';
-      else notify('Hosting-এ GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET ও GOOGLE_REDIRECT_URI সেট করতে হবে।', 'error');
-    });
+    const login = button(state.config.googleLoginEnabled ? 'Google account দিয়ে লগইন' : 'Google login সেটআপ দরকার', 'primary-cta login-wide', () => state.config.googleLoginEnabled ? location.assign('/auth/google') : notify('Hosting-এ GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET ও GOOGLE_REDIRECT_URI সেট করতে হবে।', 'error'));
     if (!state.config.googleLoginEnabled) login.title = 'Google OAuth credentials configure করা নেই';
-    panel.append(login, $('span', { class: 'login-footnote', text: 'লগইন করলে তোমার ইমেইল ঠিকানা থেকে ClipNest profile তৈরি হবে।' }));
-    setPage([panel]);
+    panel.append(login, $('span', { class: 'login-footnote', text: 'ইমেইল ও account profile Neon database-এ সুরক্ষিতভাবে রাখা হয়।' })); setPage([panel]);
   }
-  function renderUpload(token) {
-    updateNav('/upload');
-    if (!state.session.user) { renderLogin('ভিডিও আপলোড করতে আগে Google account দিয়ে লগইন করো।'); return; }
-    const page = $('div', { class: 'upload-page' });
-    page.append($('div', { class: 'page-heading' }, [
-      $('div', {}, [$('span', { class: 'section-kicker', text: 'তোমার গল্প শেয়ার করো' }), $('h1', { text: 'ভিডিও আপলোড' }), $('p', { text: 'ভিডিওটি নিরাপদে Cloudflare R2-তে পাঠানো হবে; visibility তুমি বেছে নেবে।' })])
-    ]));
-    const form = $('form', { class: 'upload-form' });
-    const fileState = { file: null };
-    const drop = $('label', { class: 'dropzone' });
-    const fileInput = $('input', { type: 'file', accept: 'video/*,.mp4,.mov,.webm,.mkv,.avi', 'aria-label': 'ভিডিও ফাইল বেছে নাও' });
-    const dropIcon = $('span', { class: 'drop-icon', text: '↑' });
-    const dropTitle = $('strong', { text: 'ভিডিও এখানে ছেড়ে দাও' });
-    const dropHelp = $('span', { text: 'অথবা ফাইল বেছে নিতে ক্লিক করো · সর্বোচ্চ ' + number(state.config.maxFileMb) + ' MB' });
-    const dropBrowse = $('span', { class: 'drop-browse', text: 'ভিডিও বেছে নাও' });
-    drop.append(fileInput, dropIcon, dropTitle, dropHelp, dropBrowse);
-    const title = $('input', { type: 'text', maxlength: '100', required: '', placeholder: 'ভিডিওর নাম লিখো' });
-    const titleCount = $('small', { text: '০/১০০ অক্ষর' });
-    title.addEventListener('input', () => { titleCount.textContent = number(title.value.length) + '/১০০ অক্ষর'; });
-    const description = $('textarea', { maxlength: '5000', placeholder: 'ভিডিওটি নিয়ে কয়েকটি কথা লিখো', rows: '4' });
-    const category = $('select');
-    categories.slice(1).forEach((item, index) => category.append($('option', { value: item.value, text: item.label, ...(index === 0 ? { selected: '' } : {}) })));
-    const visibility = $('select');
-    [['Private', 'শুধু তুমি — Private'], ['Unlisted', 'লিংক থাকলে — Unlisted'], ['Public', 'সবার জন্য — Public']].forEach((item, index) => visibility.append($('option', { value: item[0], text: item[1], ...(index === 0 ? { selected: '' } : {}) })));
-    const field = (label, input, small = null) => { const wrap = $('label', { class: 'form-field' }, [$('span', { text: label }), input]); if (small) wrap.append($('small', { text: small })); return wrap; };
-    const titleField = field('ভিডিওর শিরোনাম *', title); titleField.append(titleCount);
-    const descField = field('বিবরণ · ঐচ্ছিক', description, 'সর্বোচ্চ ৫,০০০ অক্ষর');
-    const categoryField = field('বিভাগ', category);
-    const visibilityField = field('কে ভিডিওটি দেখতে পাবে?', visibility, 'Default Private। Public video-ই ClipNest-এর public feed-এ দেখাবে।');
-    const progressWrap = $('div', { class: 'upload-progress', hidden: true });
-    const progressHead = $('div', {}, [$('span', { text: 'ভিডিও Cloudflare R2-তে যাচ্ছে' }), $('strong', { text: '০%' })]);
-    const progressTrack = $('div', { class: 'progress-track' }, [$('span', { style: { width: '0%' } })]);
-    progressWrap.append(progressHead, progressTrack);
-    const notice = $('div', { class: 'notice', hidden: true });
-    const footer = $('div', { class: 'upload-footer' }, [
-      $('span', { text: 'ফাইল ClipNest-এ থাকবে; Private, Unlisted বা Public visibility বেছে নাও।' }),
-      $('button', { type: 'submit', class: 'primary-cta', text: '↑  ভিডিও আপলোড করো' })
-    ]);
-    const submit = footer.querySelector('button');
-    form.append(drop, titleField, descField, categoryField, visibilityField, progressWrap, notice, footer);
-    const supported = file => {
-      const ext = file.name.toLowerCase().split('.').pop();
-      return file.type.startsWith('video/') || ['mp4','mov','m4v','webm','mkv','avi','wmv','mpeg','mpg','3gp','flv'].includes(ext);
-    };
-    const chooseFile = file => {
-      if (!file) return;
-      if (!supported(file)) { notify('সমর্থিত video format-এর একটি file বেছে নাও।', 'error'); return; }
-      if (file.size > state.config.maxFileMb * 1024 * 1024) { notify('ফাইলটি ' + number(state.config.maxFileMb) + ' MB-এর চেয়ে বড়।', 'error'); return; }
-      fileState.file = file;
-      dropTitle.textContent = file.name;
-      dropHelp.textContent = fmtSize(file.size) + ' · Cloudflare R2-তে upload হবে';
-      dropBrowse.textContent = 'অন্য ফাইল বেছে নাও';
-      if (!title.value) { title.value = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ').slice(0, 100); title.dispatchEvent(new Event('input')); }
-      notice.hidden = true;
-    };
-    fileInput.addEventListener('change', () => chooseFile(fileInput.files && fileInput.files[0]));
-    ['dragenter', 'dragover'].forEach(name => drop.addEventListener(name, event => { event.preventDefault(); drop.classList.add('dropzone-active'); }));
-    ['dragleave', 'drop'].forEach(name => drop.addEventListener(name, event => { event.preventDefault(); drop.classList.remove('dropzone-active'); }));
-    drop.addEventListener('drop', event => chooseFile(event.dataTransfer.files && event.dataTransfer.files[0]));
-    form.addEventListener('submit', async event => {
-      event.preventDefault();
-      const file = fileState.file || (fileInput.files && fileInput.files[0]);
-      if (!file) { notice.textContent = 'আগে একটি ভিডিও ফাইল বেছে নাও।'; notice.className = 'notice notice-warn'; notice.hidden = false; return; }
-      if (!supported(file) || file.size > state.config.maxFileMb * 1024 * 1024) { notice.textContent = 'এই file upload limit বা format মেনে চলছে না।'; notice.className = 'notice notice-warn'; notice.hidden = false; return; }
-      if (!title.value.trim()) { title.focus(); return; }
-      submit.disabled = true; fileInput.disabled = true; progressWrap.hidden = false; notice.hidden = false;
-      notice.className = 'notice notice-warn'; notice.textContent = 'নিরাপদ upload link নেওয়া হচ্ছে…';
-      progressHead.lastElementChild.textContent = '০%';
-      progressTrack.firstElementChild.style.width = '0%';
-      try {
-        const preflight = await jsonFetch('/api/upload-url', { method: 'POST', body: {
-          filename: file.name, contentType: file.type || 'video/mp4', size: file.size,
-          title: title.value.trim(), description: description.value.trim(), category: category.value, visibility: visibility.value
-        } });
-        await putFile(preflight.uploadUrl, file, percent => {
-          progressHead.lastElementChild.textContent = number(percent) + '%';
-          progressTrack.firstElementChild.style.width = percent + '%';
-        }, file.type || 'video/mp4');
-        notice.className = 'notice notice-success'; notice.textContent = 'ভিডিও সংরক্ষণ হচ্ছে…';
-        await jsonFetch('/api/finish', { method: 'POST', body: {
-          objectName: preflight.objectName, id: preflight.id, title: title.value.trim(), description: description.value.trim(), category: category.value, visibility: visibility.value
-        } });
-        notify('ভিডিও আপলোড হয়েছে।');
-        navigate('/watch/' + escapePath(preflight.id));
-      } catch (error) {
-        notice.className = 'notice notice-warn'; notice.textContent = 'Upload সম্পন্ন হয়নি: ' + error.message; notice.hidden = false;
-        progressWrap.hidden = true;
-      } finally { submit.disabled = false; fileInput.disabled = false; }
+  function subscribeButton(handle, subscribed, count, onUpdate) {
+    const buttonNode = button((subscribed ? 'সাবস্ক্রাইব করা' : 'সাবস্ক্রাইব') + ' · ' + number(count), 'follow-button' + (subscribed ? ' follow-button-active' : ''), async () => {
+      if (!state.session.user) { notify('সাবস্ক্রাইব করতে Google account দিয়ে লগইন করো।'); navigate('/login'); return; }
+      buttonNode.disabled = true;
+      try { const result = await jsonFetch('/api/channels/' + encodeURIComponent(handle) + '/subscribe', { method: 'POST', body: {} }); buttonNode.classList.toggle('follow-button-active', result.subscribed); buttonNode.textContent = (result.subscribed ? 'সাবস্ক্রাইব করা' : 'সাবস্ক্রাইব') + ' · ' + number(result.subscribersCount); if (onUpdate) onUpdate(result); }
+      catch (error) { notify(error.message, 'error'); } finally { buttonNode.disabled = false; }
     });
-    page.append(form);
-    setPage([page]);
+    buttonNode.dataset.handle = handle; return buttonNode;
   }
-  function putFile(url, file, onProgress, contentType) {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest(); xhr.open('PUT', url); xhr.setRequestHeader('Content-Type', contentType);
-      xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress(Math.round(event.loaded / event.total * 100)); };
-      xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error('R2 upload failed (HTTP ' + xhr.status + '). CORS policy পরীক্ষা করো।'));
-      xhr.onerror = () => reject(new Error('Network/CORS সমস্যায় upload থেমে গেছে।'));
-      xhr.send(file);
-    });
+  function commentElement(comment, onReply) {
+    const wrap = $('article', { class: 'comment-item', 'data-comment-id': comment.id });
+    wrap.append(avatar(comment.author?.displayName, comment.author?.avatarUrl, 'comment-avatar'));
+    const body = $('div', { class: 'comment-body' });
+    const meta = $('div', { class: 'comment-meta' }, [$('strong', { text: text(comment.author?.displayName, 'নির্মাতা') }), $('span', { text: fmtDate(comment.createdAt) })]);
+    body.append(meta, $('p', { text: comment.body }));
+    if (!comment.parentId) body.append(button('জবাব দাও', 'comment-reply', () => onReply(comment)));
+    else body.classList.add('comment-reply-body');
+    wrap.append(body); return wrap;
   }
-  function setNotice(el, message, kind = 'warn') { el.textContent = message; el.className = 'notice notice-' + kind; el.hidden = false; }
   async function renderWatch(id, token) {
     updateNav('/watch/' + id); loadingPage('ভিডিও খুঁজছি…');
     try {
-      const data = await jsonFetch('/api/videos/' + encodeURIComponent(id));
-      if (token !== state.routeToken) return;
-      const video = data.video || {};
+      const data = await jsonFetch('/api/videos/' + encodeURIComponent(id)); if (token !== state.routeToken) return;
+      const video = data.video || {}; state.currentVideoId = id;
       const section = $('section', { class: 'watch-layout' });
       const main = $('div', { class: 'watch-main' });
       const stage = $('div', { class: 'player-stage player-stage-has-video' });
-      const player = $('video', { class: 'player-media', controls: '', preload: 'metadata', playsinline: '', 'aria-label': text(video.title, 'ভিডিও প্লেয়ার') });
-      player.src = text(video.url, '');
-      stage.append(player);
+      const player = $('video', { class: 'player-media', controls: '', preload: 'metadata', playsinline: '', 'aria-label': text(video.title, 'ভিডিও প্লেয়ার') }); player.src = text(video.url, ''); stage.append(player);
       const title = $('h1', { class: 'watch-title', text: text(video.title, 'শিরোনামহীন ভিডিও') });
-      const subtitle = $('div', { class: 'watch-subtitle' }, [
-        $('span', { text: number(data.viewsCount) + ' ClipNest view' }), $('span', { class: 'meta-dot' }), $('span', { text: fmtDate(video.created) }), $('span', { class: 'watch-category', text: text(video.category, 'অন্যান্য') })
-      ]);
-      const ownerName = text(video.ownerName, 'ClipNest নির্মাতা');
-      const ownerHandle = text(video.ownerHandle, '');
+      const subtitle = $('div', { class: 'watch-subtitle' }, [$('span', { text: number(data.viewsCount) + ' ভিউ' }), $('span', { class: 'meta-dot' }), $('span', { text: fmtDate(video.created) }), $('span', { class: 'watch-category', text: text(video.category, 'অন্যান্য') })]);
+      const ownerName = text(video.ownerName, 'ClipNest নির্মাতা'); const ownerHandle = text(video.ownerHandle, '');
       const creator = $('div', { class: 'watch-creator-row' });
-      creator.append($('a', { href: ownerHandle ? '/channel/' + escapePath(ownerHandle) : '/channel/me', 'data-route': '', class: 'creator-avatar creator-avatar-large', style: { background: avatarColors[Math.abs(ownerName.length) % avatarColors.length] }, text: initials(ownerName) }));
-      creator.append($('div', { class: 'watch-creator-text' }, [
-        $('a', { href: ownerHandle ? '/channel/' + escapePath(ownerHandle) : '/channel/me', 'data-route': '', class: 'creator-name', text: ownerName }),
-        $('span', { text: 'বাংলা গল্প, সবার জন্য' })
-      ]));
-      if (ownerHandle) creator.append($('a', { href: '/channel/' + escapePath(ownerHandle), 'data-route': '', class: 'follow-button channel-link', text: 'চ্যানেল দেখো' }));
+      creator.append($('a', { href: ownerHandle ? '/channel/' + escapePath(ownerHandle) : '/channels', 'data-route': '', class: 'creator-avatar-link' }, [avatar(ownerName, video.ownerAvatar, 'creator-avatar creator-avatar-large')]));
+      creator.append($('div', { class: 'watch-creator-text' }, [$('a', { href: ownerHandle ? '/channel/' + escapePath(ownerHandle) : '/channels', 'data-route': '', class: 'creator-name', text: ownerName }), $('span', { class: 'subscriber-count', text: number(video.subscribersCount || 0) + ' জন অনুসরণ করেন' })]));
+      let subscribe = null;
+      if (ownerHandle && video.channel && (!state.session.profile || state.session.profile.handle?.toLowerCase() !== ownerHandle.toLowerCase())) {
+        subscribe = subscribeButton(ownerHandle, Boolean(video.subscribed), Number(video.subscribersCount) || 0, result => { video.subscribed = result.subscribed; video.subscribersCount = result.subscribersCount; });
+        creator.append(subscribe);
+      }
       const actions = $('div', { class: 'watch-actions' });
+      const stats = $('span', { class: 'watch-stats', text: number(data.likesCount) + ' লাইক · ' + number(data.viewsCount) + ' ভিউ' });
+      function updateStats(counts = {}) {
+        if (counts.likesCount !== undefined) data.likesCount = counts.likesCount;
+        if (counts.viewsCount !== undefined) data.viewsCount = counts.viewsCount;
+        if (counts.commentsCount !== undefined) data.commentsCount = counts.commentsCount;
+        stats.textContent = number(data.likesCount) + ' লাইক · ' + number(data.viewsCount) + ' ভিউ';
+        subtitle.firstElementChild.textContent = number(data.viewsCount) + ' ভিউ';
+        commentsHeadingCount.textContent = number(data.commentsCount) + 'টি মন্তব্য';
+      }
       const like = button((data.liked ? '♥  ' : '♡  ') + number(data.likesCount), 'action-pill' + (data.liked ? ' action-pill-liked' : ''), async () => {
         if (!state.session.user) { notify('লাইক দিতে আগে Google দিয়ে লগইন করো।'); navigate('/login'); return; }
-        like.disabled = true;
+        like.disabled = true; try { const result = await jsonFetch('/api/videos/' + encodeURIComponent(id) + '/like', { method: 'POST', body: {} }); data.liked = result.liked; like.textContent = (result.liked ? '♥  ' : '♡  ') + number(result.likesCount); like.classList.toggle('action-pill-liked', result.liked); updateStats(result); }
+        catch (error) { notify(error.message, 'error'); } finally { like.disabled = false; }
+      });
+      const save = button(data.watchLater ? '▣  পরে দেখবে' : '＋  পরে দেখো', 'action-pill', async () => {
+        if (!state.session.user) { notify('তালিকায় রাখতে লগইন করো।'); navigate('/login'); return; }
+        save.disabled = true; try { const result = await jsonFetch('/api/me/watch-later/' + encodeURIComponent(id), { method: 'POST', body: {} }); data.watchLater = result.saved; save.textContent = result.saved ? '▣  পরে দেখবে' : '＋  পরে দেখো'; notify(result.saved ? 'পরে দেখার তালিকায় যোগ হয়েছে।' : 'তালিকা থেকে সরানো হয়েছে।'); }
+        catch (error) { notify(error.message, 'error'); } finally { save.disabled = false; }
+      });
+      const share = button('↗  শেয়ার', 'action-pill', async () => { try { await navigator.clipboard.writeText(location.href); notify('লিংক কপি হয়েছে।'); } catch (_) { notify('ব্রাউজারের address bar থেকে link কপি করো।', 'error'); } });
+      const playlistPicker = $('div', { class: 'playlist-picker', hidden: true });
+      const playlistButton = button('▤  প্লেলিস্ট', 'action-pill', async () => {
+        if (!state.session.user) { notify('প্লেলিস্টে যোগ করতে লগইন করো।'); navigate('/login'); return; }
+        playlistButton.disabled = true;
         try {
-          const result = await jsonFetch('/api/videos/' + encodeURIComponent(id) + '/like', { method: 'POST', body: {} });
-          data.liked = result.liked; data.likesCount = result.likesCount;
-          like.textContent = (result.liked ? '♥  ' : '♡  ') + number(result.likesCount);
-          like.classList.toggle('action-pill-liked', result.liked); updateStats();
+          const lists = await jsonFetch('/api/me/playlists');
+          const choices = (lists.playlists || []).filter(item => !item.isWatchLater);
+          playlistPicker.replaceChildren();
+          if (!choices.length) { playlistPicker.append($('span', { text: 'নিজের প্লেলিস্ট তৈরি করো:' }), linkButton('প্লেলিস্ট তৈরি', '/playlists', 'text-link')); }
+          else choices.forEach(item => playlistPicker.append(button(item.name, 'playlist-picker-item', async () => {
+            try { await jsonFetch('/api/playlists/' + encodeURIComponent(item.id) + '/videos', { method: 'POST', body: { videoId: id } }); notify('“' + item.name + '” প্লেলিস্টে যোগ হয়েছে।'); playlistPicker.hidden = true; }
+            catch (error) { notify(error.message, 'error'); }
+          })));
+          playlistPicker.hidden = false;
         } catch (error) { notify(error.message, 'error'); }
-        finally { like.disabled = false; }
+        finally { playlistButton.disabled = false; }
       });
-      const share = button('↗  শেয়ার', 'action-pill', async () => {
-        try { await navigator.clipboard.writeText(location.href); notify('লিংক কপি হয়েছে।'); }
-        catch (_) { notify('ব্রাউজারের address bar থেকে link কপি করো।', 'error'); }
-      });
-      const stats = $('span', { class: 'watch-stats', text: number(data.likesCount) + ' লাইক · ' + number(data.viewsCount) + ' ভিউ' });
-      function updateStats() { stats.textContent = number(data.likesCount) + ' লাইক · ' + number(data.viewsCount) + ' ভিউ'; subtitle.firstElementChild.textContent = number(data.viewsCount) + ' ClipNest view'; }
-      actions.append(like, share, stats);
-      if (state.session.profile && ownerHandle && state.session.profile.handle.toLowerCase() === ownerHandle.toLowerCase()) {
-        actions.append(button('মুছে ফেলো', 'action-pill', async () => {
-          if (!window.confirm('এই ভিডিওটি স্থায়ীভাবে মুছে ফেলবে?')) return;
-          try { await jsonFetch('/api/videos/' + encodeURIComponent(id), { method: 'DELETE' }); notify('ভিডিও মুছে ফেলা হয়েছে।'); navigate('/channel/me'); }
-          catch (error) { notify(error.message, 'error'); }
-        }));
+      actions.append(like, save, playlistButton, share, stats);
+      if (state.session.profile && ownerHandle && state.session.profile.handle.toLowerCase() === ownerHandle.toLowerCase()) actions.append(button('মুছে ফেলো', 'action-pill', async () => {
+        if (!window.confirm('এই ভিডিওটি স্থায়ীভাবে মুছে ফেলবে?')) return;
+        try { await jsonFetch('/api/videos/' + encodeURIComponent(id), { method: 'DELETE' }); notify('ভিডিও মুছে ফেলা হয়েছে।'); navigate('/channel/me'); } catch (error) { notify(error.message, 'error'); }
+      }));
+      const description = $('details', { class: 'video-description' }, [$('summary', { text: 'ভিডিওর বিবরণ  ·  ' + fmtDate(video.created) }), $('p', { text: text(video.description, 'এই ভিডিওটির কোনো বিবরণ নেই।') }), $('span', { text: 'ClipNest · ভিডিও Cloudflare R2-তে' })]);
+      const discussion = $('section', { class: 'discussion' });
+      const commentsHeadingCount = $('span', { class: 'comment-count', text: number(data.commentsCount) + 'টি মন্তব্য' });
+      discussion.append($('div', { class: 'comments-heading' }, [$('h2', { text: 'মন্তব্য ও আলোচনা' }), commentsHeadingCount]));
+      const replyNotice = $('div', { class: 'reply-notice', hidden: true });
+      let replyTo = null;
+      const commentInput = $('textarea', { maxlength: '2000', rows: '2', placeholder: state.session.user ? 'মন্তব্য যোগ করো…' : 'মন্তব্য করতে লগইন করো', disabled: !state.session.user });
+      const commentForm = $('form', { class: 'comment-form' });
+      const commentSubmit = $('button', { type: 'submit', class: 'primary-cta comment-submit', text: 'মন্তব্য করো', disabled: !state.session.user });
+      commentForm.append(replyNotice, commentInput, $('div', { class: 'comment-form-footer' }, [
+        button('বাতিল', 'comment-cancel', () => { replyTo = null; replyNotice.hidden = true; commentInput.placeholder = 'মন্তব্য যোগ করো…'; }), commentSubmit
+      ]));
+      const commentsList = $('div', { class: 'comments-list' });
+      function addComment(comment) {
+        if (state.commentNodes.has(comment.id)) return;
+        const element = commentElement(comment, target => { replyTo = target.id; replyNotice.textContent = '@' + text(target.author?.displayName, 'creator') + '–কে জবাব দিচ্ছ'; replyNotice.hidden = false; commentInput.placeholder = 'জবাব লিখো…'; commentInput.focus(); });
+        state.commentNodes.set(comment.id, element);
+        if (comment.parentId) {
+          const parent = state.commentNodes.get(comment.parentId);
+          if (parent) { let replies = parent.querySelector('.comment-replies'); if (!replies) { replies = $('div', { class: 'comment-replies' }); parent.append(replies); } replies.append(element); return; }
+        }
+        commentsList.prepend(element);
       }
-      const description = $('div', { class: 'video-description' }, [
-        $('p', { text: text(video.description, 'এই ভিডিওটির কোনো বিবরণ নেই।') }),
-        $('span', { text: 'ClipNest · Cloudflare R2' })
-      ]);
-      const discussion = $('div', {}, [
-        $('div', { class: 'comments-heading' }, [$('h2', { text: 'আলোচনা' }), $('span', { text: 'শিগগিরই আসছে' })]),
-        $('div', { class: 'comments-placeholder', text: 'তোমার মতামত এখানে শেয়ার করতে পারবে।' })
-      ]);
-      creator.append(actions);
-      main.append(stage, title, subtitle, creator, description, discussion);
-      const aside = $('aside', { class: 'recommendations' }, [$('div', { class: 'recommendations-title' }, [$('h2', { text: 'এরপর দেখো' }), $('span', { text: 'সাম্প্রতিক ভিডিও' })])]);
+      window.__addClipNestComment = comment => { if (state.currentVideoId === id) addComment(comment); };
+      commentForm.addEventListener('submit', async event => {
+        event.preventDefault(); const body = commentInput.value.trim(); if (!body) return;
+        commentSubmit.disabled = true;
+        try { const result = await jsonFetch('/api/videos/' + encodeURIComponent(id) + '/comments', { method: 'POST', body: { body, parentId: replyTo } }); addComment(result.comment); commentInput.value = ''; replyTo = null; replyNotice.hidden = true; commentInput.placeholder = 'মন্তব্য যোগ করো…'; updateStats({ commentsCount: result.commentsCount }); }
+        catch (error) { notify(error.message, 'error'); } finally { commentSubmit.disabled = !state.session.user; }
+      });
+      discussion.append(commentForm, commentsList);
+      creator.append(actions); main.append(stage, title, subtitle, creator, playlistPicker, description, discussion);
+      const aside = $('aside', { class: 'recommendations' }, [$('div', { class: 'recommendations-title' }, [$('h2', { text: 'এরপর দেখো' }), $('span', { text: 'এই বিভাগের আরও ভিডিও' })])]);
       section.append(main, aside); setPage([section]);
+      if (socket) { socket.emit('video:join', id); if (ownerHandle) { state.currentChannelHandle = ownerHandle; socket.emit('channel:join', ownerHandle); } }
       try {
-        const views = await jsonFetch('/api/videos/' + encodeURIComponent(id) + '/views', { method: 'POST', body: {} });
-        if (token === state.routeToken) { data.viewsCount = views.viewsCount; updateStats(); }
+        const result = await jsonFetch('/api/videos/' + encodeURIComponent(id) + '/views', { method: 'POST', body: {} });
+        if (token === state.routeToken) updateStats(result);
       } catch (_) {}
       try {
-        const recs = await jsonFetch(queryUrl('', video.category || '', 0, 6));
-        if (token !== state.routeToken) return;
-        const others = (recs.videos || []).filter(item => item.id !== id).slice(0, 4);
-        if (others.length) others.forEach(item => aside.append(videoCard(item)));
-        else aside.append(emptyState('আরও ভিডিও আসছে', 'নতুন ভিডিও প্রকাশ হলে এখানে দেখাবে.'));
+        const comments = await jsonFetch('/api/videos/' + encodeURIComponent(id) + '/comments?limit=50');
+        if (token === state.routeToken) (comments.comments || []).forEach(addComment);
+      } catch (error) { if (token === state.routeToken) commentsList.append($('p', { class: 'inline-error', text: 'মন্তব্য লোড করা যায়নি: ' + error.message })); }
+      try {
+        const recs = await jsonFetch(queryUrl('', video.category || '', 0, 8)); if (token !== state.routeToken) return;
+        const others = (recs.videos || []).filter(item => item.id !== id).slice(0, 6);
+        if (others.length) others.forEach(item => aside.append(videoCard(item))); else aside.append(emptyState('আরও ভিডিও আসছে', 'নতুন ভিডিও প্রকাশ হলে এখানে দেখাবে।'));
       } catch (_) { aside.append(emptyState('এখনো সুপারিশ নেই', 'পরে আবার দেখে নিও।')); }
-    } catch (error) {
-      if (token === state.routeToken) setPage([emptyState('ভিডিওটি পাওয়া যায়নি', error.message, 'হোমে ফিরে যাও', '/')]);
-    }
+    } catch (error) { if (token === state.routeToken) setPage([emptyState('ভিডিওটি পাওয়া যায়নি', error.message, 'হোমে ফিরে যাও', '/')]); }
   }
   async function renderChannel(handle, token) {
     updateNav('/channel/' + handle);
@@ -550,27 +476,20 @@
     }
     loadingPage('চ্যানেল খুঁজছি…');
     try {
-      const data = await jsonFetch('/api/channels/' + encodeURIComponent(handle));
-      if (token !== state.routeToken) return;
-      const profile = data.profile || {};
-      const videos = Array.isArray(data.videos) ? data.videos : [];
-      const own = Boolean(state.session.profile && state.session.profile.handle && state.session.profile.handle.toLowerCase() === text(profile.handle, handle).toLowerCase());
+      const data = await jsonFetch('/api/channels/' + encodeURIComponent(handle)); if (token !== state.routeToken) return;
+      const profile = data.profile || {}; const videos = Array.isArray(data.videos) ? data.videos : [];
+      const own = Boolean(data.isOwner || (state.session.profile?.handle && state.session.profile.handle.toLowerCase() === text(profile.handle, handle).toLowerCase()));
       const page = $('div');
       const cover = $('div', { class: 'channel-cover' }, [$('div', { class: 'cover-orbit cover-orbit-one' }), $('div', { class: 'cover-orbit cover-orbit-two' }), $('span', { class: 'cover-caption', text: 'নিজের গল্প, নিজের ভাষায়' })]);
-      const profileSection = $('section', { class: 'channel-profile' });
-      const name = text(profile.displayName, text(profile.handle, 'ClipNest channel'));
-      profileSection.append($('div', { class: 'channel-avatar', style: { background: avatarColors[Math.abs(name.length) % avatarColors.length] }, text: initials(name) }));
-      profileSection.append($('div', { class: 'channel-info' }, [
-        $('h1', { text: name }),
-        $('span', { class: 'channel-handle', text: '@' + text(profile.handle, handle) + ' · ' + number(videos.length) + 'টি ভিডিও' }),
-        $('p', { text: text(profile.bio, 'বাংলা ভিডিও নির্মাতা। নিজের গল্প শেয়ার করছে ClipNest-এ।') }),
-        $('span', { class: 'channel-joined', text: 'ClipNest-এ সক্রিয় creator' })
-      ]));
+      const profileSection = $('section', { class: 'channel-profile' }); const name = text(profile.displayName, text(profile.handle, 'ClipNest channel'));
+      profileSection.append(avatar(name, profile.avatarUrl, 'channel-avatar'));
+      const subscriberLabel = $('span', { class: 'channel-subscribers', text: number(data.subscribersCount || 0) + ' জন সাবস্ক্রাইবার' });
+      profileSection.append($('div', { class: 'channel-info' }, [$('h1', { text: name }), $('span', { class: 'channel-handle', text: '@' + text(profile.handle, handle) + ' · ' + number(videos.length) + 'টি ভিডিও' }), $('p', { text: text(profile.bio, 'বাংলা ভিডিও নির্মাতা। নিজের গল্প শেয়ার করছে ClipNest-এ।') }), subscriberLabel]));
       const channelActions = $('div', { class: 'channel-actions' });
       if (own) channelActions.append(button('প্রোফাইল সম্পাদনা', 'action-pill', () => { const panel = document.getElementById('profileEdit'); panel.hidden = !panel.hidden; }));
+      else channelActions.append(subscribeButton(profile.handle, Boolean(data.subscribed), Number(data.subscribersCount) || 0, result => { subscriberLabel.textContent = number(result.subscribersCount) + ' জন সাবস্ক্রাইবার'; }));
       channelActions.append(button('↗', 'action-pill icon-only', async () => { try { await navigator.clipboard.writeText(location.href); notify('চ্যানেলের লিংক কপি হয়েছে।'); } catch (_) { notify('লিংক কপি করা যায়নি।', 'error'); } }));
-      profileSection.append(channelActions);
-      page.append(cover, profileSection);
+      profileSection.append(channelActions); page.append(cover, profileSection);
       if (own) {
         const edit = $('form', { class: 'profile-edit-panel', id: 'profileEdit', hidden: true });
         edit.append($('div', { class: 'profile-edit-title' }, [$('strong', { text: 'চ্যানেল পরিচিতি' }), $('span', { text: 'ClipNest profile' })]));
@@ -579,99 +498,153 @@
         const bioInput = $('textarea', { maxlength: '1000', rows: '3', placeholder: 'তোমার চ্যানেল নিয়ে কয়েকটি কথা' }); bioInput.value = text(profile.bio, '');
         edit.append($('label', { class: 'form-field' }, [$('span', { text: 'চ্যানেল নাম' }), nameInput]), $('label', { class: 'form-field' }, [$('span', { text: 'চ্যানেল handle' }), handleInput, $('small', { text: '৩–৩০ অক্ষর; ইংরেজি অক্ষর, সংখ্যা, dot, dash বা underscore' })]), $('label', { class: 'form-field' }, [$('span', { text: 'পরিচিতি' }), bioInput]));
         const formNotice = $('p', { class: 'inline-error', hidden: true });
-        const actions = $('div', { class: 'profile-edit-actions' }, [button('বাতিল', 'outline-cta', () => { edit.hidden = true; }), $('button', { type: 'submit', class: 'primary-cta', text: 'পরিবর্তন সেভ' })]);
-        edit.append(formNotice, actions);
-        edit.addEventListener('submit', async event => {
-          event.preventDefault();
-          const save = actions.querySelector('[type="submit"]'); save.disabled = true; formNotice.hidden = true;
-          try {
-            const result = await jsonFetch('/api/me/profile', { method: 'POST', body: { displayName: nameInput.value.trim(), handle: handleInput.value.trim(), bio: bioInput.value.trim() } });
-            state.session.profile = result.profile; renderAccount(); notify('চ্যানেল প্রোফাইল আপডেট হয়েছে।'); navigate('/channel/' + escapePath(result.profile.handle));
-          } catch (error) { formNotice.textContent = error.message; formNotice.hidden = false; }
-          finally { save.disabled = false; }
-        });
+        const editActions = $('div', { class: 'profile-edit-actions' }, [button('বাতিল', 'outline-cta', () => { edit.hidden = true; }), $('button', { type: 'submit', class: 'primary-cta', text: 'পরিবর্তন সেভ' })]);
+        edit.append(formNotice, editActions);
+        edit.addEventListener('submit', async event => { event.preventDefault(); const save = editActions.querySelector('[type="submit"]'); save.disabled = true; formNotice.hidden = true; try { const result = await jsonFetch('/api/me/profile', { method: 'POST', body: { displayName: nameInput.value.trim(), handle: handleInput.value.trim(), bio: bioInput.value.trim() } }); state.session.profile = result.profile; renderAccount(); notify('চ্যানেল প্রোফাইল আপডেট হয়েছে।'); navigate('/channel/' + escapePath(result.profile.handle)); } catch (error) { formNotice.textContent = error.message; formNotice.hidden = false; } finally { save.disabled = false; } });
         page.append(edit);
       }
-      const tabs = $('div', { class: 'channel-tabs' }, [
-        $('button', { type: 'button', class: 'channel-tab-active', text: '▤  ভিডিও' }),
-        $('button', { type: 'button', class: 'channel-tab', text: 'সম্পর্কে' }),
-        linkButton('ভিডিও যোগ করো  ↗', '/upload', 'channel-upload-link')
-      ]);
-      page.append(tabs, videoGrid(videos, 'এখনো কোনো প্রকাশিত ভিডিও নেই।'));
-      setPage([page]);
-    } catch (error) {
-      if (token === state.routeToken) setPage([emptyState('চ্যানেলটি পাওয়া যায়নি', error.message, 'হোমে ফিরে যাও', '/')]);
-    }
+      page.append($('div', { class: 'channel-tabs' }, [button('▤  ভিডিও', 'channel-tab-active'), $('span', { class: 'channel-tab-note', text: 'সাম্প্রতিক প্রকাশনা' }), own ? linkButton('ভিডিও যোগ করো  ↗', '/upload', 'channel-upload-link') : $('span', { class: 'channel-tab-note', text: number(videos.length) + 'টি public video' })]));
+      page.append(videoGrid(videos, 'এখনো কোনো প্রকাশিত ভিডিও নেই।'));
+      setPage([page]); state.currentChannelHandle = profile.handle;
+      if (socket && profile.handle) socket.emit('channel:join', profile.handle);
+    } catch (error) { if (token === state.routeToken) setPage([emptyState('চ্যানেলটি পাওয়া যায়নি', error.message, 'হোমে ফিরে যাও', '/')]); }
   }
   async function renderChannels(token) {
     updateNav('/channels'); loadingPage('চ্যানেল খুঁজছি…');
     try {
-      const data = await jsonFetch(queryUrl('', '', 0, 100));
-      if (token !== state.routeToken) return;
-      const channels = new Map();
-      for (const video of data.videos || []) {
-        if (!video.ownerHandle) continue;
-        const key = video.ownerHandle.toLowerCase();
-        if (!channels.has(key)) channels.set(key, { handle: video.ownerHandle, name: video.ownerName || 'ClipNest নির্মাতা', count: 0, latest: video.created, category: video.category });
-        channels.get(key).count++;
-      }
-      const page = $('section');
-      page.append($('div', { class: 'page-heading' }, [
-        $('div', {}, [$('span', { class: 'section-kicker', text: 'আবিষ্কার' }), $('h1', { text: 'চ্যানেল খুঁজে দেখো' }), $('p', { text: 'বাংলা ভিডিও নির্মাতাদের প্রকাশিত গল্প এক জায়গায়।' })])
-      ]));
+      const data = await jsonFetch('/api/channels?limit=100'); if (token !== state.routeToken) return;
+      const page = $('section'); page.append($('div', { class: 'page-heading' }, [$('div', {}, [$('span', { class: 'section-kicker', text: 'আবিষ্কার' }), $('h1', { text: 'চ্যানেল খুঁজে দেখো' }), $('p', { text: 'বাংলা ভিডিও নির্মাতাদের প্রকাশিত গল্প ও নতুন নির্মাতাদের আবিষ্কার করো।' })])]));
       const grid = $('div', { class: 'channels-grid' });
-      if (!channels.size) grid.append(emptyState('এখনো কোনো channel নেই', 'নির্মাতারা public video প্রকাশ করলে channel এখানে দেখা যাবে।', state.session.user ? 'ভিডিও আপলোড করো' : 'লগইন করো', state.session.user ? '/upload' : '/login'));
-      else for (const channel of channels.values()) {
+      if (!(data.channels || []).length) grid.append(emptyState('এখনো কোনো channel নেই', 'নির্মাতারা public video প্রকাশ করলে channel এখানে দেখা যাবে।', state.session.user ? 'ভিডিও আপলোড করো' : 'লগইন করো', state.session.user ? '/upload' : '/login'));
+      else for (const channel of data.channels) {
         const card = $('a', { href: '/channel/' + escapePath(channel.handle), 'data-route': '', class: 'channel-discovery-card' });
-        card.append($('span', { class: 'channel-avatar', style: { background: avatarColors[Math.abs(channel.name.length) % avatarColors.length] }, text: initials(channel.name) }),
-          $('div', { class: 'channel-discovery-copy' }, [$('h3', { text: channel.name }), $('span', { text: '@' + channel.handle }), $('small', { text: number(channel.count) + 'টি public video · ' + text(channel.category, 'ClipNest') })]),
-          $('span', { class: 'channel-discovery-arrow', text: '↗' }));
-        grid.append(card);
+        card.append(avatar(channel.displayName, channel.avatarUrl, 'channel-avatar'), $('div', { class: 'channel-discovery-copy' }, [$('h3', { text: channel.displayName }), $('span', { text: '@' + channel.handle }), $('small', { text: number(channel.videosCount) + 'টি ভিডিও · ' + number(channel.subscribersCount) + ' সাবস্ক্রাইবার' })]), $('span', { class: 'channel-discovery-arrow', text: '↗' })); grid.append(card);
       }
       page.append(grid); setPage([page]);
     } catch (error) { if (token === state.routeToken) setPage([emptyState('চ্যানেল লোড করা যায়নি', error.message, 'হোমে ফিরে যাও', '/')]); }
   }
-  function renderNotFound() {
-    setPage([emptyState('এই পেজটি পাওয়া যায়নি', 'লিংকটি পরীক্ষা করে আবার চেষ্টা করো।', 'ClipNest হোম', '/')]);
+  async function renderSubscriptions(token) {
+    updateNav('/subscriptions');
+    if (!state.session.user) { renderLogin('তোমার সাবস্ক্রিপশনের নতুন ভিডিও দেখতে লগইন করো।'); return; }
+    const page = $('section', { class: 'library-page' }); page.append($('div', { class: 'page-heading' }, [$('div', {}, [$('span', { class: 'section-kicker', text: 'তোমার ফিড' }), $('h1', { text: 'সাবস্ক্রিপশন' }), $('p', { text: 'যে নির্মাতাদের অনুসরণ করো, তাদের নতুন ভিডিও এখানে একসাথে দেখো।' })])]));
+    const grid = $('div', { class: 'video-grid' }, [emptyState('ভিডিও লোড হচ্ছে…', 'একটু অপেক্ষা করো।')]); page.append(grid); setPage([page]);
+    try { const data = await jsonFetch('/api/videos/subscriptions?limit=48'); if (token !== state.routeToken) return; grid.replaceWith(videoGrid(data.videos || [], 'এই মুহূর্তে নতুন ভিডিও নেই।', {})); }
+    catch (error) { if (token === state.routeToken) grid.replaceWith(emptyState('ফিড লোড হয়নি', error.message, 'চ্যানেল আবিষ্কার করো', '/channels')); }
   }
+  async function renderHistory(token) {
+    updateNav('/history'); if (!state.session.user) { renderLogin('তোমার দেখা ভিডিওর ইতিহাস রাখতে লগইন করো।'); return; }
+    const page = $('section', { class: 'library-page' });
+    const heading = $('div', { class: 'page-heading library-heading' }, [$('div', {}, [$('span', { class: 'section-kicker', text: 'তোমার লাইব্রেরি' }), $('h1', { text: 'দেখার ইতিহাস' }), $('p', { text: 'তুমি যে ভিডিও দেখেছ, সেগুলো এখানে থাকে।' })]), button('ইতিহাস মুছো', 'outline-cta', async () => { if (!confirm('তোমার সম্পূর্ণ দেখার ইতিহাস মুছে ফেলবে?')) return; try { await jsonFetch('/api/me/history', { method: 'DELETE' }); notify('দেখার ইতিহাস মুছে ফেলা হয়েছে।'); renderRoute(); } catch (error) { notify(error.message, 'error'); } })]);
+    const grid = $('div', { class: 'video-grid' }, [emptyState('ইতিহাস লোড হচ্ছে…', 'একটু অপেক্ষা করো।')]); page.append(heading, grid); setPage([page]);
+    try { const data = await jsonFetch('/api/me/history'); if (token !== state.routeToken) return; grid.replaceWith(videoGrid(data.videos || [], 'এখনো কোনো ভিডিও দেখা হয়নি।')); }
+    catch (error) { if (token === state.routeToken) grid.replaceWith(emptyState('ইতিহাস লোড হয়নি', error.message)); }
+  }
+  async function renderPlaylists(token) {
+    updateNav('/playlists'); if (!state.session.user) { renderLogin('প্লেলিস্ট তৈরি করতে বা পরে দেখার তালিকা রাখতে লগইন করো।'); return; }
+    const page = $('section', { class: 'library-page' });
+    page.append($('div', { class: 'page-heading' }, [$('div', {}, [$('span', { class: 'section-kicker', text: 'তোমার লাইব্রেরি' }), $('h1', { text: 'প্লেলিস্ট ও পরে দেখব' }), $('p', { text: 'পছন্দের ভিডিওগুলো নিজের মতো করে গুছিয়ে রাখো।' })])]));
+    const form = $('form', { class: 'playlist-create-form' }); const name = $('input', { type: 'text', maxlength: '80', required: '', placeholder: 'নতুন প্লেলিস্টের নাম' });
+    const description = $('input', { type: 'text', maxlength: '500', placeholder: 'ছোট বিবরণ · ঐচ্ছিক' }); const publicToggle = $('label', { class: 'playlist-public-toggle' }, [$('input', { type: 'checkbox' }), $('span', { text: 'পাবলিক প্লেলিস্ট' })]);
+    form.append(name, description, publicToggle, $('button', { type: 'submit', class: 'primary-cta', text: '＋ প্লেলিস্ট তৈরি' }));
+    const list = $('div', { class: 'playlist-grid' }, [emptyState('প্লেলিস্ট লোড হচ্ছে…', 'একটু অপেক্ষা করো।')]); page.append(form, list); setPage([page]);
+    form.addEventListener('submit', async event => { event.preventDefault(); const submit = form.querySelector('[type="submit"]'); submit.disabled = true; try { await jsonFetch('/api/me/playlists', { method: 'POST', body: { name: name.value.trim(), description: description.value.trim(), isPublic: publicToggle.querySelector('input').checked } }); notify('প্লেলিস্ট তৈরি হয়েছে।'); renderPlaylists(state.routeToken); } catch (error) { notify(error.message, 'error'); } finally { submit.disabled = false; } });
+    try {
+      const data = await jsonFetch('/api/me/playlists'); if (token !== state.routeToken) return; list.replaceChildren();
+      if (!(data.playlists || []).length) list.append(emptyState('এখনো কোনো প্লেলিস্ট নেই', 'নতুন প্লেলিস্ট তৈরি করে ভিডিও সেভ করো।'));
+      else for (const playlist of data.playlists) {
+        const card = $('a', { href: '/playlist/' + escapePath(playlist.id), 'data-route': '', class: 'playlist-card' });
+        card.append($('span', { class: 'playlist-art', text: playlist.isWatchLater ? '◷' : '▣' }), $('span', { class: 'playlist-card-copy' }, [$('strong', { text: playlist.name }), $('small', { text: number(playlist.videosCount) + 'টি ভিডিও · ' + (playlist.isPublic ? 'পাবলিক' : 'প্রাইভেট') })]), $('span', { class: 'playlist-arrow', text: '↗' })); list.append(card);
+      }
+    } catch (error) { if (token === state.routeToken) list.replaceChildren(emptyState('প্লেলিস্ট লোড হয়নি', error.message)); }
+  }
+  async function renderPlaylist(id, token) {
+    updateNav('/playlist/' + id); if (!state.session.user) { renderLogin('নিজের প্লেলিস্ট দেখতে লগইন করো।'); return; }
+    loadingPage('প্লেলিস্ট খুঁজছি…');
+    try { const data = await jsonFetch('/api/playlists/' + encodeURIComponent(id)); if (token !== state.routeToken) return;
+      const page = $('section', { class: 'library-page' }); page.append($('div', { class: 'page-heading' }, [$('div', {}, [$('span', { class: 'section-kicker', text: 'তোমার লাইব্রেরি' }), $('h1', { text: data.playlist.name }), $('p', { text: data.playlist.description || (data.playlist.isWatchLater ? 'এখানে পরে দেখার জন্য রাখা ভিডিওগুলো আছে।' : 'তোমার সেভ করা ভিডিও।') })]), linkButton('সব প্লেলিস্ট', '/playlists', 'outline-cta')]));
+      page.append(videoGrid(data.videos || [], 'এই প্লেলিস্টে এখনো কোনো ভিডিও নেই।', { playlistId: id })); setPage([page]);
+    } catch (error) { if (token === state.routeToken) setPage([emptyState('প্লেলিস্ট পাওয়া যায়নি', error.message, 'প্লেলিস্টগুলো দেখো', '/playlists')]); }
+  }
+  function renderUpload() {
+    updateNav('/upload'); if (!state.session.user) { renderLogin('ভিডিও আপলোড করতে আগে Google account দিয়ে লগইন করো।'); return; }
+    const page = $('div', { class: 'upload-page' });
+    page.append($('div', { class: 'page-heading' }, [$('div', {}, [$('span', { class: 'section-kicker', text: 'তোমার গল্প শেয়ার করো' }), $('h1', { text: 'ভিডিও আপলোড' }), $('p', { text: 'ভিডিও ফাইল R2-তে যাবে; শিরোনাম, বিবরণ, visibility ও অন্যান্য তথ্য Neon-এ থাকবে।' })])]));
+    const form = $('form', { class: 'upload-form' }); const fileState = { file: null }; const drop = $('label', { class: 'dropzone' });
+    const fileInput = $('input', { type: 'file', accept: 'video/*,.mp4,.mov,.webm,.mkv,.avi', 'aria-label': 'ভিডিও ফাইল বেছে নাও' });
+    const dropTitle = $('strong', { text: 'ভিডিও এখানে ছেড়ে দাও' }); const dropHelp = $('span', { text: 'অথবা ফাইল বেছে নিতে ক্লিক করো · সর্বোচ্চ ' + number(state.config.maxFileMb) + ' MB' });
+    drop.append(fileInput, $('span', { class: 'drop-icon', text: '↑' }), dropTitle, dropHelp, $('span', { class: 'drop-browse', text: 'ভিডিও বেছে নাও' }));
+    const title = $('input', { type: 'text', maxlength: '100', required: '', placeholder: 'ভিডিওর নাম লিখো' }); const titleCount = $('small', { text: '০/১০০ অক্ষর' });
+    title.addEventListener('input', () => { titleCount.textContent = number(title.value.length) + '/১০০ অক্ষর'; });
+    const description = $('textarea', { maxlength: '5000', placeholder: 'ভিডিওটি নিয়ে কয়েকটি কথা লিখো', rows: '4' });
+    const category = $('select'); categories.slice(1).forEach((item, index) => category.append($('option', { value: item.value, text: item.label, ...(index === 0 ? { selected: '' } : {}) })));
+    const visibility = $('select'); [['Private','শুধু তুমি — Private'],['Unlisted','লিংক থাকলে — Unlisted'],['Public','সবার জন্য — Public']].forEach(([value,label], index) => visibility.append($('option', { value, text: label, ...(index === 0 ? { selected: '' } : {}) })));
+    const field = (label, input, small = null) => { const wrap = $('label', { class: 'form-field' }, [$('span', { text: label }), input]); if (small) wrap.append($('small', { text: small })); return wrap; };
+    const titleField = field('ভিডিওর শিরোনাম *', title); titleField.append(titleCount);
+    const progressWrap = $('div', { class: 'upload-progress', hidden: true }); const progressHead = $('div', {}, [$('span', { text: 'ভিডিও Cloudflare R2-তে যাচ্ছে' }), $('strong', { text: '০%' })]);
+    const progressTrack = $('div', { class: 'progress-track' }, [$('span', { style: { width: '0%' } })]); progressWrap.append(progressHead, progressTrack);
+    const notice = $('div', { class: 'notice', hidden: true }); const footer = $('div', { class: 'upload-footer' }, [$('span', { text: 'Default visibility Private। Public video-ই home/search-এ দেখাবে।' }), $('button', { type: 'submit', class: 'primary-cta', text: '↑  ভিডিও আপলোড করো' })]);
+    const submit = footer.querySelector('button'); form.append(drop, titleField, field('বিবরণ · ঐচ্ছিক', description, 'সর্বোচ্চ ৫,০০০ অক্ষর'), field('বিভাগ', category), field('কে ভিডিওটি দেখতে পাবে?', visibility), progressWrap, notice, footer);
+    const supported = file => file && (file.type.startsWith('video/') || ['mp4','mov','m4v','webm','mkv','avi','wmv','mpeg','mpg','3gp','flv'].includes(file.name.toLowerCase().split('.').pop()));
+    const chooseFile = file => { if (!file) return; if (!supported(file)) { notify('সমর্থিত video format-এর একটি file বেছে নাও।', 'error'); return; } if (file.size > state.config.maxFileMb * 1024 * 1024) { notify('ফাইলটি ' + number(state.config.maxFileMb) + ' MB-এর চেয়ে বড়।', 'error'); return; } fileState.file = file; dropTitle.textContent = file.name; dropHelp.textContent = fmtSize(file.size) + ' · Cloudflare R2-তে upload হবে'; if (!title.value) { title.value = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ').slice(0, 100); title.dispatchEvent(new Event('input')); } notice.hidden = true; };
+    fileInput.addEventListener('change', () => chooseFile(fileInput.files?.[0]));
+    ['dragenter','dragover'].forEach(name => drop.addEventListener(name, event => { event.preventDefault(); drop.classList.add('dropzone-active'); }));
+    ['dragleave','drop'].forEach(name => drop.addEventListener(name, event => { event.preventDefault(); drop.classList.remove('dropzone-active'); })); drop.addEventListener('drop', event => chooseFile(event.dataTransfer.files?.[0]));
+    form.addEventListener('submit', async event => {
+      event.preventDefault(); const file = fileState.file || fileInput.files?.[0];
+      if (!file) { notice.textContent = 'আগে একটি ভিডিও ফাইল বেছে নাও।'; notice.className = 'notice notice-warn'; notice.hidden = false; return; }
+      if (!supported(file) || file.size > state.config.maxFileMb * 1024 * 1024) { notice.textContent = 'এই file upload limit বা format মেনে চলছে না।'; notice.className = 'notice notice-warn'; notice.hidden = false; return; }
+      if (!title.value.trim()) { title.focus(); return; }
+      submit.disabled = true; fileInput.disabled = true; progressWrap.hidden = false; notice.hidden = false; notice.className = 'notice notice-warn'; notice.textContent = 'নিরাপদ upload link নেওয়া হচ্ছে…';
+      try {
+        const preflight = await jsonFetch('/api/upload-url', { method: 'POST', body: { filename: file.name, contentType: file.type || 'video/mp4', size: file.size, title: title.value.trim(), description: description.value.trim(), category: category.value, visibility: visibility.value } });
+        await putFile(preflight.uploadUrl, file, percent => { progressHead.lastElementChild.textContent = number(percent) + '%'; progressTrack.firstElementChild.style.width = percent + '%'; }, file.type || 'video/mp4');
+        notice.className = 'notice notice-success'; notice.textContent = 'ভিডিও সংরক্ষণ হচ্ছে…';
+        await jsonFetch('/api/finish', { method: 'POST', body: { objectName: preflight.objectName, id: preflight.id, title: title.value.trim(), description: description.value.trim(), category: category.value, visibility: visibility.value } });
+        notify('ভিডিও আপলোড হয়েছে।'); navigate('/watch/' + escapePath(preflight.id));
+      } catch (error) { notice.className = 'notice notice-warn'; notice.textContent = 'Upload সম্পন্ন হয়নি: ' + error.message; notice.hidden = false; progressWrap.hidden = true; }
+      finally { submit.disabled = false; fileInput.disabled = false; }
+    });
+    page.append(form);
+    setPage([page]);
+  }
+  function putFile(url, file, onProgress, contentType) {
+    return new Promise((resolve, reject) => { const xhr = new XMLHttpRequest(); xhr.open('PUT', url); xhr.setRequestHeader('Content-Type', contentType); xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress(Math.round(event.loaded / event.total * 100)); }; xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error('R2 upload failed (HTTP ' + xhr.status + '). CORS policy পরীক্ষা করো।')); xhr.onerror = () => reject(new Error('Network/CORS সমস্যায় upload থেমে গেছে।')); xhr.send(file); });
+  }
+  function renderNotFound() { setPage([emptyState('এই পেজটি পাওয়া যায়নি', 'লিংকটি পরীক্ষা করে আবার চেষ্টা করো।', 'ClipNest হোম', '/')]); }
   async function renderRoute() {
-    const token = ++state.routeToken;
-    const path = location.pathname.replace(/\/+$/, '') || '/';
-    document.title = path === '/upload' ? 'ভিডিও আপলোড · ClipNest' : path === '/login' ? 'লগইন · ClipNest' : path === '/channels' ? 'চ্যানেল খুঁজে দেখো · ClipNest' : path.startsWith('/watch/') ? 'ভিডিও · ClipNest' : path.startsWith('/channel/') ? 'চ্যানেল · ClipNest' : path === '/search' ? 'খুঁজে দেখো · ClipNest' : 'ClipNest · বাংলা ভিডিও';
-    updateNav(path);
-    if (path === '/') return renderHome(token);
-    if (path === '/search') return renderSearch(token);
-    if (path === '/channels') return renderChannels(token);
-    if (path === '/upload') return renderUpload(token);
-    if (path === '/login') return renderLogin();
-    const watch = path.match(/^\/watch\/([^/]+)$/);
-    if (watch) return renderWatch(decodeURIComponent(watch[1]), token);
-    const channel = path.match(/^\/channel\/([^/]+)$/);
-    if (channel) return renderChannel(decodeURIComponent(channel[1]), token);
-    return renderNotFound();
+    leaveRealtimeRooms(); const token = ++state.routeToken; const path = location.pathname;
+    if (path === '/') { document.title = 'ClipNest · বাংলা ভিডিও'; return renderHome(token); }
+    if (path === '/search') { document.title = 'খুঁজে দেখো · ClipNest'; return renderSearch(token); }
+    if (path === '/login') { document.title = 'লগইন · ClipNest'; return renderLogin(); }
+    if (path === '/upload') { document.title = 'ভিডিও আপলোড · ClipNest'; return renderUpload(); }
+    if (path === '/channels') { document.title = 'চ্যানেল · ClipNest'; return renderChannels(token); }
+    if (path === '/subscriptions') { document.title = 'সাবস্ক্রিপশন · ClipNest'; return renderSubscriptions(token); }
+    if (path === '/history') { document.title = 'দেখার ইতিহাস · ClipNest'; return renderHistory(token); }
+    if (path === '/playlists') { document.title = 'প্লেলিস্ট · ClipNest'; return renderPlaylists(token); }
+    if (path.startsWith('/watch/')) { const id = decodeURIComponent(path.slice('/watch/'.length)); document.title = 'ভিডিও · ClipNest'; return renderWatch(id, token); }
+    if (path.startsWith('/channel/')) { const handle = decodeURIComponent(path.slice('/channel/'.length)); document.title = 'চ্যানেল · ClipNest'; return renderChannel(handle, token); }
+    if (path.startsWith('/playlist/')) { const id = decodeURIComponent(path.slice('/playlist/'.length)); document.title = 'প্লেলিস্ট · ClipNest'; return renderPlaylist(id, token); }
+    renderNotFound();
   }
   document.addEventListener('click', event => {
-    const link = event.target.closest && event.target.closest('a[data-route]');
-    if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const url = new URL(link.href, location.origin);
-    if (url.origin !== location.origin) return;
+    const link = event.target.closest('a[data-route]'); if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.target === '_blank') return;
+    const url = new URL(link.href, location.href); if (url.origin !== location.origin) return;
     event.preventDefault(); navigate(url.pathname + url.search);
   });
-  searchForm.addEventListener('submit', event => {
-    event.preventDefault(); state.query = globalSearch.value.trim(); state.category = '';
-    navigate('/search' + (state.query ? '?q=' + encodeURIComponent(state.query) : ''));
-  });
-  mobileToggle.addEventListener('click', () => {
-    const open = sidebar.classList.toggle('sidebar-open');
-    mobileToggle.setAttribute('aria-expanded', String(open));
-  });
   window.addEventListener('popstate', renderRoute);
-  async function boot() {
-    try { state.config = { ...state.config, ...await jsonFetch('/api/config') }; } catch (_) {}
-    try { state.session = await jsonFetch('/auth/me'); } catch (_) { state.session = { user: null, profile: null }; }
-    renderAccount(); await renderRoute();
+  mobileToggle.addEventListener('click', () => { const open = sidebar.classList.toggle('sidebar-open'); mobileToggle.setAttribute('aria-expanded', String(open)); });
+  searchForm.addEventListener('submit', event => { event.preventDefault(); state.query = globalSearch.value.trim(); state.category = ''; navigate('/search' + (state.query ? '?q=' + encodeURIComponent(state.query) : '')); });
+  if (socket) {
+    socket.on('connect', () => { if (state.currentVideoId) socket.emit('video:join', state.currentVideoId); if (state.currentChannelHandle) socket.emit('channel:join', state.currentChannelHandle); });
+    socket.on('video:stats', counts => { if (counts.videoId !== state.currentVideoId) return; const stats = document.querySelector('.watch-stats'); if (stats) stats.textContent = number(counts.likesCount) + ' লাইক · ' + number(counts.viewsCount) + ' ভিউ'; const subtitle = document.querySelector('.watch-subtitle>span:first-child'); if (subtitle) subtitle.textContent = number(counts.viewsCount) + ' ভিউ'; const heading = document.querySelector('.comment-count'); if (heading) heading.textContent = number(counts.commentsCount) + 'টি মন্তব্য'; const like = document.querySelector('.watch-actions .action-pill'); if (like) like.textContent = (like.classList.contains('action-pill-liked') ? '♥  ' : '♡  ') + number(counts.likesCount); });
+    socket.on('comment:new', comment => { if (comment.videoId !== state.currentVideoId) return; if (window.__addClipNestComment) window.__addClipNestComment(comment); });
+    socket.on('channel:stats', message => { if (message.handle !== state.currentChannelHandle) return; document.querySelectorAll('.subscriber-count,.channel-subscribers').forEach(node => { node.textContent = number(message.subscribersCount) + ' জন সাবস্ক্রাইবার'; }); });
   }
-  boot();
+  (async function init() {
+    try { const [config, auth] = await Promise.all([jsonFetch('/api/config'), jsonFetch('/auth/me')]); state.config = config; state.session = auth; }
+    catch (_) { state.session = { user: null, profile: null }; }
+    renderAccount(); renderRoute();
+  })();
   </script>
 </body>
 </html>
