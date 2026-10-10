@@ -35,16 +35,9 @@ R2-তে পুরনো JSON metadata থাকলে migration command সে
 ## Neon ও পুরনো ডেটা migration
 
 1. Neon-এ PostgreSQL project/database তৈরি করুন। Neon dashboard-এর **pooled connection string** নিন এবং `DATABASE_URL` হিসেবে hosting environment-এ দিন। Connection string গোপন রাখুন; browser/client code বা Git-এ দেবেন না।
-2. Local `.env`-এ `DATABASE_URL`, R2 credentials এবং কমপক্ষে 32-character `SESSION_SECRET` দিন। `.env.example` template হিসেবে ব্যবহার করুন।
-3. নতুন backend deploy করার আগে/সাথে পুরনো R2 JSON data একবার import করুন:
-
-   ```bash
-   npm install
-   npm run migrate:r2
-   ```
-
-   Migration idempotent: সফল হলে `storage_migrations`-এ marker রাখে এবং পরের run-এ duplicate import করে না। `meta/`, `profiles/`, active sessions, likes ও views থেকে relational records তৈরি হয়। Original R2 objects untouched থাকে। `npm run migrate:r2` সম্পন্ন না হওয়া পর্যন্ত existing app-এর পুরনো metadata নতুন UI-তে আসবে না।
-4. Migration success হলে GitHub থেকে নতুন app deploy করুন। Startup-এ server idempotently database tables/indexes তৈরি/নিশ্চিত করবে।
+2. Hosting environment-এ `DATABASE_URL`, R2 credentials এবং কমপক্ষে 32-character `SESSION_SECRET` দিন. `.env.example` template হিসেবে ব্যবহার করুন।
+3. Server startup-এ database schema/indexes idempotently তৈরি/নিশ্চিত হয়. `storage_migrations`-এ `r2-json-v1` marker না থাকলে backend পুরনো R2 JSON metadata-কে Neon-এ **একবার** import করে. `meta/`, `profiles/`, active sessions, likes ও views থেকে relational records তৈরি হয়; source R2 objects এবং video files মুছে না।
+4. Auto-migration সাময়িকভাবে বন্ধ করতে `MIGRATE_R2_JSON_ON_START=false` দিন। Local CLI-তে একই migration `npm run migrate:r2` দিয়ে চালানো যায়; সফল migration marker থাকলে পরের run কোনো duplicate import করে না।
 
 ## Cloudflare R2 ও browser upload
 
@@ -111,6 +104,7 @@ Render Free web service 15 মিনিট inbound traffic না থাকল�
 | `GOOGLE_REDIRECT_URI` | Login-এর জন্য | Authorized callback URI |
 | `APP_ORIGIN` | Production-এ সুপারিশকৃত | OAuth redirect ও Socket.IO allowed origin |
 | `SESSION_SECRET` | হ্যাঁ | Signed session/viewer cookies; অন্তত 32 characters |
+| `MIGRATE_R2_JSON_ON_START` | না | `false` দিলে startup-এ legacy R2 JSON migration বন্ধ |
 
 ## নিরাপত্তা ও privacy
 

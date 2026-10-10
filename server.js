@@ -760,6 +760,17 @@ app.use((error, req, res, next) => {
 
 async function start() {
   await initializeDatabase();
+  if (process.env.MIGRATE_R2_JSON_ON_START !== 'false') {
+    const migration = require('./scripts/migrate-r2-json');
+    try {
+      const result = await migration.migrateR2Json();
+      console.log('Legacy R2 JSON migration check completed:', JSON.stringify(result));
+    } catch (error) {
+      console.error('Legacy R2 JSON migration deferred; application will still start:', error.message);
+    } finally {
+      await migration.closeMigrationClient();
+    }
+  }
   server.listen(PORT, '0.0.0.0', () => console.log(`ClipNest running on port ${PORT}; Neon and Socket.IO ready.`));
 }
 if (require.main === module) start().catch(error => {

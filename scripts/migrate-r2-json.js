@@ -60,7 +60,7 @@ async function main() {
     console.log('R2 JSON migration was already completed at', prior.rows[0].completed_at.toISOString());
     console.log('Previous import summary:', prior.rows[0].summary);
     console.log('Nothing changed. Pass no flags; old R2 JSON files remain untouched.');
-    return;
+    return { alreadyCompleted: true, completedAt: prior.rows[0].completed_at, summary: prior.rows[0].summary };
   }
 
   const totals = { users: 0, profiles: 0, videos: 0, sessions: 0, likes: 0, views: 0, skipped: 0 };
@@ -175,12 +175,19 @@ async function main() {
   await pool.query('INSERT INTO storage_migrations (name, summary) VALUES ($1,$2::jsonb)', ['r2-json-v1', JSON.stringify(summary)]);
   console.log('R2 JSON migration completed:', summary);
   console.log('Video binary objects were not copied or deleted; they remain in R2.');
+  return { alreadyCompleted: false, summary };
 }
 
-main().catch(error => {
-  console.error('R2-to-Neon migration failed. Source R2 data remains untouched.', error);
-  process.exitCode = 1;
-}).finally(async () => {
-  await pool.end().catch(() => {});
-  await s3.destroy();
-});
+async function closeMigrationClient() { await s3.destroy(); }
+
+if (require.main === module) {
+  main().catch(error => {
+    console.error('R2-to-Neon migration failed. Source R2 data remains untouched.', error);
+    process.exitCode = 1;
+  }).finally(async () => {
+    await pool.end().catch(() => {});
+    await closeMigrationClient();
+  });
+}
+
+module.exports = { migrateR2Json: main, closeMigrationClient };
