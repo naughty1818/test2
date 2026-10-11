@@ -70,7 +70,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
   }
 
   // Public ad serving is disabled until the verified owner enables it and activates campaigns.
-  app.get('/api/ads/serve', async (req, res, next) => {
+  app.get('/api/sponsor/serve', async (req, res, next) => {
     try {
       const placement = String(req.query.placement || '');
       if (!['feed','watch_sidebar'].includes(placement)) return fail(res, 'Invalid ad placement.');
@@ -87,7 +87,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
     } catch (error) { next(error); }
   });
 
-  app.post('/api/ads/events', async (req, res, next) => {
+  app.post('/api/sponsor/events', async (req, res, next) => {
     try {
       const campaignId = String(req.body?.campaignId || '');
       const eventType = String(req.body?.eventType || '');

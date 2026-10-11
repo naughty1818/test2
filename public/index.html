@@ -263,16 +263,27 @@
     }));
     body.append(creator, copy, actions); card.append(thumbLink, body); return card;
   }
+  function embeddedImageUrl(value) {
+    try {
+      const url = new URL(String(value || ''));
+      if (url.protocol !== 'https:') return '';
+      if (url.hostname === 'drive.google.com') {
+        const id = url.pathname.match(/^\/file\/d\/([^/]+)/)?.[1] || url.searchParams.get('id');
+        if (id) return 'https://drive.google.com/uc?export=view&id=' + encodeURIComponent(id);
+      }
+      return url.toString();
+    } catch (_) { return ''; }
+  }
   function sponsoredCard(ad, videoId = null, compact = false) {
     const card = $('article', { class: 'sponsored-card' + (compact ? ' sponsored-watch' : '') });
     const link = $('a', { href: text(ad.destinationUrl, '#'), target: '_blank', rel: 'noopener noreferrer', 'aria-label': text(ad.title, 'Sponsored') });
-    const image = $('img', { src: text(ad.creativeUrl, ''), alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' });
+    const image = $('img', { src: embeddedImageUrl(ad.creativeUrl), alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' });
     image.addEventListener('error', () => image.remove());
     const copy = $('div', { class: 'sponsored-copy' }, [$('span', { class: 'sponsored-label', text: 'Sponsored · ' + text(ad.sponsorName, 'Partner') }), $('strong', { text: text(ad.title, 'Partner message') }), $('small', { text: 'প্রমোটেড কনটেন্ট' }), $('span', { class: 'sponsored-cta', text: 'আরও জানো ↗' })]);
     link.append(image, copy);
-    link.addEventListener('click', () => { jsonFetch('/api/ads/events', { method: 'POST', body: { campaignId: ad.id, eventType: 'click', videoId } }).catch(() => {}); });
+    link.addEventListener('click', () => { jsonFetch('/api/sponsor/events', { method: 'POST', body: { campaignId: ad.id, eventType: 'click', videoId } }).catch(() => {}); });
     card.append(link);
-    jsonFetch('/api/ads/events', { method: 'POST', body: { campaignId: ad.id, eventType: 'impression', videoId } }).catch(() => {});
+    jsonFetch('/api/sponsor/events', { method: 'POST', body: { campaignId: ad.id, eventType: 'impression', videoId } }).catch(() => {});
     return card;
   }
   function videoGrid(videos, message = 'এখনো কোনো প্রকাশিত ভিডিও নেই।', options = {}) {
@@ -327,7 +338,7 @@
       chips.replaceWith(categoryChips(state.category, value => { state.category = value; renderRoute(); }));
       const nextGrid = videoGrid(videos, 'এখনো কোনো public video নেই। প্রথম ভিডিওটি তোমার হতে পারে.'); grid.replaceWith(nextGrid);
       if (data.hasMore) appendLoadMore(feed, nextGrid, '', state.category, 24, token);
-      jsonFetch('/api/ads/serve?placement=feed').then(result => { if (token === state.routeToken && result.ad) nextGrid.append(sponsoredCard(result.ad)); }).catch(() => {});
+      jsonFetch('/api/sponsor/serve?placement=feed').then(result => { if (token === state.routeToken && result.ad) nextGrid.append(sponsoredCard(result.ad)); }).catch(() => {});
     } catch (error) { if (token === state.routeToken) grid.replaceWith(emptyState('ভিডিও লোড করা যায়নি', error.message, 'আবার চেষ্টা করো', '/')); }
   }
   async function renderSearch(token) {
@@ -466,7 +477,7 @@
       creator.append(actions); main.append(stage, title, subtitle, creator, playlistPicker, description, discussion);
       const aside = $('aside', { class: 'recommendations' }, [$('div', { class: 'recommendations-title' }, [$('h2', { text: 'এরপর দেখো' }), $('span', { text: 'এই বিভাগের আরও ভিডিও' })])]);
       section.append(main, aside); setPage([section]);
-      jsonFetch('/api/ads/serve?placement=watch_sidebar').then(result => { if (token === state.routeToken && result.ad) aside.append(sponsoredCard(result.ad, id, true)); }).catch(() => {});
+      jsonFetch('/api/sponsor/serve?placement=watch_sidebar').then(result => { if (token === state.routeToken && result.ad) aside.append(sponsoredCard(result.ad, id, true)); }).catch(() => {});
       if (socket) { socket.emit('video:join', id); if (ownerHandle) { state.currentChannelHandle = ownerHandle; socket.emit('channel:join', ownerHandle); } }
       try {
         const result = await jsonFetch('/api/videos/' + encodeURIComponent(id) + '/views', { method: 'POST', body: {} });
