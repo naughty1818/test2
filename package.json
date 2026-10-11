@@ -1,7 +1,7 @@
 {
   "name": "video-hub-r2",
   "version": "1.0.0",
-  "description": "Bengali video platform with Neon PostgreSQL, Socket.IO updates, creator channels, playlists, comments, and direct Cloudflare R2 uploads.",
+  "description": "Bengali video platform with Neon PostgreSQL, Socket.IO, creator analytics, role-based admin moderation, sponsor campaigns, and Cloudflare R2 uploads.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

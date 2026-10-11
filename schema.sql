@@ -134,3 +134,110 @@ CREATE TABLE IF NOT EXISTS storage_migrations (
   completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   summary JSONB NOT NULL DEFAULT '{}'::jsonb
 );
+
+
+-- Owner/admin controls, ad campaigns, creator analytics, and reversible moderation.
+ALTER TABLE app_users
+  ADD COLUMN IF NOT EXISTS account_status TEXT NOT NULL DEFAULT 'active';
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'app_users_account_status_check') THEN
+    ALTER TABLE app_users ADD CONSTRAINT app_users_account_status_check CHECK (account_status IN ('active','suspended','banned'));
+  END IF;
+END $$;
+
+ALTER TABLE videos
+  ADD COLUMN IF NOT EXISTS moderation_status TEXT NOT NULL DEFAULT 'active';
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'videos_moderation_status_check') THEN
+    ALTER TABLE videos ADD CONSTRAINT videos_moderation_status_check CHECK (moderation_status IN ('active','removed'));
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS videos_moderation_owner_idx ON videos (moderation_status, owner_sub, created_at DESC);
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS monetization_status TEXT NOT NULL DEFAULT 'pending';
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'profiles_monetization_status_check') THEN
+    ALTER TABLE profiles ADD CONSTRAINT profiles_monetization_status_check CHECK (monetization_status IN ('pending','enabled','paused','rejected'));
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS admin_members (
+  email TEXT PRIMARY KEY,
+  role TEXT NOT NULL CHECK (role IN ('admin','moderator')),
+  added_by_email TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS platform_settings (
+  id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  ads_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  monetization_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  creator_share_percent NUMERIC(5,2),
+  updated_by_email TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (creator_share_percent IS NULL OR (creator_share_percent >= 0 AND creator_share_percent <= 100))
+);
+INSERT INTO platform_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS ad_campaigns (
+  id UUID PRIMARY KEY,
+  title TEXT NOT NULL CHECK (char_length(title) BETWEEN 1 AND 120),
+  sponsor_name TEXT NOT NULL CHECK (char_length(sponsor_name) BETWEEN 1 AND 120),
+  placement TEXT NOT NULL CHECK (placement IN ('feed','watch_sidebar')),
+  creative_url TEXT NOT NULL,
+  destination_url TEXT NOT NULL,
+  cpm_bdt NUMERIC(12,4) NOT NULL DEFAULT 0 CHECK (cpm_bdt >= 0),
+  status TEXT NOT NULL DEFAULT 'paused' CHECK (status IN ('draft','active','paused')),
+  starts_at TIMESTAMPTZ,
+  ends_at TIMESTAMPTZ,
+  created_by_email TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (ends_at IS NULL OR starts_at IS NULL OR ends_at > starts_at)
+);
+CREATE INDEX IF NOT EXISTS ad_campaigns_serve_idx ON ad_campaigns (placement, status, starts_at, ends_at, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS ad_events (
+  id BIGSERIAL PRIMARY KEY,
+  campaign_id UUID NOT NULL REFERENCES ad_campaigns(id) ON DELETE RESTRICT,
+  video_id TEXT REFERENCES videos(id) ON DELETE SET NULL,
+  creator_sub TEXT REFERENCES app_users(google_sub) ON DELETE SET NULL,
+  event_type TEXT NOT NULL CHECK (event_type IN ('impression','click')),
+  dedupe_key TEXT NOT NULL,
+  estimated_creator_earnings_bdt NUMERIC(14,6) NOT NULL DEFAULT 0 CHECK (estimated_creator_earnings_bdt >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (campaign_id, event_type, dedupe_key)
+);
+CREATE INDEX IF NOT EXISTS ad_events_creator_created_idx ON ad_events (creator_sub, created_at DESC);
+CREATE INDEX IF NOT EXISTS ad_events_campaign_created_idx ON ad_events (campaign_id, event_type, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS copyright_strikes (
+  id UUID PRIMARY KEY,
+  video_id TEXT REFERENCES videos(id) ON DELETE SET NULL,
+  channel_sub TEXT REFERENCES app_users(google_sub) ON DELETE SET NULL,
+  reason TEXT NOT NULL CHECK (char_length(reason) BETWEEN 5 AND 2000),
+  evidence_url TEXT,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','appealed','dismissed','resolved')),
+  appeal_text TEXT,
+  issued_by_email TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  appealed_at TIMESTAMPTZ,
+  resolved_by_email TEXT,
+  resolved_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS copyright_strikes_channel_created_idx ON copyright_strikes (channel_sub, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS admin_audit_logs (
+  id BIGSERIAL PRIMARY KEY,
+  actor_email TEXT NOT NULL,
+  actor_role TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id TEXT,
+  reason TEXT NOT NULL DEFAULT '',
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS admin_audit_created_idx ON admin_audit_logs (created_at DESC);

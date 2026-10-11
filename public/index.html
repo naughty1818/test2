@@ -62,6 +62,7 @@
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/console.js"></script>
   <script>
   'use strict';
   const app = document.getElementById('app');
@@ -74,7 +75,7 @@
   const socket = typeof io === 'function' ? io({ transports: ['websocket', 'polling'] }) : null;
   const state = {
     config: { maxFileMb: 500, googleLoginEnabled: false },
-    session: { user: null, profile: null },
+    session: { user: null, profile: null }, admin: null,
     category: '', query: '', routeToken: 0, toastTimer: null,
     currentVideoId: null, currentChannelHandle: null, commentNodes: new Map()
   };
@@ -183,7 +184,8 @@
     const toggle = $('button', { type: 'button', class: 'account-toggle', 'aria-expanded': 'false', 'aria-label': 'অ্যাকাউন্ট মেনু' }, [avatar, $('span', { class: 'account-name', text: name }), $('span', { class: 'chevron', text: '⌄' })]);
     const menu = $('div', { class: 'account-menu' });
     menu.append($('div', { class: 'menu-note', text: name }));
-    [['আমার চ্যানেল', '/channel/me'], ['সাবস্ক্রিপশন', '/subscriptions'], ['প্লেলিস্ট', '/playlists'], ['ভিডিও আপলোড', '/upload']].forEach(([label, href]) => menu.append($('a', { href, 'data-route': '', text: label })));
+    [['আমার চ্যানেল', '/channel/me'], ['Creator Studio', '/studio'], ['সাবস্ক্রিপশন', '/subscriptions'], ['প্লেলিস্ট', '/playlists'], ['ভিডিও আপলোড', '/upload']].forEach(([label, href]) => menu.append($('a', { href, 'data-route': '', text: label })));
+    if (state.admin?.role) menu.append($('a', { href: '/admin', 'data-route': '', text: 'Admin control panel' }));
     menu.append($('button', { type: 'button', class: 'logout-item', text: 'লগআউট', onClick: async () => {
       try { await jsonFetch('/auth/logout', { method: 'POST', body: {} }); state.session = { user: null, profile: null }; renderAccount(); notify('লগআউট হয়েছে।'); renderRoute(); }
       catch (error) { notify(error.message, 'error'); }
@@ -261,6 +263,18 @@
     }));
     body.append(creator, copy, actions); card.append(thumbLink, body); return card;
   }
+  function sponsoredCard(ad, videoId = null, compact = false) {
+    const card = $('article', { class: 'sponsored-card' + (compact ? ' sponsored-watch' : '') });
+    const link = $('a', { href: text(ad.destinationUrl, '#'), target: '_blank', rel: 'noopener noreferrer', 'aria-label': text(ad.title, 'Sponsored') });
+    const image = $('img', { src: text(ad.creativeUrl, ''), alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' });
+    image.addEventListener('error', () => image.remove());
+    const copy = $('div', { class: 'sponsored-copy' }, [$('span', { class: 'sponsored-label', text: 'Sponsored · ' + text(ad.sponsorName, 'Partner') }), $('strong', { text: text(ad.title, 'Partner message') }), $('small', { text: 'প্রমোটেড কনটেন্ট' }), $('span', { class: 'sponsored-cta', text: 'আরও জানো ↗' })]);
+    link.append(image, copy);
+    link.addEventListener('click', () => { jsonFetch('/api/ads/events', { method: 'POST', body: { campaignId: ad.id, eventType: 'click', videoId } }).catch(() => {}); });
+    card.append(link);
+    jsonFetch('/api/ads/events', { method: 'POST', body: { campaignId: ad.id, eventType: 'impression', videoId } }).catch(() => {});
+    return card;
+  }
   function videoGrid(videos, message = 'এখনো কোনো প্রকাশিত ভিডিও নেই।', options = {}) {
     const grid = $('div', { class: 'video-grid' });
     if (!Array.isArray(videos) || !videos.length) { grid.append(emptyState(message, 'নতুন ভিডিও যোগ হলে এখানে দেখা যাবে।', state.session.user ? 'ভিডিও আপলোড করো' : 'লগইন করে আপলোড করো', state.session.user ? '/upload' : '/login')); return grid; }
@@ -313,6 +327,7 @@
       chips.replaceWith(categoryChips(state.category, value => { state.category = value; renderRoute(); }));
       const nextGrid = videoGrid(videos, 'এখনো কোনো public video নেই। প্রথম ভিডিওটি তোমার হতে পারে.'); grid.replaceWith(nextGrid);
       if (data.hasMore) appendLoadMore(feed, nextGrid, '', state.category, 24, token);
+      jsonFetch('/api/ads/serve?placement=feed').then(result => { if (token === state.routeToken && result.ad) nextGrid.append(sponsoredCard(result.ad)); }).catch(() => {});
     } catch (error) { if (token === state.routeToken) grid.replaceWith(emptyState('ভিডিও লোড করা যায়নি', error.message, 'আবার চেষ্টা করো', '/')); }
   }
   async function renderSearch(token) {
@@ -451,6 +466,7 @@
       creator.append(actions); main.append(stage, title, subtitle, creator, playlistPicker, description, discussion);
       const aside = $('aside', { class: 'recommendations' }, [$('div', { class: 'recommendations-title' }, [$('h2', { text: 'এরপর দেখো' }), $('span', { text: 'এই বিভাগের আরও ভিডিও' })])]);
       section.append(main, aside); setPage([section]);
+      jsonFetch('/api/ads/serve?placement=watch_sidebar').then(result => { if (token === state.routeToken && result.ad) aside.append(sponsoredCard(result.ad, id, true)); }).catch(() => {});
       if (socket) { socket.emit('video:join', id); if (ownerHandle) { state.currentChannelHandle = ownerHandle; socket.emit('channel:join', ownerHandle); } }
       try {
         const result = await jsonFetch('/api/videos/' + encodeURIComponent(id) + '/views', { method: 'POST', body: {} });
@@ -617,6 +633,8 @@
     if (path === '/search') { document.title = 'খুঁজে দেখো · ClipNest'; return renderSearch(token); }
     if (path === '/login') { document.title = 'লগইন · ClipNest'; return renderLogin(); }
     if (path === '/upload') { document.title = 'ভিডিও আপলোড · ClipNest'; return renderUpload(); }
+    if (path === '/studio') { document.title = 'Creator Studio · ClipNest'; return window.ClipNestConsole.renderStudio(app, { jsonFetch, notify }); }
+    if (path === '/admin') { document.title = 'Admin · ClipNest'; return window.ClipNestConsole.renderAdmin(app, { jsonFetch, notify, adminRole: state.admin?.role || null, navigate }); }
     if (path === '/channels') { document.title = 'চ্যানেল · ClipNest'; return renderChannels(token); }
     if (path === '/subscriptions') { document.title = 'সাবস্ক্রিপশন · ClipNest'; return renderSubscriptions(token); }
     if (path === '/history') { document.title = 'দেখার ইতিহাস · ClipNest'; return renderHistory(token); }
@@ -641,8 +659,8 @@
     socket.on('channel:stats', message => { if (message.handle !== state.currentChannelHandle) return; document.querySelectorAll('.subscriber-count,.channel-subscribers').forEach(node => { node.textContent = number(message.subscribersCount) + ' জন সাবস্ক্রাইবার'; }); });
   }
   (async function init() {
-    try { const [config, auth] = await Promise.all([jsonFetch('/api/config'), jsonFetch('/auth/me')]); state.config = config; state.session = auth; }
-    catch (_) { state.session = { user: null, profile: null }; }
+    try { const [config, auth] = await Promise.all([jsonFetch('/api/config'), jsonFetch('/auth/me')]); state.config = config; state.session = auth; state.admin = auth.user ? await jsonFetch('/api/admin/me').catch(() => null) : null; }
+    catch (_) { state.session = { user: null, profile: null }; state.admin = null; }
     renderAccount(); renderRoute();
   })();
   </script>
