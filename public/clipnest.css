@@ -748,8 +748,9 @@ body { color:var(--foreground); }
 button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible { outline-color:#20c2a288; }
 ::selection { background:#16b89b55; color:#f0fff9; }
 .topbar { background:rgba(7,18,15,.96); border-bottom-color:var(--border); }
-.brand-lockup { gap:0; padding:4px 10px; border:1px solid #b7e9d933; border-radius:13px; background:#dff4e9; box-shadow:0 5px 22px #0003; }
-.brand-logo { display:block; width:164px; height:auto; max-height:56px; object-fit:contain; }
+.brand-lockup { gap:5px; padding:4px 8px; border:1px solid #b7e9d933; border-radius:13px; background:#dff4e9; box-shadow:0 5px 22px #0003; }
+.brand-latin { color:#006e64; font:800 12px/1 Inter,system-ui,sans-serif; white-space:nowrap; }
+.brand-logo { display:block; width:130px; height:auto; max-height:45px; object-fit:contain; }
 .top-search,.account-toggle,.account-menu,.console-tabs { background:#101e18; border-color:var(--border); color:var(--foreground); }
 .top-search:focus-within { border-color:#248f78; box-shadow:0 0 0 3px #16b89b22; }
 .top-search input,.search-large input,.form-field input,.form-field textarea,.form-field select,.comment-form textarea,.playlist-create-form>input,.console-form .form-field input,.console-form .form-field select,.console-form .form-field textarea { background:#0a1712; color:#e5f2ec; border-color:#2b4338; }
@@ -856,8 +857,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible 
 .sponsored-cta { color:#05221a; background:#21c5a3; }
 .toast-error { border-color:#6a3932 !important; color:#ffd5cc !important; background:#301b18 !important; }
 @media (max-width:760px) {
-  .brand-logo { width:138px; max-height:47px; }
-  .brand-lockup { padding:3px 8px; border-radius:11px; }
+  .brand-logo { width:97px; max-height:34px; }
+  .brand-latin { font-size:10px; }
+  .brand-lockup { gap:4px; padding:3px 7px; border-radius:11px; }
   .top-search { background:#101e18; border-color:#30483c; }
   .sidebar { background:#091510; box-shadow:12px 0 32px #0008; }
   .mobile-bottom-nav { border-color:var(--border); background:rgba(7,18,15,.97); }
