@@ -77,10 +77,10 @@
     const queryTab=new URLSearchParams(location.search).get('tab');
     const tabs=[['overview','Overview'],['ads','Ads'],['moderation','Moderation'],['staff','Admin roles'],['settings','Platform settings'],['audit','Audit log']];
     const role=ctx.adminRole;
-    if(!role){app.replaceChildren(heading('CLIPNEST ADMIN','অনুমতি নেই','এই panel শুধু অনুমোদিত Admin/Moderator-এর জন্য।'));return;}
+    if(!role){app.replaceChildren(heading('ATHARO ADMIN','অনুমতি নেই','এই panel শুধু অনুমোদিত Admin/Moderator-এর জন্য।'));return;}
     let activeTab=chosenTab||queryTab||'overview';
     if((['ads','audit'].includes(activeTab)&&!['owner','admin'].includes(role))||(['staff','settings'].includes(activeTab)&&role!=='owner')) activeTab='overview';
-    app.replaceChildren(heading('CLIPNEST ADMIN','Admin control panel','নিরাপদ staff roles, ads, monetization controls এবং creator/content moderation.'));
+    app.replaceChildren(heading('ATHARO ADMIN','Admin control panel','নিরাপদ staff roles, ads, monetization controls এবং creator/content moderation.'));
     const nav=el('nav',{class:'console-tabs','aria-label':'Admin sections'});
     tabs.forEach(([id,label])=>{if(id==='staff'&&role!=='owner')return;if(id==='settings'&&role!=='owner')return;if(['ads','audit'].includes(id)&&!['owner','admin'].includes(role))return;nav.append(el('button',{type:'button',class:'console-tab'+(activeTab===id?' active':''),text:label,onClick:()=>ctx.navigate('/admin?tab='+id)}));});
     app.append(nav,el('div',{class:'console-notice',text:'Owner email server-side-এ যাচাই হয়। Moderation action-গুলো reversible record হিসেবে রাখা হয়; video remove করলে R2 file স্থায়ীভাবে মুছে যায় না।'}));

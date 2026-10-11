@@ -3,19 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f8f7f4">
-  <meta name="description" content="ClipNest — বাংলা ভিডিও, নিজের ভাষায়, নিজের মানুষের কাছে।">
-  <title>ClipNest · বাংলা ভিডিও</title>
-  <link rel="icon" href="/clipnest-favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/clipnest.css">
+  <meta name="theme-color" content="#07120f">
+  <meta name="description" content="Atharo | আঠারো — বাংলা ভিডিও, নিজের ভাষায়, নিজের মানুষের কাছে।">
+  <title>Atharo | আঠারো · বাংলা ভিডিও</title>
+  <link rel="icon" href="/assets/atharo-icon.png" type="image/png">
+  <link rel="stylesheet" href="/clipnest.css?v=atharo-1">
 </head>
 <body>
   <div class="app-frame">
     <header class="topbar">
       <button class="icon-button mobile-menu-trigger" id="mobileToggle" type="button" aria-expanded="false" aria-controls="sidebar" aria-label="মেনু খুলুন">☰</button>
-      <a href="/" data-route class="brand-lockup" aria-label="ClipNest হোম">
-        <span class="brand-icon"><span class="play-glyph" aria-hidden="true"></span></span>
-        <span class="brand-word">clip<span>nest</span></span>
+      <a href="/" data-route class="brand-lockup" aria-label="Atharo | আঠারো হোম">
+        <img class="brand-logo" src="/assets/atharo-logo.png" alt="Atharo | আঠারো">
       </a>
       <form class="top-search" id="searchForm" role="search">
         <span aria-hidden="true">⌕</span>
@@ -49,7 +48,7 @@
           <p>তোমার গল্প, তোমার কণ্ঠে।</p>
           <span>বাংলা ভিডিওর নতুন ঠিকানা</span>
         </div>
-        <div class="sidebar-footer">© ২০২৬ ClipNest · নিজের মতো দেখো</div>
+        <div class="sidebar-footer">© ২০২৬ Atharo | আঠারো · নিজের মতো দেখো</div>
       </aside>
       <main class="main-content" id="app" tabindex="-1"></main>
     </div>
@@ -225,7 +224,7 @@
     thumb.append(img, $('span', { class: 'thumb-overlay' }), $('span', { class: 'thumb-play' }, [$('span', { class: 'play-glyph' })]), $('span', { class: 'video-duration', text: text(video.category, 'ClipNest') }));
     thumbLink.append(thumb);
     const body = $('div', { class: 'video-card-body' });
-    const ownerName = text(video.ownerName, 'ClipNest নির্মাতা');
+    const ownerName = text(video.ownerName, 'Atharo নির্মাতা');
     const ownerHandle = text(video.ownerHandle, '');
     const creatorLink = ownerHandle ? '/channel/' + escapePath(ownerHandle) : '/channels';
     const creator = $('a', { href: creatorLink, 'data-route': '', class: 'creator-avatar-link', 'aria-label': ownerName }, [avatar(ownerName, video.ownerAvatar)]);
@@ -305,7 +304,7 @@
     copy.append($('span', { class: 'hero-eyebrow', text: '✦ বাংলা ভিডিও, তোমার মতো' }), $('h1', {}, [$('span', { text: 'আজ কী' }), document.createElement('br'), $('em', { text: 'দেখবে?' })]), $('p', { text: 'নতুন গল্প, পরিচিত মুখ আর নিজের পছন্দের নির্মাতাদের এক ফিডে খুঁজে নাও।' }));
     copy.append(linkButton(featured ? '▷  ভিডিও দেখো  ↗' : '⌕  খুঁজে দেখো  ↗', featured ? '/watch/' + escapePath(featured.id) : '/search', 'hero-cta'));
     const caption = $('div', { class: 'hero-caption' });
-    caption.append($('span', { class: 'hero-caption-kicker', text: featured ? 'তোমার জন্য বাছাই' : 'ClipNest · বাংলা ভিডিও' }), $('strong', { text: featured ? text(featured.title, 'নতুন ভিডিও') : 'নিজের গল্প, নিজের ভাষায়' }), $('span', { text: featured ? text(featured.ownerName, 'ClipNest নির্মাতা') + ' · ' + number(featured.viewsCount) + ' ভিউ' : 'তোমার দেখা শুরু হোক এখান থেকেই' }));
+    caption.append($('span', { class: 'hero-caption-kicker', text: featured ? 'তোমার জন্য বাছাই' : 'Atharo | আঠারো · বাংলা ভিডিও' }), $('strong', { text: featured ? text(featured.title, 'নতুন ভিডিও') : 'নিজের গল্প, নিজের ভাষায়' }), $('span', { text: featured ? text(featured.ownerName, 'Atharo নির্মাতা') + ' · ' + number(featured.viewsCount) + ' ভিউ' : 'তোমার দেখা শুরু হোক এখান থেকেই' }));
     section.append(copy, caption, $('div', { class: 'hero-progress' }, [$('span')])); return section;
   }
   function creatorCallout() {
@@ -391,7 +390,7 @@
       const player = $('video', { class: 'player-media', controls: '', preload: 'metadata', playsinline: '', 'aria-label': text(video.title, 'ভিডিও প্লেয়ার') }); player.src = text(video.url, ''); stage.append(player);
       const title = $('h1', { class: 'watch-title', text: text(video.title, 'শিরোনামহীন ভিডিও') });
       const subtitle = $('div', { class: 'watch-subtitle' }, [$('span', { text: number(data.viewsCount) + ' ভিউ' }), $('span', { class: 'meta-dot' }), $('span', { text: fmtDate(video.created) }), $('span', { class: 'watch-category', text: text(video.category, 'অন্যান্য') })]);
-      const ownerName = text(video.ownerName, 'ClipNest নির্মাতা'); const ownerHandle = text(video.ownerHandle, '');
+      const ownerName = text(video.ownerName, 'Atharo নির্মাতা'); const ownerHandle = text(video.ownerHandle, '');
       const creator = $('div', { class: 'watch-creator-row' });
       creator.append($('a', { href: ownerHandle ? '/channel/' + escapePath(ownerHandle) : '/channels', 'data-route': '', class: 'creator-avatar-link' }, [avatar(ownerName, video.ownerAvatar, 'creator-avatar creator-avatar-large')]));
       creator.append($('div', { class: 'watch-creator-text' }, [$('a', { href: ownerHandle ? '/channel/' + escapePath(ownerHandle) : '/channels', 'data-route': '', class: 'creator-name', text: ownerName }), $('span', { class: 'subscriber-count', text: number(video.subscribersCount || 0) + ' জন অনুসরণ করেন' })]));
@@ -443,7 +442,7 @@
         if (!window.confirm('এই ভিডিওটি স্থায়ীভাবে মুছে ফেলবে?')) return;
         try { await jsonFetch('/api/videos/' + encodeURIComponent(id), { method: 'DELETE' }); notify('ভিডিও মুছে ফেলা হয়েছে।'); navigate('/channel/me'); } catch (error) { notify(error.message, 'error'); }
       }));
-      const description = $('details', { class: 'video-description' }, [$('summary', { text: 'ভিডিওর বিবরণ  ·  ' + fmtDate(video.created) }), $('p', { text: text(video.description, 'এই ভিডিওটির কোনো বিবরণ নেই।') }), $('span', { text: 'ClipNest · ভিডিও Cloudflare R2-তে' })]);
+      const description = $('details', { class: 'video-description' }, [$('summary', { text: 'ভিডিওর বিবরণ  ·  ' + fmtDate(video.created) }), $('p', { text: text(video.description, 'এই ভিডিওটির কোনো বিবরণ নেই।') }), $('span', { text: 'Atharo · ভিডিও Cloudflare R2-তে' })]);
       const discussion = $('section', { class: 'discussion' });
       const commentsHeadingCount = $('span', { class: 'comment-count', text: number(data.commentsCount) + 'টি মন্তব্য' });
       discussion.append($('div', { class: 'comments-heading' }, [$('h2', { text: 'মন্তব্য ও আলোচনা' }), commentsHeadingCount]));
@@ -508,10 +507,10 @@
       const own = Boolean(data.isOwner || (state.session.profile?.handle && state.session.profile.handle.toLowerCase() === text(profile.handle, handle).toLowerCase()));
       const page = $('div');
       const cover = $('div', { class: 'channel-cover' }, [$('div', { class: 'cover-orbit cover-orbit-one' }), $('div', { class: 'cover-orbit cover-orbit-two' }), $('span', { class: 'cover-caption', text: 'নিজের গল্প, নিজের ভাষায়' })]);
-      const profileSection = $('section', { class: 'channel-profile' }); const name = text(profile.displayName, text(profile.handle, 'ClipNest channel'));
+      const profileSection = $('section', { class: 'channel-profile' }); const name = text(profile.displayName, text(profile.handle, 'Atharo channel'));
       profileSection.append(avatar(name, profile.avatarUrl, 'channel-avatar'));
       const subscriberLabel = $('span', { class: 'channel-subscribers', text: number(data.subscribersCount || 0) + ' জন সাবস্ক্রাইবার' });
-      profileSection.append($('div', { class: 'channel-info' }, [$('h1', { text: name }), $('span', { class: 'channel-handle', text: '@' + text(profile.handle, handle) + ' · ' + number(videos.length) + 'টি ভিডিও' }), $('p', { text: text(profile.bio, 'বাংলা ভিডিও নির্মাতা। নিজের গল্প শেয়ার করছে ClipNest-এ।') }), subscriberLabel]));
+      profileSection.append($('div', { class: 'channel-info' }, [$('h1', { text: name }), $('span', { class: 'channel-handle', text: '@' + text(profile.handle, handle) + ' · ' + number(videos.length) + 'টি ভিডিও' }), $('p', { text: text(profile.bio, 'বাংলা ভিডিও নির্মাতা। নিজের গল্প শেয়ার করছে Atharo-তে।') }), subscriberLabel]));
       const channelActions = $('div', { class: 'channel-actions' });
       if (own) channelActions.append(button('প্রোফাইল সম্পাদনা', 'action-pill', () => { const panel = document.getElementById('profileEdit'); panel.hidden = !panel.hidden; }));
       else channelActions.append(subscribeButton(profile.handle, Boolean(data.subscribed), Number(data.subscribersCount) || 0, result => { subscriberLabel.textContent = number(result.subscribersCount) + ' জন সাবস্ক্রাইবার'; }));
@@ -519,7 +518,7 @@
       profileSection.append(channelActions); page.append(cover, profileSection);
       if (own) {
         const edit = $('form', { class: 'profile-edit-panel', id: 'profileEdit', hidden: true });
-        edit.append($('div', { class: 'profile-edit-title' }, [$('strong', { text: 'চ্যানেল পরিচিতি' }), $('span', { text: 'ClipNest profile' })]));
+        edit.append($('div', { class: 'profile-edit-title' }, [$('strong', { text: 'চ্যানেল পরিচিতি' }), $('span', { text: 'Atharo প্রোফাইল' })]));
         const nameInput = $('input', { type: 'text', maxlength: '120', required: '', value: text(profile.displayName, '') });
         const handleInput = $('input', { type: 'text', maxlength: '30', minlength: '3', required: '', value: text(profile.handle, '') });
         const bioInput = $('textarea', { maxlength: '1000', rows: '3', placeholder: 'তোমার চ্যানেল নিয়ে কয়েকটি কথা' }); bioInput.value = text(profile.bio, '');
@@ -637,22 +636,22 @@
   function putFile(url, file, onProgress, contentType) {
     return new Promise((resolve, reject) => { const xhr = new XMLHttpRequest(); xhr.open('PUT', url); xhr.setRequestHeader('Content-Type', contentType); xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress(Math.round(event.loaded / event.total * 100)); }; xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error('R2 upload failed (HTTP ' + xhr.status + '). CORS policy পরীক্ষা করো।')); xhr.onerror = () => reject(new Error('Network/CORS সমস্যায় upload থেমে গেছে।')); xhr.send(file); });
   }
-  function renderNotFound() { setPage([emptyState('এই পেজটি পাওয়া যায়নি', 'লিংকটি পরীক্ষা করে আবার চেষ্টা করো।', 'ClipNest হোম', '/')]); }
+  function renderNotFound() { setPage([emptyState('এই পেজটি পাওয়া যায়নি', 'লিংকটি পরীক্ষা করে আবার চেষ্টা করো।', 'Atharo | আঠারো হোম', '/')]); }
   async function renderRoute() {
     leaveRealtimeRooms(); const token = ++state.routeToken; const path = location.pathname;
-    if (path === '/') { document.title = 'ClipNest · বাংলা ভিডিও'; return renderHome(token); }
-    if (path === '/search') { document.title = 'খুঁজে দেখো · ClipNest'; return renderSearch(token); }
-    if (path === '/login') { document.title = 'লগইন · ClipNest'; return renderLogin(); }
-    if (path === '/upload') { document.title = 'ভিডিও আপলোড · ClipNest'; return renderUpload(); }
-    if (path === '/studio') { document.title = 'Creator Studio · ClipNest'; return window.ClipNestConsole.renderStudio(app, { jsonFetch, notify }); }
-    if (path === '/admin') { document.title = 'Admin · ClipNest'; return window.ClipNestConsole.renderAdmin(app, { jsonFetch, notify, adminRole: state.admin?.role || null, navigate }); }
-    if (path === '/channels') { document.title = 'চ্যানেল · ClipNest'; return renderChannels(token); }
-    if (path === '/subscriptions') { document.title = 'সাবস্ক্রিপশন · ClipNest'; return renderSubscriptions(token); }
-    if (path === '/history') { document.title = 'দেখার ইতিহাস · ClipNest'; return renderHistory(token); }
-    if (path === '/playlists') { document.title = 'প্লেলিস্ট · ClipNest'; return renderPlaylists(token); }
-    if (path.startsWith('/watch/')) { const id = decodeURIComponent(path.slice('/watch/'.length)); document.title = 'ভিডিও · ClipNest'; return renderWatch(id, token); }
-    if (path.startsWith('/channel/')) { const handle = decodeURIComponent(path.slice('/channel/'.length)); document.title = 'চ্যানেল · ClipNest'; return renderChannel(handle, token); }
-    if (path.startsWith('/playlist/')) { const id = decodeURIComponent(path.slice('/playlist/'.length)); document.title = 'প্লেলিস্ট · ClipNest'; return renderPlaylist(id, token); }
+    if (path === '/') { document.title = 'Atharo | আঠারো · বাংলা ভিডিও'; return renderHome(token); }
+    if (path === '/search') { document.title = 'খুঁজে দেখো · Atharo | আঠারো'; return renderSearch(token); }
+    if (path === '/login') { document.title = 'লগইন · Atharo | আঠারো'; return renderLogin(); }
+    if (path === '/upload') { document.title = 'ভিডিও আপলোড · Atharo | আঠারো'; return renderUpload(); }
+    if (path === '/studio') { document.title = 'Creator Studio · Atharo | আঠারো'; return window.ClipNestConsole.renderStudio(app, { jsonFetch, notify }); }
+    if (path === '/admin') { document.title = 'Admin · Atharo | আঠারো'; return window.ClipNestConsole.renderAdmin(app, { jsonFetch, notify, adminRole: state.admin?.role || null, navigate }); }
+    if (path === '/channels') { document.title = 'চ্যানেল · Atharo | আঠারো'; return renderChannels(token); }
+    if (path === '/subscriptions') { document.title = 'সাবস্ক্রিপশন · Atharo | আঠারো'; return renderSubscriptions(token); }
+    if (path === '/history') { document.title = 'দেখার ইতিহাস · Atharo | আঠারো'; return renderHistory(token); }
+    if (path === '/playlists') { document.title = 'প্লেলিস্ট · Atharo | আঠারো'; return renderPlaylists(token); }
+    if (path.startsWith('/watch/')) { const id = decodeURIComponent(path.slice('/watch/'.length)); document.title = 'ভিডিও · Atharo | আঠারো'; return renderWatch(id, token); }
+    if (path.startsWith('/channel/')) { const handle = decodeURIComponent(path.slice('/channel/'.length)); document.title = 'চ্যানেল · Atharo | আঠারো'; return renderChannel(handle, token); }
+    if (path.startsWith('/playlist/')) { const id = decodeURIComponent(path.slice('/playlist/'.length)); document.title = 'প্লেলিস্ট · Atharo | আঠারো'; return renderPlaylist(id, token); }
     renderNotFound();
   }
   document.addEventListener('click', event => {

@@ -718,3 +718,150 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .console-muted { color:#8a8f88; font-size:10px; line-height:1.7; }
 @media (max-width:900px) { .console-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:760px) { .console-heading { align-items:flex-start; flex-direction:column; } .console-tabs { width:100%; overflow-x:auto; flex-wrap:nowrap; } .console-tab { white-space:nowrap; } .console-form { grid-template-columns:1fr; } .console-form .span-2,.console-form-actions { grid-column:1; } .console-panel { padding:14px; } .console-chart { gap:4px; } .console-stat-value { font-size:20px; } }
+
+
+/* Atharo | আঠারো — deep green-black theme */
+:root {
+  --primary: #16b89b;
+  --primary-foreground: #062019;
+  --background: #07120f;
+  --foreground: #e5f2ec;
+  --card: #0e1b16;
+  --card-foreground: #e5f2ec;
+  --popover: #102019;
+  --popover-foreground: #e5f2ec;
+  --secondary: #172923;
+  --secondary-foreground: #d2e4db;
+  --muted: #192a22;
+  --muted-foreground: #9ab0a4;
+  --accent: #153b30;
+  --accent-foreground: #8ce9d1;
+  --destructive: #e16b68;
+  --destructive-foreground: #fff;
+  --border: #263c32;
+  --input: #294238;
+  --ring: #20c2a2;
+  color-scheme: dark;
+}
+html,body { background:var(--background); color:var(--foreground); }
+body { color:var(--foreground); }
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible { outline-color:#20c2a288; }
+::selection { background:#16b89b55; color:#f0fff9; }
+.topbar { background:rgba(7,18,15,.96); border-bottom-color:var(--border); }
+.brand-lockup { gap:0; padding:4px 10px; border:1px solid #b7e9d933; border-radius:13px; background:#dff4e9; box-shadow:0 5px 22px #0003; }
+.brand-logo { display:block; width:164px; height:auto; max-height:56px; object-fit:contain; }
+.top-search,.account-toggle,.account-menu,.console-tabs { background:#101e18; border-color:var(--border); color:var(--foreground); }
+.top-search:focus-within { border-color:#248f78; box-shadow:0 0 0 3px #16b89b22; }
+.top-search input,.search-large input,.form-field input,.form-field textarea,.form-field select,.comment-form textarea,.playlist-create-form>input,.console-form .form-field input,.console-form .form-field select,.console-form .form-field textarea { background:#0a1712; color:#e5f2ec; border-color:#2b4338; }
+.top-search input::placeholder,.search-large input::placeholder,.form-field input::placeholder,.form-field textarea::placeholder,.comment-form textarea::placeholder { color:#80998c; }
+.top-search button,.search-clear,.icon-button { color:#c5d8ce; background:#1a2b23; border-color:#30483c; }
+.upload-link,.icon-button,.top-actions { color:#d1e4da; }
+.upload-link:hover,.text-link:hover,.see-all:hover { color:#72dfc4; }
+.login-button { color:#eafff6; background:#0b3329; }
+.login-button:hover { background:#12503f; }
+.page-layout { color:var(--foreground); }
+.sidebar { border-right-color:var(--border); background:#091510; }
+.sidebar-label,.sidebar-footer { color:#80998c; }
+.nav-item { color:#b4c9bf; }
+.nav-item:hover { color:#effbf5; background:#14271f; }
+.nav-item-active,.nav-item-active:hover { color:#8de8d2; background:#12352b; }
+.sidebar-divider { background:var(--border); }
+.sidebar-note { color:#e5f2ec; border-color:#2a4639; background:linear-gradient(135deg,#12241c,#0d1a14); }
+.sidebar-note-icon { color:#7fe2ca; background:#153b30; }
+.sidebar-note span { color:#9ab0a4; }
+.main-content,#app { color:#dcebe3; }
+#app h1,#app h2,#app h3,#app h4,#app .video-title,#app .watch-creator-text .creator-name,#app .channel-info h1,#app .profile-edit-title,#app .console-stat-value,#app .console-table td strong { color:#e5f2ec; }
+#app p,#app .page-heading p,#app .creator-callout p,#app .watch-creator-text span,#app .video-meta,#app .creator-name,#app .channel-handle,#app .channel-info p,#app .channel-joined,#app .login-panel p,#app .comments-heading span,#app .comment-meta span,#app .comment-count,#app .recommendations-title span,#app .console-heading p,#app .console-panel>p,#app .console-stat-label,#app .console-stat-note,#app .console-muted,#app .console-empty,#app .settings-help,#app .settings-footer,#app .policy-updated { color:#9aafa4; }
+.section-kicker,.hero-eyebrow { color:#8ce9d1; }
+.section-kicker { color:#73d9bc; }
+.hero-copy h1 em { color:#86e4cb; }
+.hero-panel { background:#102820; }
+.hero-shade { background:linear-gradient(90deg,rgba(3,15,11,.87) 0%,rgba(3,15,11,.56) 45%,rgba(3,15,11,.06) 100%),linear-gradient(0deg,rgba(3,12,9,.46),transparent 45%); }
+.hero-cta,.primary-cta,.follow-button { color:#05221a; background:#21c5a3; box-shadow:0 8px 22px #0b6e5838; }
+.hero-cta:hover,.primary-cta:hover,.follow-button:hover { color:#041c15; background:#56d9bb; }
+.feed-heading h2,.results-heading h2,.recommendations-title h2 { color:#e7f4ed; }
+.category-chip,.action-pill,.outline-cta,.console-actions button,.console-small-button { color:#c7dbd0; background:#101e18; border-color:#2a4136; }
+.category-chip:hover,.action-pill:hover,.outline-cta:hover,.console-actions button:hover,.console-small-button:hover { color:#9af0d9; border-color:#28745f; background:#153329; }
+.category-chip-active,.category-chip-active:hover { color:#eafff7; border-color:#166b57; background:#115540; }
+.video-title:hover,.creator-name:hover,.channel-tab-active,.channel-upload-link { color:#7ee2c7; }
+.creator-callout,.login-panel,.upload-form,.profile-edit-panel,.settings-card,.console-stat,.console-panel,.account-menu,.channel-discovery-card,.playlist-create-form,.sponsored-card { color:#e5f2ec; border-color:#293f34; background:#0e1b16; box-shadow:0 10px 28px #0002; }
+.creator-callout { background:linear-gradient(100deg,#10231a,#0c1913); }
+.creator-callout-mark,.login-symbol,.drop-icon,.file-icon { color:#052019; background:#20b999; }
+.video-thumb { border-color:#263a31; }
+.empty-state-icon { color:#7fe2ca; background:#15382d; }
+.empty-state p,.creator-callout p,.video-meta,.card-like-count,.subscriber-count,.comment-meta span { color:#93a99d; }
+.page-heading h1,.watch-title,.channel-info h1,.policy-page h1,.policy-page h2 { color:#e7f4ed; }
+.search-large { color:#9ab0a4; background:#101e18; border-color:#2b4338; box-shadow:0 4px 18px #0003; }
+.watch-creator-row,.channel-profile,.channel-tabs { border-color:var(--border); }
+.watch-category { color:#9ee8d5; background:#14382d; }
+.follow-button-active,.follow-button-active:hover { color:#a9cbbd; background:#1a3027; }
+.video-description { color:#cadbd2; border-color:#293f34; background:#101e18; }
+.video-description summary,.comments-heading h2,.comment-meta strong { color:#e0eee7; }
+.video-description>span { color:#89a397; }
+.action-pill-liked { color:#8fe8d2; border-color:#2d705e; background:#12372d; }
+.comment-form textarea { background:#0a1712; color:#e5f2ec; border-color:#2b4338; }
+.comment-form textarea:disabled { background:#111f19; }
+.comment-body p { color:#c2d4ca; }
+.comment-reply,.comment-cancel { color:#9aafa4; }
+.comment-replies { border-left-color:#315044; }
+.channel-cover { background:linear-gradient(110deg,#0d493b,#116b55 48%,#1c382c); }
+.channel-avatar { border-color:#07120f; box-shadow:0 0 0 1px #294438; }
+.channel-tabs button,.channel-tabs>a { color:#a9beb3; }
+.dropzone { color:#bfcec5; border-color:#365347; background:#0d1a14; }
+.dropzone:hover,.dropzone-active { border-color:#22a889; background:#10281f; }
+.dropzone strong,.selected-file strong,.form-field>span,.profile-edit-title { color:#e1eee7; }
+.dropzone>span:not(.drop-icon):not(.drop-browse),.selected-file span,.form-field small,.login-footnote,.upload-footer>span,.upload-footnote { color:#91a79b; }
+.drop-browse,.text-button,.settings-help a,.settings-footer a,.settings-card a:not(.outline-cta),.policy-page a { color:#77dfc4; }
+.form-field input:focus,.form-field textarea:focus,.form-field select:focus,.console-form .form-field input:focus,.console-form .form-field select:focus,.console-form .form-field textarea:focus { border-color:#279578; box-shadow:0 0 0 3px #16b89b20; }
+.form-field select:disabled { color:#81958b; background:#14221b; }
+.notice-warn,.console-notice { color:#e5c58c; border-color:#665236; background:#2b2418; }
+.notice-success { color:#9ce2b4; border-color:#315b43; background:#10291a; }
+.upload-footer,.library-row,.console-table th,.console-table td,.console-chart { border-color:var(--border); }
+.progress-track { background:#1c3027; }
+.progress-track span,.console-chart-bar { background:linear-gradient(90deg,#69dfbd,#17a988); }
+.account-toggle:hover { background:#16271f; }
+.account-menu .menu-note { color:#93a99d; border-color:var(--border); }
+.account-menu a,.account-menu button { color:#c8d9d0; }
+.account-menu a:hover,.account-menu button:hover { color:#a0f0db; background:#15382d; }
+.logout-button { color:#9aafa4; }
+.channel-discovery-copy h3,.library-row strong { color:#e5f2ec; }
+.channel-discovery-copy>span,.channel-discovery-copy small,.library-row span { color:#9aafa4; }
+.channel-discovery-arrow { color:#78dfc4; }
+.policy-page { color:#c6d8ce; }
+.policy-page h1,.policy-page h2 { color:#e5f2ec; }
+.policy-footer { border-color:var(--border); color:#9aafa4; }
+.console-heading h1 { color:#e9f5ee; }
+.console-tabs { background:#0d1b15; }
+.console-tab { color:#b3c7bc; }
+.console-tab.active,.console-tab:hover { color:#8ce9d1; background:#15382d; }
+.console-stat-value { color:#e8f4ed; }
+.console-panel { background:#0e1b16; }
+.console-panel h2 { color:#e3f0e8; }
+.console-form .form-field input,.console-form .form-field select,.console-form .form-field textarea { background:#091610; color:#e5f2ec; border-color:#2b4338; }
+.console-table th,.console-table td { border-color:#263c32; }
+.console-table th { color:#9aafa4; }
+.console-table td { color:#c6d8ce; }
+.console-badge { color:#c4d5cc; background:#1b2d24; }
+.console-badge.good { color:#9ce2b4; background:#153322; }
+.console-badge.warn { color:#e9c77f; background:#342a18; }
+.console-badge.bad,.console-danger { color:#f09a96 !important; background:#351c1c; }
+.console-notice { color:#d9c59c; border-color:#504431; background:#262116; }
+.console-chart-bar { background:linear-gradient(180deg,#55d8b6,#128c6f); }
+.console-toggle { color:#d1e1d8; }
+.sponsored-card { border-color:#2c5443; background:#0e1b16; }
+.sponsored-card img { background:#14241b; }
+.sponsored-label { color:#82d9be; }
+.sponsored-copy strong { color:#e5f2ec; }
+.sponsored-copy small { color:#9aafa4; }
+.sponsored-cta { color:#05221a; background:#21c5a3; }
+.toast-error { border-color:#6a3932 !important; color:#ffd5cc !important; background:#301b18 !important; }
+@media (max-width:760px) {
+  .brand-logo { width:138px; max-height:47px; }
+  .brand-lockup { padding:3px 8px; border-radius:11px; }
+  .top-search { background:#101e18; border-color:#30483c; }
+  .sidebar { background:#091510; box-shadow:12px 0 32px #0008; }
+  .mobile-bottom-nav { border-color:var(--border); background:rgba(7,18,15,.97); }
+  .mobile-bottom-nav>a { color:#a2b7ab; }
+  .mobile-bottom-nav>a.mobile-nav-active { color:#7ee2c7; }
+  .upload-link { color:#98e8d4; background:#12382d; }
+}
