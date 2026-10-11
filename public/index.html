@@ -269,7 +269,7 @@
       if (url.protocol !== 'https:') return '';
       if (url.hostname === 'drive.google.com') {
         const id = url.pathname.match(/^\/file\/d\/([^/]+)/)?.[1] || url.searchParams.get('id');
-        if (id) return 'https://drive.google.com/uc?export=view&id=' + encodeURIComponent(id);
+        if (id) return 'https://lh3.googleusercontent.com/d/' + encodeURIComponent(id);
       }
       return url.toString();
     } catch (_) { return ''; }
