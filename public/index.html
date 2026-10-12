@@ -424,13 +424,14 @@
       const main = $('div', { class: 'watch-main' });
       const stage = $('div', { class: 'player-stage player-stage-has-video' });
       const player = $('video', { class: 'player-media', controls: '', preload: 'metadata', playsinline: '', 'aria-label': text(video.title, 'ভিডিও প্লেয়ার') }); player.src = text(video.url, ''); if(video.thumbnailUrl)player.poster=video.thumbnailUrl;
-      const playerStatus=$('div',{class:'player-status','aria-live':'polite',text:'ভিডিও সংযোগ হচ্ছে…'}),retryPlayback=button('পুনরায় চেষ্টা','outline-cta',()=>{retryPlayback.hidden=true;player.load();player.play().catch(()=>{});});retryPlayback.hidden=true;
+      const playerStatus=$('div',{class:'player-status','aria-live':'polite',text:'ভিডিও লোড হচ্ছে…'}),retryPlayback=button('পুনরায় চেষ্টা','outline-cta',()=>{retryPlayback.hidden=true;playerStatus.textContent='ভিডিও আবার লোড হচ্ছে…';playerStatus.hidden=false;player.load();player.play().catch(()=>{});});retryPlayback.hidden=true;
       player.addEventListener('waiting',()=>{playerStatus.textContent='ভিডিও বাফার হচ্ছে… নেটওয়ার্ক ধীর হলে কিছুক্ষণ অপেক্ষা করো।';playerStatus.hidden=false;});
       player.addEventListener('stalled',()=>{playerStatus.textContent='ভিডিও ডেটা আসতে দেরি হচ্ছে।';playerStatus.hidden=false;});
+      player.addEventListener('loadedmetadata',()=>{playerStatus.hidden=true;});player.addEventListener('canplay',()=>{playerStatus.hidden=true;});
       player.addEventListener('playing',()=>{playerStatus.hidden=true;retryPlayback.hidden=true;});
       player.addEventListener('error',()=>{playerStatus.textContent='ভিডিও লোড হয়নি। সংযোগ পরীক্ষা করে আবার চেষ্টা করো।';playerStatus.hidden=false;retryPlayback.hidden=false;});
       const speed=$('select',{class:'player-speed','aria-label':'Playback speed'});[['0.75','0.75×'],['1','1×'],['1.25','1.25×'],['1.5','1.5×'],['2','2×']].forEach(([value,label])=>speed.append($('option',{value,text:label})));speed.value='1';speed.addEventListener('change',()=>{player.playbackRate=Number(speed.value)||1;});
-      const playerTools=$('div',{class:'player-tools'},[$('label',{class:'player-speed-label'},[$('span',{text:'গতি'}),speed]),retryPlayback]);stage.append(player,playerStatus,playerTools);
+      const playerTools=$('div',{class:'player-tools'},[$('label',{class:'player-speed-label'},[$('span',{text:'গতি'}),speed]),retryPlayback]);stage.append(player,playerStatus,playerTools);if(player.readyState>=1)playerStatus.hidden=true;
       const title = $('h1', { class: 'watch-title', text: text(video.title, 'শিরোনামহীন ভিডিও') });
       const subtitle = $('div', { class: 'watch-subtitle' }, [$('span', { text: number(data.viewsCount) + ' ভিউ' }), $('span', { class: 'meta-dot' }), $('span', { text: fmtDate(video.created) }), $('span', { class: 'watch-category', text: text(video.category, 'অন্যান্য') })]);
       const ownerName = text(video.ownerName, 'Atharo নির্মাতা'); const ownerHandle = text(video.ownerHandle, '');
