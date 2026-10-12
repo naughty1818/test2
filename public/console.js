@@ -253,7 +253,7 @@
       el('div',{class:'console-notice span-2',text:'Creator share এবং CPM কেবল estimate গণনা করে। এটি advertiser payment বা creator payout নিশ্চিত করে না। 0% share দিয়ে monetization enable করা যাবে না.'}),
       el('div',{class:'console-form-actions'},[el('button',{type:'submit',class:'primary-cta',text:'Settings save'})])
     ]);
-    form.addEventListener('submit',async event=>{event.preventDefault();try{await ctx.jsonFetch('/api/admin/settings',{method:'PUT',body:{adsEnabled:ads.checked,monetizationEnabled:monet.checked,creatorSharePercent:share.value===''?null:Number(share.value),adToggles:{feed:adFeed.checked,watchSidebar:adWatch.checked,channel:adChannel.checked,sticky:adSticky.checked,postroll:adPostroll.checked}}});ctx.notify('Platform settings save হয়েছে।');await renderSettings(root,ctx);}catch(error){ctx.notify(error.message,'error');}});
+    form.addEventListener('submit',async event=>{event.preventDefault();try{await ctx.jsonFetch('/api/admin/settings',{method:'PUT',body:{adsEnabled:ads.checked,monetizationEnabled:monet.checked,creatorSharePercent:share.value===''?null:Number(share.value),adToggles:{feed:adFeed.checked,watchSidebar:adWatch.checked,channel:adChannel.checked,sticky:adSticky.checked,postroll:adPostroll.checked,lBanner:adLBanner.checked}}});ctx.notify('Platform settings save হয়েছে।');await renderSettings(root,ctx);}catch(error){ctx.notify(error.message,'error');}});
     root.append(panel('Platform monetization settings','Ads default-off থাকে। Share percentage নিজের commercial policy অনুযায়ী নির্ধারণ করুন—এখানে কোনো default ভাগ ধরে নেওয়া হয়নি.',form));
   }
 
