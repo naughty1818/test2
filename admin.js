@@ -74,10 +74,10 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
     try {
       const placement = String(req.query.placement || '');
       const channelHandle = req.query.handle ? String(req.query.handle).replace(/^@/,'').trim() : null;
-      if (!['feed','watch_sidebar','channel','sticky_banner','postroll'].includes(placement)) return fail(res, 'Invalid ad placement.');
+      if (!['feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'].includes(placement)) return fail(res, 'Invalid ad placement.');
       if (placement === 'channel' && !channelHandle) return fail(res, 'Channel handle is required.');
-      const settings = await pool.query('SELECT ads_enabled,ad_feed_enabled,ad_watch_sidebar_enabled,ad_channel_enabled,ad_sticky_enabled,ad_postroll_enabled FROM platform_settings WHERE id=1');
-      const settingKey = {feed:'ad_feed_enabled',watch_sidebar:'ad_watch_sidebar_enabled',channel:'ad_channel_enabled',sticky_banner:'ad_sticky_enabled',postroll:'ad_postroll_enabled'}[placement];
+      const settings = await pool.query('SELECT ads_enabled,ad_feed_enabled,ad_watch_sidebar_enabled,ad_channel_enabled,ad_sticky_enabled,ad_postroll_enabled,ad_l_banner_enabled FROM platform_settings WHERE id=1');
+      const settingKey = {feed:'ad_feed_enabled',watch_sidebar:'ad_watch_sidebar_enabled',channel:'ad_channel_enabled',sticky_banner:'ad_sticky_enabled',postroll:'ad_postroll_enabled',l_banner:'ad_l_banner_enabled'}[placement];
       if (!settings.rows[0]?.ads_enabled || !settings.rows[0]?.[settingKey]) return res.json({ ad: null });
       const result = await pool.query(`SELECT c.id,c.title,c.sponsor_name,c.placement,c.creative_url,c.destination_url
         FROM ad_campaigns c WHERE c.placement=$1 AND c.status='active'
@@ -102,7 +102,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
         AND (starts_at IS NULL OR starts_at<=NOW()) AND (ends_at IS NULL OR ends_at>NOW())`, [campaignId]);
       if (!campaignResult.rowCount) return jsonError(res, 404, 'Ad campaign unavailable.');
       const placement = campaignResult.rows[0].placement;
-      if ((placement === 'watch_sidebar' && !videoId) || (['feed','sticky_banner','postroll'].includes(placement) && (videoId || channelHandle)) || (placement === 'channel' && (!channelHandle || videoId))) return fail(res, 'Ad placement and context do not match.');
+      if ((placement === 'watch_sidebar' && !videoId) || (['feed','sticky_banner','postroll','l_banner'].includes(placement) && (videoId || channelHandle)) || (placement === 'channel' && (!channelHandle || videoId))) return fail(res, 'Ad placement and context do not match.');
       let creatorSub = null;
       let creatorEligible = false;
       if (channelHandle) {
@@ -327,7 +327,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const cpm = Number(req.body?.cpmBdt);
       const startsAt = req.body?.startsAt ? new Date(req.body.startsAt) : null;
       const endsAt = req.body?.endsAt ? new Date(req.body.endsAt) : null;
-      if (!title || !sponsor || !['feed','watch_sidebar','channel','sticky_banner','postroll'].includes(placement) || !creativeUrl || !destinationUrl || !Number.isFinite(cpm) || cpm < 0 || cpm > 1000000) return fail(res, 'Campaign-এর title, sponsor, HTTPS creative/landing URL, placement ও valid CPM দিন।');
+      if (!title || !sponsor || !['feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'].includes(placement) || !creativeUrl || !destinationUrl || !Number.isFinite(cpm) || cpm < 0 || cpm > 1000000) return fail(res, 'Campaign-এর title, sponsor, HTTPS creative/landing URL, placement ও valid CPM দিন।');
       if ((startsAt && Number.isNaN(startsAt.getTime())) || (endsAt && Number.isNaN(endsAt.getTime())) || (startsAt && endsAt && endsAt <= startsAt)) return fail(res, 'Campaign date range ঠিক নয়।');
       const id = crypto.randomUUID();
       await withTransaction(async client => {
@@ -357,9 +357,9 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
 
   app.get('/api/admin/settings', adminAuth(), async (req, res, next) => {
     try {
-      const result = await pool.query('SELECT ads_enabled,monetization_enabled,creator_share_percent,ad_feed_enabled,ad_watch_sidebar_enabled,ad_channel_enabled,ad_sticky_enabled,ad_postroll_enabled,updated_at FROM platform_settings WHERE id=1');
+      const result = await pool.query('SELECT ads_enabled,monetization_enabled,creator_share_percent,ad_feed_enabled,ad_watch_sidebar_enabled,ad_channel_enabled,ad_sticky_enabled,ad_postroll_enabled,ad_l_banner_enabled,updated_at FROM platform_settings WHERE id=1');
       const row = result.rows[0] || {};
-      res.json({adsEnabled:Boolean(row.ads_enabled),monetizationEnabled:Boolean(row.monetization_enabled),creatorSharePercent:row.creator_share_percent===null||row.creator_share_percent===undefined?null:Number(row.creator_share_percent),adToggles:{feed:Boolean(row.ad_feed_enabled),watchSidebar:Boolean(row.ad_watch_sidebar_enabled),channel:Boolean(row.ad_channel_enabled),sticky:Boolean(row.ad_sticky_enabled),postroll:Boolean(row.ad_postroll_enabled)},updatedAt:row.updated_at});
+      res.json({adsEnabled:Boolean(row.ads_enabled),monetizationEnabled:Boolean(row.monetization_enabled),creatorSharePercent:row.creator_share_percent===null||row.creator_share_percent===undefined?null:Number(row.creator_share_percent),adToggles:{feed:Boolean(row.ad_feed_enabled),watchSidebar:Boolean(row.ad_watch_sidebar_enabled),channel:Boolean(row.ad_channel_enabled),sticky:Boolean(row.ad_sticky_enabled),postroll:Boolean(row.ad_postroll_enabled),lBanner:Boolean(row.ad_l_banner_enabled)},updatedAt:row.updated_at});
     } catch (error) { next(error); }
   });
 
@@ -369,15 +369,15 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const monetizationEnabled = req.body?.monetizationEnabled;
       const shareRaw = req.body?.creatorSharePercent;
       const toggles = req.body?.adToggles || {};
-      const adFeed = toggles.feed !== false, adWatchSidebar = toggles.watchSidebar !== false, adChannel = toggles.channel !== false, adSticky = toggles.sticky === true, adPostroll = toggles.postroll === true;
+      const adFeed = toggles.feed !== false, adWatchSidebar = toggles.watchSidebar !== false, adChannel = toggles.channel !== false, adSticky = toggles.sticky === true, adPostroll = toggles.postroll === true, adLBanner = toggles.lBanner === true;
       const share = shareRaw === null || shareRaw === '' || shareRaw === undefined ? null : Number(shareRaw);
       if (typeof adsEnabled !== 'boolean' || typeof monetizationEnabled !== 'boolean' || (share !== null && (!Number.isFinite(share) || share < 0 || share > 100))) return fail(res,'Settings values invalid.');
       if (monetizationEnabled && (share === null || share <= 0)) return fail(res,'Monetization চালু করতে 0-এর বেশি creator share percentage সেট করুন।');
       await withTransaction(async client => {
-        await client.query(`UPDATE platform_settings SET ads_enabled=$1,monetization_enabled=$2,creator_share_percent=$3,ad_feed_enabled=$4,ad_watch_sidebar_enabled=$5,ad_channel_enabled=$6,ad_sticky_enabled=$7,ad_postroll_enabled=$8,updated_by_email=$9,updated_at=NOW() WHERE id=1`, [adsEnabled,monetizationEnabled,share,adFeed,adWatchSidebar,adChannel,adSticky,adPostroll,req.admin.email]);
-        await writeAudit(client,req.admin,'platform_settings','settings','1','', {adsEnabled,monetizationEnabled,creatorSharePercent:share,adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll}});
+        await client.query(`UPDATE platform_settings SET ads_enabled=$1,monetization_enabled=$2,creator_share_percent=$3,ad_feed_enabled=$4,ad_watch_sidebar_enabled=$5,ad_channel_enabled=$6,ad_sticky_enabled=$7,ad_postroll_enabled=$8,ad_l_banner_enabled=$9,updated_by_email=$10,updated_at=NOW() WHERE id=1`, [adsEnabled,monetizationEnabled,share,adFeed,adWatchSidebar,adChannel,adSticky,adPostroll,adLBanner,req.admin.email]);
+        await writeAudit(client,req.admin,'platform_settings','settings','1','', {adsEnabled,monetizationEnabled,creatorSharePercent:share,adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll,lBanner:adLBanner}});
       });
-      res.json({ok:true,adsEnabled,monetizationEnabled,creatorSharePercent:share,adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll}});
+      res.json({ok:true,adsEnabled,monetizationEnabled,creatorSharePercent:share,adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll,lBanner:adLBanner}});
     } catch (error) { next(error); }
   });
 

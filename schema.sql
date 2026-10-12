@@ -180,6 +180,7 @@ CREATE TABLE IF NOT EXISTS platform_settings (
   ad_channel_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   ad_sticky_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   ad_postroll_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  ad_l_banner_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   updated_by_email TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CHECK (creator_share_percent IS NULL OR (creator_share_percent >= 0 AND creator_share_percent <= 100))
@@ -189,13 +190,14 @@ ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS ad_watch_sidebar_enabled 
 ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS ad_channel_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS ad_sticky_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS ad_postroll_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS ad_l_banner_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 INSERT INTO platform_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS ad_campaigns (
   id UUID PRIMARY KEY,
   title TEXT NOT NULL CHECK (char_length(title) BETWEEN 1 AND 120),
   sponsor_name TEXT NOT NULL CHECK (char_length(sponsor_name) BETWEEN 1 AND 120),
-  placement TEXT NOT NULL CHECK (placement IN ('feed','watch_sidebar','channel','sticky_banner','postroll')),
+  placement TEXT NOT NULL CHECK (placement IN ('feed','watch_sidebar','channel','sticky_banner','postroll','l_banner')),
   creative_url TEXT NOT NULL,
   destination_url TEXT NOT NULL,
   cpm_bdt NUMERIC(12,4) NOT NULL DEFAULT 0 CHECK (cpm_bdt >= 0),
@@ -209,7 +211,7 @@ CREATE TABLE IF NOT EXISTS ad_campaigns (
 );
 DO $$ BEGIN
   ALTER TABLE ad_campaigns DROP CONSTRAINT IF EXISTS ad_campaigns_placement_check;
-  ALTER TABLE ad_campaigns ADD CONSTRAINT ad_campaigns_placement_check CHECK (placement IN ('feed','watch_sidebar','channel','sticky_banner','postroll'));
+  ALTER TABLE ad_campaigns ADD CONSTRAINT ad_campaigns_placement_check CHECK (placement IN ('feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'));
 EXCEPTION WHEN undefined_table THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS ad_campaigns_serve_idx ON ad_campaigns (placement, status, starts_at, ends_at, created_at DESC);
 

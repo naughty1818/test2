@@ -466,7 +466,17 @@
       player.addEventListener('error',()=>{playerStatus.textContent='ভিডিও লোড হয়নি। সংযোগ পরীক্ষা করে আবার চেষ্টা করো।';playerStatus.hidden=false;retryPlayback.hidden=false;});
       stage.addEventListener('mousemove',()=>{stage.classList.add('player-controls-visible');clearTimeout(stage._controlsTimer);stage._controlsTimer=setTimeout(()=>stage.classList.remove('player-controls-visible'),2500);});
       stage.addEventListener('mouseleave',()=>stage.classList.remove('player-controls-visible'));
-      stage.append(player,playerStatus,retryPlayback,playerControls,settingsMenu);if(player.readyState>=1)playerStatus.hidden=true;
+      const lShapeAd = $('div', { class: 'l-shape-ad', hidden: true });
+      const lShapeClose = button('×', 'l-shape-close', () => { lShapeAd.hidden = true; stage.classList.remove('l-ad-active'); });
+      const lShapeImage = $('img', { class: 'l-shape-image', alt: '' });
+      const lShapeBody = $('div', { class: 'l-shape-body' });
+      const lShapeLink = $('a', { class: 'l-shape-link', target: '_blank', rel: 'noopener noreferrer' }, [lShapeImage, lShapeBody]);
+      lShapeAd.append(lShapeLink, lShapeClose);
+      stage.append(player,playerStatus,retryPlayback,playerControls,settingsMenu,lShapeAd);if(player.readyState>=1)playerStatus.hidden=true;
+      let lAdShown = false, lAdTimer = null;
+      const showLAd = ad => { if (lAdShown || document.fullscreenElement || document.pictureInPictureElement) return; lAdShown = true; lShapeImage.src = embeddedImageUrl(ad.creativeUrl); lShapeBody.replaceChildren($('strong',{text:text(ad.title,'Sponsored')}),$('small',{text:'Sponsored · '+text(ad.sponsorName,'Partner')}),$('span',{text:'আরও জানো ↗'})); lShapeLink.href = text(ad.destinationUrl,'#'); lShapeAd.hidden = false; stage.classList.add('l-ad-active'); jsonFetch('/api/sponsor/events',{method:'POST',body:{campaignId:ad.id,eventType:'impression'}}).catch(()=>{}); lShapeLink.addEventListener('click',()=>jsonFetch('/api/sponsor/events',{method:'POST',body:{campaignId:ad.id,eventType:'click'}}).catch(()=>{}),{once:true}); };
+      const scheduleLAd = () => { if (lAdShown || lAdTimer) return; lAdTimer = setTimeout(() => { lAdTimer = null; jsonFetch('/api/sponsor/serve?placement=l_banner').then(result => { if (result.ad && token === state.routeToken) showLAd(result.ad); }).catch(()=>{}); }, 20000); };
+      player.addEventListener('playing', scheduleLAd); player.addEventListener('pause', () => { if (lAdTimer) { clearTimeout(lAdTimer); lAdTimer = null; } });
       const postrollSlot = $('div', { class: 'postroll-ad-slot' });
       let postrollLoaded = false;
       player.addEventListener('ended', () => { if (postrollLoaded) return; postrollLoaded = true; jsonFetch('/api/sponsor/serve?placement=postroll').then(result => { if (token === state.routeToken && result.ad) postrollSlot.append(sponsoredCard(result.ad)); }).catch(() => {}); });
@@ -557,7 +567,7 @@
       });
       discussion.append(commentForm, commentsList);
       if(ownerHandle&&(!state.session.profile||state.session.profile.handle?.toLowerCase()!==ownerHandle.toLowerCase()))creator.append(reportButton('channel',ownerHandle));
-      creator.append(actions); main.append(stage, title, subtitle, creator, playlistPicker, description, chaptersPanel, transcript, discussion);
+      creator.append(actions); main.append(stage, postrollSlot, title, subtitle, creator, playlistPicker, description, chaptersPanel, transcript, discussion);
       const aside = $('aside', { class: 'recommendations' }, [$('div', { class: 'recommendations-title' }, [$('h2', { text: 'এরপর দেখো' }), $('span', { text: 'এই বিভাগের আরও ভিডিও' })])]);
       section.append(main, aside); setPage([section]);
       if(state.session.user){
