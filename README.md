@@ -1,6 +1,6 @@
-# ClipNest — বাংলা ভিডিও প্ল্যাটফর্ম
+# Atharo | আঠারো — বাংলা ভিডিও প্ল্যাটফর্ম
 
-Node.js/Express-ভিত্তিক বাংলা-first video sharing site। ClipNest-এর নিজস্ব coral/cream design রেখে পরিচিত video-platform patterns—discovery feed, creator subscriptions, comments, playlists, watch history এবং live interaction counts—যোগ করা হয়েছে। Layout ও branding নিজস্ব; কোনো existing platform-এর হুবহু UI কপি নয়।
+Node.js/Express-ভিত্তিক বাংলা-first video sharing site। Atharo-র নিজস্ব deep green-black design, supplied transparent logo এবং video-platform patterns—discovery feed, creator subscriptions, comments, playlists, watch history এবং live interaction counts—আছে। Layout ও branding নিজস্ব; কোনো existing platform-এর হুবহু UI কপি নয়।
 
 ## Feature set
 
@@ -13,6 +13,20 @@ Node.js/Express-ভিত্তিক বাংলা-first video sharing site�
 - **Role-based Admin Panel** (`/admin`): campaign/ads controls, platform monetization settings, creator approval, channel suspend/ban, video remove/restore, copyright strikes/appeals, multiple staff accounts ও audit log
 - Admin-controlled sponsored cards in feed/watch page. Ads global default-এ বন্ধ এবং নতুন campaigns Paused থাকে
 - Responsive Bengali UI, mobile navigation, share link ও owner-only video deletion
+- Education-first P0 tools: class/subject/syllabus metadata, indexed advanced search filters, Bengali/English WebVTT captions with searchable transcript, creator thumbnails, duration badges, timestamp chapters, playback-speed control, signed direct-to-R2 playback, continue-watching, sampled watch-time/retention, content reports and moderation appeals
+
+## শিক্ষা ও playback P0: কী আছে, কী নেই
+
+1. Class/level, subject ও syllabus tags upload metadata-তে Neon-এ রাখা হয়; search-এ education/duration/caption/sort filter আছে।
+2. Creator `.vtt` captions upload/edit করতে পারেন। Transcript search index হয়; player-এ browser-native captions toggle এবং transcript panel থাকে।
+3. Upload থেকে duration best-effort পড়া হয়, custom thumbnail R2-তে আলাদাভাবে রাখা হয় এবং creator timestamp chapters সম্পাদনা করতে পারেন।
+4. Player-এ 0.75×–2× playback speed, buffering/error/retry state, signed R2 direct URL এবং account-based resume/continue-watching আছে। Video bytes Node server দিয়ে proxy হয় না; watch page playback-এর আগে R2 `HEAD` request করে না।
+5. Creator Studio-তে best-effort sampled watch seconds, session counts, completion estimate ও 5%-bucket audience-retention curve আছে। এগুলো analytics signal, unique-person guarantee বা payout proof নয়।
+6. Signed-in viewers video/channel/comment report জমা দিতে পারেন; Admin/Moderator report triage করেন, Admin removed-video appeal reason-সহ review করতে পারেন এবং decisions audit হয়।
+
+**Streaming limitation:** এই revision-এ upload file-কে HLS/DASH multi-bitrate renditions-এ transcode করার background worker নেই; তাই quality/adaptive bitrate selector-ও নেই। Direct R2 signed playback Node hop কমায়, কিন্তু source file-এর codec/bitrate অনুযায়ী mobile/slow-network performance এখনও বদলাতে পারে। Production-grade adaptive streaming-এর জন্য আলাদা queue/transcoding worker, HLS renditions, manifest access policy এবং end-to-end device/network testing লাগবে।
+
+**Scale limitation:** এই feature release কোনো 5 কোটি registered বা ১ কোটি concurrent-user load-test/guarantee নয়। Render web process, Neon pooled connections, Socket.IO multi-instance fanout এবং analytics write capacity-তে বাস্তব workload-ভিত্তিক load test, queues, caching/CDN policies ও horizontal-scaling validation দরকার।
 
 ## Monetization: বর্তমান সীমা
 
@@ -29,7 +43,7 @@ Node.js/Express-ভিত্তিক বাংলা-first video sharing site�
 | Session hash/expiry, video title/description/category/visibility | Neon PostgreSQL |
 | Likes, views, comments, subscriptions, playlists ও watch history | Neon PostgreSQL |
 | Admin roles, platform settings, campaigns, ad events, strikes ও audit log | Neon PostgreSQL |
-| Site code, ClipNest UI assets | GitHub repository |
+| Site code, Atharo UI assets | GitHub repository |
 
 R2-তে পুরনো JSON metadata থাকলে migration command সেগুলো **copy/import** করবে; source R2 object মুছবে না। Video binary R2-তেই থাকবে। Campaign creative URL এখন HTTPS URL হিসেবে সংরক্ষিত হয়; ভিডিও ছাড়া অন্য কোনো media upload workflow যোগ করা হয়নি।
 

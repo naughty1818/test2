@@ -61,10 +61,16 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
     res.setHeader('Vary', 'Origin');
   }
   if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+app.use((req, res, next) => {
+  if (req.method === 'PUT' && /^\/api\/videos\/[^/]+\/captions\/[a-z0-9-]+$/.test(req.path)) {
+    return express.text({ type: ['text/vtt', 'text/plain'], limit: '2mb' })(req, res, next);
+  }
   next();
 });
 app.use(express.json({ limit: '32kb' }));
@@ -74,8 +80,10 @@ const VIDEO_SELECT = `
   SELECT v.id, v.object_name, v.owner_sub, v.title, v.description, v.category,
          v.visibility, v.size, v.created_at, v.legacy, v.likes_count,
          v.views_count, v.comments_count, v.moderation_status,
+         v.thumbnail_object_name, v.class_level, v.subject, v.syllabus_tags, v.duration_seconds,
+         EXISTS(SELECT 1 FROM video_captions vc WHERE vc.video_id=v.id) AS has_captions,
          p.handle AS owner_handle,
-         COALESCE(NULLIF(p.display_name,''), NULLIF(u.google_name,''), 'ClipNest নির্মাতা') AS owner_name,
+         COALESCE(NULLIF(p.display_name,''), NULLIF(u.google_name,''), 'Atharo নির্মাতা') AS owner_name,
          p.avatar_url AS owner_avatar, u.account_status AS owner_status
   FROM videos v
   LEFT JOIN profiles p ON p.sub = v.owner_sub
@@ -122,6 +130,10 @@ function validUuid(value) { return typeof value === 'string' && /^[0-9a-f]{8}-[0
 function validVideoId(value) { return typeof value === 'string' && (validUuid(value) || /^\d+-[0-9a-f]{8}$/i.test(value)); }
 function safeText(value, max) { return typeof value === 'string' ? value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim().slice(0, max) : ''; }
 function normalizeCategory(value) { return ALLOWED_CATEGORIES.includes(value) ? value : null; }
+function normalizeSyllabusTags(value) {
+  const values = Array.isArray(value) ? value : String(value || '').split(',');
+  return [...new Set(values.map(tag => safeText(tag, 60)).filter(Boolean))].slice(0, 12);
+}
 function normalizeVisibility(value) {
   if (ALLOWED_VISIBILITIES.includes(value)) return value;
   if (typeof value !== 'string') return null;
@@ -147,9 +159,12 @@ function videoCard(row) {
   return {
     id: row.id, title: row.title, description: row.description, category: row.category,
     visibility: row.visibility, size: Number(row.size) || 0, created: toISO(row.created_at),
-    ownerHandle: row.owner_handle || null, ownerName: row.owner_name || 'ClipNest নির্মাতা',
+    ownerHandle: row.owner_handle || null, ownerName: row.owner_name || 'Atharo নির্মাতা',
     ownerAvatar: row.owner_avatar || null, likesCount: Number(row.likes_count) || 0,
     viewsCount: Number(row.views_count) || 0, commentsCount: Number(row.comments_count) || 0,
+    thumbnailUrl: row.thumbnail_object_name ? `/api/videos/${encodeURIComponent(row.id)}/thumbnail` : null,
+    classLevel: row.class_level || '', subject: row.subject || '', syllabusTags: row.syllabus_tags || [],
+    durationSeconds: Number(row.duration_seconds) || 0, hasCaptions: Boolean(row.has_captions),
     liked: Boolean(row.liked), watchLater: Boolean(row.watch_later)
   };
 }
@@ -229,9 +244,9 @@ async function canView(video, sub) {
   if (video.owner_status && video.owner_status !== 'active') return false;
   return video.visibility !== 'Private' || Boolean(sub && video.owner_sub === sub);
 }
-async function loadCards({ category = '', query = '', limit = 24, offset = 0, userSub = null, ownerSub = null, subscriptions = false, playlistId = null, history = false } = {}) {
+async function loadCards({ category = '', query = '', limit = 24, offset = 0, userSub = null, ownerSub = null, subscriptions = false, playlistId = null, history = false, classLevel = '', subject = '', syllabusTag = '', durationMin = 0, durationMax = 0, captionsOnly = false, sort = '' } = {}) {
   const safeLimit = Math.min(MAX_LIST, Math.max(1, Number.parseInt(limit, 10) || 24));
-  const safeOffset = Math.max(0, Number.parseInt(offset, 10) || 0);
+  const safeOffset = Math.min(100000, Math.max(0, Number.parseInt(offset, 10) || 0));
   const params = [];
   let from = `${VIDEO_SELECT}`;
   let where = ["COALESCE(v.moderation_status,'active')='active'", "COALESCE(u.account_status,'active')='active'"];
@@ -256,9 +271,24 @@ async function loadCards({ category = '', query = '', limit = 24, offset = 0, us
     where.push(`v.visibility='Public'`);
   }
   if (category) { params.push(category); where.push(`v.category=$${params.length}`); }
-  if (query) { params.push(`%${query}%`); where.push(`(v.title ILIKE $${params.length} OR v.description ILIKE $${params.length} OR p.display_name ILIKE $${params.length} OR p.handle ILIKE $${params.length})`); }
+  if (query) {
+    params.push(query); const q = `$${params.length}`;
+    where.push(`(to_tsvector('simple',v.title || ' ' || v.description) @@ plainto_tsquery('simple',${q})
+      OR EXISTS(SELECT 1 FROM video_captions vc WHERE vc.video_id=v.id AND to_tsvector('simple',vc.transcript_text) @@ plainto_tsquery('simple',${q}))
+      OR LOWER(p.handle)=LOWER(${q}) OR LOWER(p.display_name)=LOWER(${q}))`);
+  }
+  if (classLevel) { params.push(classLevel); where.push(`v.class_level=$${params.length}`); }
+  if (subject) { params.push(subject); where.push(`LOWER(v.subject)=LOWER($${params.length})`); }
+  if (syllabusTag) { params.push([syllabusTag]); where.push(`v.syllabus_tags @> $${params.length}::text[]`); }
+  if (durationMin > 0) { params.push(durationMin); where.push(`v.duration_seconds >= $${params.length}`); }
+  if (durationMax > 0) { params.push(durationMax); where.push(`v.duration_seconds <= $${params.length}`); }
+  if (captionsOnly) where.push('EXISTS(SELECT 1 FROM video_captions vc WHERE vc.video_id=v.id)');
   let order = history ? 'wh.last_watched_at DESC' : playlistId ? 'pi.position ASC, pi.added_at DESC' : 'v.created_at DESC';
   if (subscriptions) order = 'v.created_at DESC';
+  if (!history && !playlistId && !subscriptions) {
+    const orders = { newest: 'v.created_at DESC', views: 'v.views_count DESC,v.created_at DESC', popular: 'v.likes_count DESC,v.views_count DESC,v.created_at DESC', duration: 'v.duration_seconds DESC,v.created_at DESC' };
+    if (orders[sort]) order = orders[sort];
+  }
   const filterSql = where.length ? ' WHERE ' + where.join(' AND ') : '';
   if (userSub) {
     params.push(userSub);
@@ -430,9 +460,17 @@ app.get('/api/videos', async (req, res, next) => {
     const category = req.query.category ? normalizeCategory(String(req.query.category)) : '';
     if (req.query.category && !category) return jsonError(res, 400, 'Invalid category / category সঠিক নয়।');
     const limit = Math.min(MAX_LIST, Math.max(1, Number.parseInt(req.query.limit || '24', 10) || 24));
-    const offset = Math.max(0, Number.parseInt(req.query.offset || '0', 10) || 0);
+    const offset = Math.min(100000, Math.max(0, Number.parseInt(req.query.offset || '0', 10) || 0));
+    const classLevel = safeText(req.query.classLevel, 40);
+    const subject = safeText(req.query.subject, 80);
+    const syllabusTag = safeText(req.query.syllabusTag, 60);
+    const durationMin = Math.max(0, Number.parseInt(req.query.durationMin || '0', 10) || 0);
+    const durationMax = Math.max(0, Number.parseInt(req.query.durationMax || '0', 10) || 0);
+    const captionsOnly = String(req.query.captions || '') === 'true';
+    const sort = ['newest','views','popular','duration'].includes(String(req.query.sort || '')) ? String(req.query.sort) : '';
+    if (durationMin > 604800 || durationMax > 604800 || (durationMin && durationMax && durationMin > durationMax)) return jsonError(res, 400, 'ভিডিওর সময়সীমা সঠিক নয়।');
     const auth = await loadSession(req);
-    const data = await loadCards({ query, category, limit, offset, userSub: auth?.session.sub });
+    const data = await loadCards({ query, category, classLevel, subject, syllabusTag, durationMin, durationMax, captionsOnly, sort, limit, offset, userSub: auth?.session.sub });
     res.json(data);
   } catch (error) { next(error); }
 });
@@ -448,20 +486,21 @@ app.get('/api/videos/:id', requireValidId, async (req, res, next) => {
     if (!video) return jsonError(res, 404, 'Video not found / ভিডিও পাওয়া যায়নি।');
     const auth = await loadSession(req);
     if (!await canView(video, auth?.session.sub)) return jsonError(res, 403, 'This video is private / ভিডিওটি private।');
-    if (!await objectHead(video.object_name)) return jsonError(res, 404, 'Video file no longer exists / ভিডিও ফাইল নেই।');
-    const [liked, watchLater, profile, subscribers, subscribed] = await Promise.all([
-      auth ? pool.query('SELECT 1 FROM video_likes WHERE video_id=$1 AND user_sub=$2', [video.id, auth.session.sub]) : Promise.resolve({ rowCount: 0 }),
-      auth ? pool.query(`SELECT 1 FROM playlist_items pi JOIN playlists p ON p.id=pi.playlist_id WHERE p.owner_sub=$1 AND p.is_watch_later=TRUE AND pi.video_id=$2`, [auth.session.sub, video.id]) : Promise.resolve({ rowCount: 0 }),
-      video.owner_sub ? loadProfile(video.owner_sub) : Promise.resolve(null),
-      video.owner_sub ? pool.query('SELECT COUNT(*)::bigint AS n FROM subscriptions WHERE channel_sub=$1', [video.owner_sub]) : Promise.resolve({ rows: [{ n: 0 }] }),
-      auth && video.owner_sub ? pool.query('SELECT 1 FROM subscriptions WHERE subscriber_sub=$1 AND channel_sub=$2', [auth.session.sub, video.owner_sub]) : Promise.resolve({ rowCount: 0 })
-    ]);
-    const card = videoCard({ ...video, liked: liked.rowCount > 0, watch_later: watchLater.rowCount > 0 });
+    // Sign the R2 URL directly; do not make a serial R2 HEAD request before playback starts.
+    const state = await pool.query(`SELECT
+      EXISTS(SELECT 1 FROM video_likes WHERE video_id=$1 AND user_sub=$2) AS liked,
+      EXISTS(SELECT 1 FROM playlist_items pi JOIN playlists p ON p.id=pi.playlist_id WHERE p.owner_sub=$2 AND p.is_watch_later=TRUE AND pi.video_id=$1) AS watch_later,
+      (SELECT COUNT(*)::bigint FROM subscriptions WHERE channel_sub=$3) AS subscribers_count,
+      EXISTS(SELECT 1 FROM subscriptions WHERE subscriber_sub=$2 AND channel_sub=$3) AS subscribed`, [video.id, auth?.session.sub || null, video.owner_sub || null]);
+    const stateRow = state.rows[0] || {};
+    const profile = video.owner_handle ? { handle: video.owner_handle, display_name: video.owner_name, bio: '', avatar_url: video.owner_avatar } : null;
+    const card = videoCard({ ...video, liked: stateRow.liked, watch_later: stateRow.watch_later });
     card.url = await signedVideoUrl(video.object_name);
     card.profile = publicProfile(profile);
     card.channel = profile ? { handle: profile.handle, displayName: profile.display_name } : null;
-    card.subscribersCount = Number(subscribers.rows[0].n);
-    card.subscribed = subscribed.rowCount > 0;
+    card.subscribersCount = Number(stateRow.subscribers_count || 0);
+    card.subscribed = Boolean(stateRow.subscribed);
+    res.set('Cache-Control', 'private, no-store');
     res.json({ video: card, likesCount: card.likesCount, viewsCount: card.viewsCount, commentsCount: card.commentsCount, liked: card.liked, watchLater: card.watchLater });
   } catch (error) { next(error); }
 });
@@ -650,13 +689,18 @@ app.post('/api/upload-url', requireAuth, requireActive, async (req, res, next) =
     const title = safeText(body.title, 100);
     const category = normalizeCategory(body.category || 'অন্যান্য');
     const visibility = normalizeVisibility(body.visibility || 'Private');
+    const classLevel = safeText(body.classLevel, 40);
+    const subject = safeText(body.subject, 80);
+    const syllabusTags = normalizeSyllabusTags(body.syllabusTags);
+    const durationSeconds = body.durationSeconds === undefined || body.durationSeconds === '' ? 0 : Number(body.durationSeconds);
     if (!title) return jsonError(res, 400, 'A video title is required.');
     if (!category || !visibility) return jsonError(res, 400, 'Category or visibility is invalid.');
+    if (!Number.isFinite(durationSeconds) || durationSeconds < 0 || durationSeconds > 604800) return jsonError(res, 400, 'Video duration is invalid.');
     const id = crypto.randomUUID();
     const objectName = `videos/${id}-${filename}`;
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-    await pool.query(`INSERT INTO upload_intents (id,owner_sub,object_name,content_type,expected_size,title,description,category,visibility,expires_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [id, req.auth.session.sub, objectName, contentType, size, title, safeText(body.description, 5000), category, visibility, expiresAt]);
+    await pool.query(`INSERT INTO upload_intents (id,owner_sub,object_name,content_type,expected_size,title,description,category,visibility,class_level,subject,syllabus_tags,duration_seconds,expires_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, [id, req.auth.session.sub, objectName, contentType, size, title, safeText(body.description, 5000), category, visibility, classLevel, subject, syllabusTags, Math.round(durationSeconds), expiresAt]);
     const uploadUrl = await getSignedUrl(s3, new PutObjectCommand({ Bucket: R2_BUCKET, Key: objectName, ContentType: contentType }), { expiresIn: 30 * 60 });
     res.json({ uploadUrl, objectName, id, expiresAt: expiresAt.toISOString() });
   } catch (error) { next(error); }
@@ -674,7 +718,12 @@ app.post('/api/finish', requireAuth, requireActive, async (req, res, next) => {
     const description = req.body?.description === undefined ? intent.description : safeText(req.body.description, 5000);
     const category = req.body?.category === undefined ? intent.category : normalizeCategory(req.body.category);
     const visibility = req.body?.visibility === undefined ? intent.visibility : normalizeVisibility(req.body.visibility);
+    const classLevel = req.body?.classLevel === undefined ? (intent.class_level || '') : safeText(req.body.classLevel, 40);
+    const subject = req.body?.subject === undefined ? (intent.subject || '') : safeText(req.body.subject, 80);
+    const syllabusTags = req.body?.syllabusTags === undefined ? (intent.syllabus_tags || []) : normalizeSyllabusTags(req.body.syllabusTags);
+    const durationSeconds = req.body?.durationSeconds === undefined ? (Number(intent.duration_seconds) || 0) : Number(req.body.durationSeconds);
     if (!title || !category || !visibility) return jsonError(res, 400, 'Title, category and visibility are required.');
+    if (!Number.isFinite(durationSeconds) || durationSeconds < 0 || durationSeconds > 604800) return jsonError(res, 400, 'Video duration is invalid.');
     const head = await objectHead(intent.object_name);
     if (!head) return jsonError(res, 404, 'Uploaded file not found in R2.');
     if (Number(head.ContentLength) !== Number(intent.expected_size) || Number(head.ContentLength) > MAX_FILE_MB * 1024 * 1024) {
@@ -684,9 +733,9 @@ app.post('/api/finish', requireAuth, requireActive, async (req, res, next) => {
     if (head.ContentType && head.ContentType !== intent.content_type) return jsonError(res, 400, 'Uploaded file type does not match the intent.');
     const profile = await loadProfile(req.auth.session.sub);
     const inserted = await withTransaction(async client => {
-      const result = await client.query(`INSERT INTO videos (id,object_name,owner_sub,title,description,category,visibility,size,created_at,legacy)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),FALSE) RETURNING id,object_name,owner_sub,title,description,category,visibility,size,created_at,legacy,likes_count,views_count,comments_count`,
-        [intent.id, intent.object_name, req.auth.session.sub, title, description, category, visibility, Number(head.ContentLength)]);
+      const result = await client.query(`INSERT INTO videos (id,object_name,owner_sub,title,description,category,visibility,size,class_level,subject,syllabus_tags,duration_seconds,created_at,legacy)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),FALSE) RETURNING *`,
+        [intent.id, intent.object_name, req.auth.session.sub, title, description, category, visibility, Number(head.ContentLength), classLevel, subject, syllabusTags, Math.round(durationSeconds)]);
       await client.query('DELETE FROM upload_intents WHERE id=$1', [intent.id]);
       return result.rows[0];
     });
@@ -701,11 +750,12 @@ app.delete('/api/videos/:id', requireAuth, requireActive, requireValidId, async 
     if (!video.owner_sub || video.owner_sub !== req.auth.session.sub) return jsonError(res, 403, 'Only the owner can delete this video.');
     if (!video.object_name || !/^videos\/[0-9a-f-]+-[a-zA-Z0-9._-]+$/i.test(video.object_name)) return jsonError(res, 409, 'Video object is invalid; not deleted.');
     await pool.query('DELETE FROM videos WHERE id=$1 AND owner_sub=$2', [video.id, req.auth.session.sub]);
-    await s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: video.object_name })).catch(error => console.error('Deleted Neon metadata but could not remove R2 object:', error.message));
+    await Promise.all([video.object_name, video.thumbnail_object_name].filter(Boolean).map(key => s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: key })).catch(error => console.error('Deleted Neon metadata but could not remove R2 object:', error.message))));
     res.json({ ok: true });
   } catch (error) { next(error); }
 });
 
+require('./learning')({ app, pool, withTransaction, s3, bucket: R2_BUCKET, requireAuth, requireActive, requireValidId, getVideo, canView, loadSession, safeText, sha, objectHead });
 require('./admin')({ app, requireAuth, requireActive, loadSession });
 
 io.use(async (socket, next) => {
@@ -781,7 +831,7 @@ async function start() {
       await migration.closeMigrationClient();
     }
   }
-  server.listen(PORT, '0.0.0.0', () => console.log(`ClipNest running on port ${PORT}; Neon and Socket.IO ready.`));
+  server.listen(PORT, '0.0.0.0', () => console.log(`Atharo running on port ${PORT}; Neon and Socket.IO ready.`));
 }
 if (require.main === module) start().catch(error => {
   console.error('Application startup failed:', error.message);

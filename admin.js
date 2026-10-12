@@ -415,4 +415,64 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       res.json({events:result.rows.map(r=>({actorEmail:r.actor_email,actorRole:r.actor_role,action:r.action,targetType:r.target_type,targetId:r.target_id,reason:r.reason,metadata:r.metadata,createdAt:r.created_at}))});
     } catch (error) { next(error); }
   });
+
+  app.get('/api/admin/reports', adminAuth('admin','moderator'), async (req,res,next)=>{
+    try{
+      const allowed=['open','reviewing','action_taken','dismissed','all'];
+      const status=allowed.includes(String(req.query.status||''))?String(req.query.status):'open';
+      const limit=Math.min(100,Math.max(1,Number.parseInt(req.query.limit||'50',10)||50));
+      const result=await pool.query(`SELECT r.id,r.target_type,r.target_id,r.reason_code,r.details,r.status,r.resolution,r.created_at,r.reviewed_at,
+        COALESCE(v.title,p.display_name,LEFT(c.body,160),r.target_id) AS target_label,rp.handle AS reporter_handle
+        FROM content_reports r LEFT JOIN videos v ON v.id=r.video_id LEFT JOIN app_users u ON u.google_sub=r.channel_sub
+        LEFT JOIN profiles p ON p.sub=u.google_sub LEFT JOIN comments c ON c.id=r.comment_id
+        LEFT JOIN profiles rp ON rp.sub=r.reporter_sub WHERE ($1='all' OR r.status=$1)
+        ORDER BY CASE r.status WHEN 'open' THEN 0 WHEN 'reviewing' THEN 1 ELSE 2 END,r.created_at DESC LIMIT $2`,[status,limit]);
+      res.json({reports:result.rows.map(r=>({id:r.id,targetType:r.target_type,targetId:r.target_id,targetLabel:r.target_label,reasonCode:r.reason_code,details:r.details,status:r.status,resolution:r.resolution,reporterHandle:r.reporter_handle||null,createdAt:r.created_at,reviewedAt:r.reviewed_at}))});
+    }catch(error){next(error);}
+  });
+  app.post('/api/admin/reports/:id/status', adminAuth('admin','moderator'), async (req,res,next)=>{
+    try{
+      if(!validUuid(req.params.id))return fail(res,'Report id সঠিক নয়।');
+      const status=String(req.body?.status||'');const resolution=clean(req.body?.resolution,2000);
+      if(!['reviewing','action_taken','dismissed'].includes(status))return fail(res,'Report status সঠিক নয়।');
+      if(status!=='reviewing'&&resolution.length<5)return fail(res,'Final decision-এর কারণ অন্তত ৫ অক্ষরের হতে হবে।');
+      const updated=await withTransaction(async client=>{
+        const row=await client.query(`UPDATE content_reports SET status=$2,resolution=CASE WHEN $3='' THEN resolution ELSE $3 END,
+          reviewed_by_email=$4,reviewed_at=NOW() WHERE id=$1 RETURNING target_type,target_id`,[req.params.id,status,resolution,req.admin.email]);
+        if(!row.rowCount)return null;
+        await writeAudit(client,req.admin,'content_report_'+status,row.rows[0].target_type,row.rows[0].target_id,resolution,{reportId:req.params.id});
+        return row.rows[0];
+      });
+      if(!updated)return jsonError(res,404,'Report পাওয়া যায়নি।');
+      res.json({ok:true,status});
+    }catch(error){next(error);}
+  });
+  app.get('/api/admin/appeals', adminAuth('admin'), async (req,res,next)=>{
+    try{
+      const status=['pending','approved','rejected','all'].includes(String(req.query.status||''))?String(req.query.status):'pending';
+      const result=await pool.query(`SELECT a.id,a.video_id,a.appellant_sub,a.appeal_text,a.status,a.decision_note,a.created_at,a.reviewed_at,
+        v.title,p.handle,p.display_name FROM moderation_appeals a LEFT JOIN videos v ON v.id=a.video_id
+        LEFT JOIN profiles p ON p.sub=a.appellant_sub WHERE ($1='all' OR a.status=$1)
+        ORDER BY CASE a.status WHEN 'pending' THEN 0 ELSE 1 END,a.created_at DESC LIMIT 100`,[status]);
+      res.json({appeals:result.rows.map(r=>({id:r.id,videoId:r.video_id,appellantSub:r.appellant_sub,title:r.title||'Removed video',handle:r.handle||null,displayName:r.display_name||'Creator',appeal:r.appeal_text,status:r.status,decisionNote:r.decision_note,createdAt:r.created_at,reviewedAt:r.reviewed_at}))});
+    }catch(error){next(error);}
+  });
+  app.post('/api/admin/appeals/:id/decision', adminAuth('admin'), async (req,res,next)=>{
+    try{
+      if(!validUuid(req.params.id))return fail(res,'Appeal id সঠিক নয়।');
+      const decision=String(req.body?.decision||'');const note=clean(req.body?.note,1000);
+      if(!['approved','rejected'].includes(decision)||note.length<5)return fail(res,'Decision ও অন্তত ৫ অক্ষরের কারণ দিন।');
+      const result=await withTransaction(async client=>{
+        const existing=await client.query('SELECT video_id FROM moderation_appeals WHERE id=$1 AND status=\'pending\' FOR UPDATE',[req.params.id]);
+        if(!existing.rowCount)return false;
+        const videoId=existing.rows[0].video_id;
+        await client.query('UPDATE moderation_appeals SET status=$2,decision_note=$3,reviewed_by_email=$4,reviewed_at=NOW() WHERE id=$1',[req.params.id,decision,note,req.admin.email]);
+        if(decision==='approved')await client.query("UPDATE videos SET moderation_status='active' WHERE id=$1",[videoId]);
+        await writeAudit(client,req.admin,'moderation_appeal_'+decision,'video',videoId,note,{appealId:req.params.id});
+        return true;
+      });
+      if(!result)return jsonError(res,404,'Pending appeal পাওয়া যায়নি।');
+      res.json({ok:true,status:decision,videoRestored:decision==='approved'});
+    }catch(error){next(error);}
+  });
 };

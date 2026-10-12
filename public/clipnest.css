@@ -867,3 +867,31 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible 
   .mobile-bottom-nav>a.mobile-nav-active { color:#7ee2c7; }
   .upload-link { color:#98e8d4; background:#12382d; }
 }
+
+
+/* Atharo P0 learning/playback tools */
+.resume-section { margin: 0 0 26px; }
+.resume-progress { position:absolute; z-index:4; left:0; bottom:0; height:3px; background:#20c2a2; box-shadow:0 0 8px #20c2a277; }
+.player-status { position:absolute; z-index:3; top:12px; left:12px; max-width:calc(100% - 24px); padding:7px 10px; border:1px solid #ffffff30; border-radius:8px; color:#f1fbf5; background:#07120fe0; font-size:11px; }
+.player-tools { position:absolute; z-index:3; top:12px; right:12px; display:flex; align-items:center; gap:8px; }
+.player-speed-label { display:flex; align-items:center; gap:6px; padding:5px 8px; border:1px solid #ffffff40; border-radius:8px; color:#eef8f2; background:#07120fc9; font-size:10px; }
+.player-speed { max-width:88px; padding:3px 5px; border:1px solid #ffffff36; border-radius:5px; color:#f0fff8; background:#0c1c16; }
+.player-tools .outline-cta { min-height:30px; padding:5px 9px; font-size:10px; }
+.chapters-panel,.transcript-details { margin-top:14px; padding:13px 15px; border:1px solid #2b4338; border-radius:11px; color:#dcebe3; background:#101e18; }
+.chapters-panel h2 { margin:0 0 10px; font-size:14px; }
+.chapter-list { display:flex; flex-wrap:wrap; gap:7px; }
+.chapter-button { padding:8px 10px; border:1px solid #315342; border-radius:8px; color:#c9e2d5; background:#14291f; font-size:11px; }
+.chapter-button:hover { border-color:#20c2a2; color:#9af0d9; }
+.transcript-details summary { color:#8ce9d1; cursor:pointer; font-weight:700; }
+.transcript-copy { max-height:320px; overflow:auto; white-space:pre-wrap; color:#c8d9d0; font:12px/1.8 inherit; }
+.report-dialog { width:min(520px,calc(100% - 28px)); max-width:520px; padding:22px; border:1px solid #2e4b3c; border-radius:16px; color:#e5f2ec; background:#0e1b16; box-shadow:0 22px 70px #0009; }
+.report-dialog::backdrop { background:#030806bb; backdrop-filter:blur(3px); }
+.report-dialog h2 { margin:0 0 16px; font-size:18px; }
+.report-dialog form { display:grid; gap:12px; }
+.report-dialog textarea,.report-dialog select { width:100%; padding:10px; border:1px solid #2b4338; border-radius:8px; color:#e5f2ec; background:#091610; }
+.report-dialog .console-form-actions { justify-content:flex-end; }
+.console-list { display:grid; gap:8px; margin:10px 0; }
+.console-list-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:9px 11px; border:1px solid #293f34; border-radius:8px; color:#dcebe3; background:#0c1913; }
+.console-form .console-small-button { align-self:end; min-height:38px; }
+.console-list-row .console-small-button { flex:none; }
+@media(max-width:760px){.player-tools{top:7px;right:7px}.player-status{top:7px;left:7px;font-size:9px}.player-speed-label{padding:4px 5px;font-size:9px}.player-speed{max-width:72px}.report-dialog{padding:17px}.console-list-row{align-items:flex-start}}

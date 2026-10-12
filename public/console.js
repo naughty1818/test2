@@ -40,18 +40,28 @@
     const loading=panel('পরিসংখ্যান','তথ্য লোড হচ্ছে…',empty('একটু অপেক্ষা করো।')); app.append(loading);
     async function load() {
       try {
-        const data=await ctx.jsonFetch('/api/creator/analytics?days='+encodeURIComponent(range.value));
+        const [data,learning]=await Promise.all([ctx.jsonFetch('/api/creator/analytics?days='+encodeURIComponent(range.value)),ctx.jsonFetch('/api/creator/learning-analytics?days='+encodeURIComponent(range.value)).catch(()=>({videos:[],watchSeconds:0}))]);
         const totals=data.totals||{}, ads=data.ads||{};
+        const learningVideos=learning.videos||[],learningById=new Map(learningVideos.map(item=>[item.id,item]));
+        const playSessions=learningVideos.reduce((sum,item)=>sum+(Number(item.sessions)||0),0);
+        const avgCompletion=playSessions?learningVideos.reduce((sum,item)=>sum+(Number(item.averageCompletion)||0)*(Number(item.sessions)||0),0)/playSessions:0;
         app.replaceChildren(heading('CREATOR STUDIO','তোমার channel-এর পরিসংখ্যান','Views, engagement, subscriber growth এবং ad performance এক জায়গায় দেখো।'),rangeWrap,
-          el('div',{class:'console-grid'},[stat('মোট views',num(totals.views),'নির্বাচিত সময়ের chart নিচে'),stat('Subscribers',num(totals.subscribers),'বর্তমান channel followers'),stat('মোট likes',num(totals.likes),'সব ভিডিও মিলিয়ে'),stat('ভিডিও',num(totals.videos),'আপলোড করা সব ভিডিও')]));
+          el('div',{class:'console-grid'},[stat('মোট views',num(totals.views),'নির্বাচিত সময়ের chart নিচে'),stat('Subscribers',num(totals.subscribers),'বর্তমান channel followers'),stat('মোট likes',num(totals.likes),'সব ভিডিও মিলিয়ে'),stat('ভিডিও',num(totals.videos),'আপলোড করা সব ভিডিও'),stat('Watch time',num(Math.round((Number(learning.watchSeconds)||0)/3600))+' ঘণ্টা','Best-effort sampled watch time'),stat('Play sessions',num(playSessions),'Pseudonymous; unique people নয়'),stat('গড় completion',Math.round(avgCompletion*100)+'%','Sampled retention')]));
         rangeWrap.querySelector('select').value=String(data.days||range.value);
         const points=(data.viewsByDay||[]).slice(-14); const max=Math.max(1,...points.map(x=>Number(x.views)||0));
         const chart=el('div',{class:'console-chart'});
         points.forEach(point=>{const bar=el('div',{class:'console-chart-bar',style:''});bar.style.height=Math.max(3,Math.round((Number(point.views)||0)/max*88))+'px';bar.title=num(point.views)+' views · '+point.day;bar.append(el('span',{text:String(point.day||'').slice(5)}));chart.append(bar);});
         if(!points.length) chart.append(empty('এখনো chart data নেই।'));
         app.append(panel('Views trend','শেষ '+num(data.days)+' দিনের recorded unique views',chart));
-        const rows=(data.videos||[]).map(video=>tr(cell(el('strong',{text:video.title}),el('div',{class:'console-muted',text:dateText(video.createdAt)})),cell(num(video.views)),cell(num(video.likes)),cell(num(video.comments)),cell(statusBadge(video.moderationStatus)),cell(money(video.estimatedEarningsBdt))));
-        app.append(panel('তোমার ভিডিও','Ad earnings হলো আনুমানিক হিসাব—এটি payout নয়। এই app বর্তমানে watch-time মাপে না.',rows.length?table(['ভিডিও','Views','Likes','Comments','Status','আনুমানিক আয়'],rows):empty('এখনো কোনো ভিডিও নেই।')));
+        const rows=(data.videos||[]).map(video=>{const metric=learningById.get(video.id)||{};return tr(cell(el('strong',{text:video.title}),el('div',{class:'console-muted',text:dateText(video.createdAt)})),cell(num(video.views)),cell(num(video.likes)),cell(num(video.comments)),cell(num(metric.watchSeconds)+' sec'),cell(num(metric.sessions)),cell(Math.round((Number(metric.averageCompletion)||0)*100)+'%'),cell(statusBadge(video.moderationStatus)),cell(money(video.estimatedEarningsBdt)));});
+        app.append(panel('তোমার ভিডিও','Ad earnings estimate, watch time ও completion ইঙ্গিতমূলক—verified audience বা payout নয়.',rows.length?table(['ভিডিও','Views','Likes','Comments','Watch sec','Sessions','Completion','Status','আনুমানিক আয়'],rows):empty('এখনো কোনো ভিডিও নেই।')));
+        if(learningVideos.length){
+          const retentionVideo=select(learningVideos.map(item=>[item.id,item.title||item.id]),learningVideos[0].id),retentionChart=el('div',{class:'console-chart'}),retentionCaption=el('div',{class:'console-muted',text:'Retention data লোড হচ্ছে…'});
+          async function loadRetention(){try{const info=await ctx.jsonFetch('/api/creator/learning-analytics?days='+encodeURIComponent(range.value)+'&videoId='+encodeURIComponent(retentionVideo.value));retentionCaption.textContent=num(info.sessions)+' sessions · '+num(info.watchSeconds)+' watch seconds · '+Math.round((Number(info.averageCompletion)||0)*100)+'% average completion';retentionChart.replaceChildren();const bars=info.retention||[],max=Math.max(1,...bars.map(x=>Number(x.rate)||0));bars.forEach(point=>{const bar=el('div',{class:'console-chart-bar'});bar.style.height=Math.max(2,Math.round((Number(point.rate)||0)/max*88))+'px';bar.title=point.percent+'% · '+point.rate+'% audience';bar.append(el('span',{text:String(point.percent)+'%'}));retentionChart.append(bar);});}catch(error){retentionCaption.textContent=error.message;}}
+          retentionVideo.addEventListener('change',loadRetention);await loadRetention();
+          app.append(panel('Audience retention','কত শতাংশ পর্যন্ত viewer sample পৌঁছেছে। Anonymous session-based estimate; unique মানুষ নয়.',el('div',{},[field('ভিডিও',retentionVideo),retentionCaption,retentionChart])));
+        }
+        await renderCreatorAssets(app,ctx,data.videos||[]);
         const statusText=data.monetizationStatus==='enabled'?'চ্যানেল monetization-এ অনুমোদিত।':data.monetizationStatus==='paused'?'Monetization বর্তমানে pause করা।':data.monetizationStatus==='rejected'?'Monetization অনুমোদিত হয়নি।':'Monetization approval-এর অপেক্ষায়।';
         const notice=el('div',{class:'console-notice',text:statusText+' Real payout ও payment method এখনো যুক্ত নয়।'});
         const summary=el('div',{class:'console-grid'},[stat('Ad impressions',num(ads.impressions)),stat('Ad clicks',num(ads.clicks)),stat('Estimated creator earnings',money(ads.estimatedEarningsBdt),'যাচাই করা payment নয়'),stat('Active copyright strikes',num(data.activeStrikes))]);
@@ -73,16 +83,65 @@
     await load();
   }
 
+  async function renderCreatorAssets(root,ctx,videos){
+    if(!videos.length)return;
+    const chosen=select(videos.map(v=>[v.id,v.title||v.id]),videos[0].id);
+    const chapterList=el('div',{class:'console-list'}),captionList=el('div',{class:'console-list'});
+    const start=el('input',{type:'number',min:'0',step:'1',placeholder:'Seconds'}),chapterTitle=el('input',{type:'text',maxlength:'120',placeholder:'Chapter title'}),chapters=[];
+    function renderChapters(){chapterList.replaceChildren();chapters.forEach((item,index)=>chapterList.append(el('div',{class:'console-list-row'},[el('span',{text:Math.floor(item.startSeconds/60)+':'+String(item.startSeconds%60).padStart(2,'0')+' · '+item.title}),button('Remove',()=>{chapters.splice(index,1);renderChapters();})])));if(!chapters.length)chapterList.append(empty('এখনো chapter নেই।'));}
+    const addChapter=button('Chapter যোগ করো',()=>{const value=start.value===''?NaN:Number(start.value),title=chapterTitle.value.trim();if(!Number.isInteger(value)||value<0||!title){ctx.notify('Chapter time ও title দিন।','error');return;}chapters.push({startSeconds:value,title});chapters.sort((a,b)=>a.startSeconds-b.startSeconds);start.value='';chapterTitle.value='';renderChapters();});
+    const saveChapters=button('Chapters save',async()=>{try{await ctx.jsonFetch('/api/videos/'+encodeURIComponent(chosen.value)+'/chapters',{method:'PUT',body:{chapters}});ctx.notify('Chapters save হয়েছে।');await loadAssets();}catch(error){ctx.notify(error.message,'error');}});
+    const language=el('input',{type:'text',maxlength:'35',value:'bn',placeholder:'bn / en'}),label=el('input',{type:'text',maxlength:'80',value:'বাংলা',placeholder:'Caption label'}),captionFile=el('input',{type:'file',accept:'.vtt,text/vtt'}),isDefault=el('input',{type:'checkbox',checked:true});
+    const captionForm=el('form',{class:'console-form'},[field('Language code',language),field('Track label',label),field('WEBVTT file (max 2 MB)',captionFile),field('Default track',isDefault),el('div',{class:'console-form-actions'},[el('button',{type:'submit',class:'primary-cta',text:'Caption upload / update'})])]);
+    captionForm.addEventListener('submit',async event=>{event.preventDefault();const file=captionFile.files?.[0];if(!file)return ctx.notify('WEBVTT file বেছে নাও।','error');if(file.size>2*1024*1024)return ctx.notify('Caption file 2 MB-এর বেশি হতে পারবে না।','error');try{const response=await fetch('/api/videos/'+encodeURIComponent(chosen.value)+'/captions/'+encodeURIComponent(language.value.trim().toLowerCase())+'?label='+encodeURIComponent(label.value.trim())+'&default='+isDefault.checked,{method:'PUT',headers:{'Content-Type':'text/vtt'},body:await file.text()});if(!response.ok){const result=await response.json().catch(()=>({}));throw new Error(result.error||'Caption upload failed.');}ctx.notify('Caption track save হয়েছে।');captionFile.value='';await loadAssets();}catch(error){ctx.notify(error.message,'error');}});
+    async function loadAssets(){try{const [chapterData,captionData]=await Promise.all([ctx.jsonFetch('/api/videos/'+encodeURIComponent(chosen.value)+'/chapters'),ctx.jsonFetch('/api/videos/'+encodeURIComponent(chosen.value)+'/captions')]);chapters.splice(0,chapters.length,...(chapterData.chapters||[]).map(x=>({startSeconds:Number(x.startSeconds),title:x.title})));renderChapters();captionList.replaceChildren();for(const item of captionData.captions||[])captionList.append(el('div',{class:'console-list-row'},[el('span',{text:item.label+' · '+item.language+(item.isDefault?' · Default':'')}),button('Delete',async()=>{try{await ctx.jsonFetch('/api/videos/'+encodeURIComponent(chosen.value)+'/captions/'+encodeURIComponent(item.language),{method:'DELETE'});await loadAssets();}catch(error){ctx.notify(error.message,'error');}})]));if(!captionList.childElementCount)captionList.append(empty('Caption track নেই।'));}catch(error){chapterList.replaceChildren(el('div',{class:'console-notice',text:error.message}));}}
+    chosen.addEventListener('change',loadAssets);
+    const editor=panel('Chapters & captions','Chapter-গুলোর time ক্রমানুসারে দিন। বাংলা ও English WebVTT caption creator-ই upload করে.',el('div',{},[field('ভিডিও',chosen),el('h3',{text:'Chapters'}),el('div',{class:'console-form'},[field('Start time (seconds)',start),field('Chapter title',chapterTitle),addChapter]),chapterList,saveChapters,el('h3',{text:'Caption tracks'}),captionList,captionForm]));
+    root.append(editor);await loadAssets();
+  }
+
+  async function renderReports(root,ctx){
+    const status=select([['open','Open'],['reviewing','Reviewing'],['action_taken','Action taken'],['dismissed','Dismissed'],['all','All']],'open');
+    const list=el('div');
+    async function load(){
+      list.replaceChildren(empty('রিপোর্ট লোড হচ্ছে…'));
+      try{const data=await ctx.jsonFetch('/api/admin/reports?status='+encodeURIComponent(status.value));const reports=data.reports||[];list.replaceChildren();
+        if(!reports.length){list.append(empty('এই অবস্থায় কোনো report নেই।'));return;}
+        const rows=reports.map(report=>{
+          const targetLink=report.targetType==='video'?'/watch/'+encodeURIComponent(report.targetId):report.targetType==='channel'?'/channel/'+encodeURIComponent(report.targetId):null;
+          const target=targetLink?el('a',{href:targetLink,'data-route':'',text:report.targetLabel||report.targetId}):el('strong',{text:report.targetLabel||report.targetId});
+          const summary=el('div',{},[el('div',{class:'console-list-row'},[el('strong',{text:report.targetType+' · '+report.reasonCode}),statusBadge(report.status)]),target,el('p',{class:'console-muted',text:report.details}),el('span',{class:'console-muted',text:'Reporter @'+text(report.reporterHandle,'anonymous')+' · '+dateText(report.createdAt)}),report.resolution?el('p',{class:'console-notice',text:'Review note: '+report.resolution}):null]);
+          const resolution=el('textarea',{rows:'2',maxlength:'2000',placeholder:'Final action/dismissal-এর কারণ (কমপক্ষে ৫ অক্ষর)'});
+          const actions=el('div',{class:'console-form-actions'});
+          const update=async(next)=>{const note=resolution.value.trim();if(next!=='reviewing'&&note.length<5){ctx.notify('Decision-এর কারণ অন্তত ৫ অক্ষর লিখুন।','error');resolution.focus();return;}try{await ctx.jsonFetch('/api/admin/reports/'+encodeURIComponent(report.id)+'/status',{method:'POST',body:{status:next,resolution:note}});ctx.notify('Report status update হয়েছে।');await load();}catch(error){ctx.notify(error.message,'error');}};
+          if(report.status!=='reviewing')actions.append(button('Review শুরু',()=>update('reviewing')));
+          if(!['action_taken','dismissed'].includes(report.status))actions.append(button('Action taken',()=>update('action_taken')),button('Dismiss',()=>update('dismissed')));
+          return tr(cell(summary),cell(resolution,actions));
+        });
+        list.append(table(['Report','Review action'],rows));
+      }catch(error){list.replaceChildren(el('div',{class:'console-notice',text:error.message}));}
+    }
+    status.addEventListener('change',load);root.append(panel('Content reports','Admin/Moderator রিপোর্ট triage করবেন। Final decision-এর কারণ audit log-এ থাকবে।',el('div',{},[field('Status',status),list])));await load();
+  }
+
+  async function renderAppeals(root,ctx){
+    const status=select([['pending','Pending'],['approved','Approved'],['rejected','Rejected'],['all','All']],'pending'),list=el('div');
+    async function load(){list.replaceChildren(empty('Appeals লোড হচ্ছে…'));try{const data=await ctx.jsonFetch('/api/admin/appeals?status='+encodeURIComponent(status.value));const appeals=data.appeals||[];list.replaceChildren();if(!appeals.length){list.append(empty('এই অবস্থায় appeal নেই।'));return;}
+      const rows=appeals.map(item=>{const note=el('textarea',{rows:'2',maxlength:'1000',placeholder:'Decision-এর কারণ (কমপক্ষে ৫ অক্ষর)'});const content=el('div',{},[el('strong',{text:item.title}),el('div',{class:'console-muted',text:'@'+text(item.handle,item.displayName)+' · '+dateText(item.createdAt)}),el('p',{text:item.appeal}),item.decisionNote?el('div',{class:'console-notice',text:'Decision note: '+item.decisionNote}):null]);const actions=el('div',{class:'console-form-actions'});if(item.status==='pending')for(const decision of ['approved','rejected'])actions.append(button(decision==='approved'?'Approve & restore':'Reject',async()=>{if(note.value.trim().length<5){ctx.notify('Decision-এর কারণ অন্তত ৫ অক্ষর লিখুন।','error');note.focus();return;}try{await ctx.jsonFetch('/api/admin/appeals/'+encodeURIComponent(item.id)+'/decision',{method:'POST',body:{decision,note:note.value.trim()}});ctx.notify(decision==='approved'?'Appeal মঞ্জুর; video পুনরায় active হয়েছে।':'Appeal rejected.');await load();}catch(error){ctx.notify(error.message,'error');}}));return tr(cell(content),cell(statusBadge(item.status),note,actions));});list.append(table(['Appeal','Decision'],rows));
+    }catch(error){list.replaceChildren(el('div',{class:'console-notice',text:error.message}));}}
+    status.addEventListener('change',load);root.append(panel('Removed-video appeals','Admin সিদ্ধান্তের কারণ audit trail-এ থাকবে। Approve করলে removed video পুনরায় active হবে।',el('div',{},[field('Status',status),list])));await load();
+  }
+
   async function renderAdmin(app,ctx,chosenTab) {
     const queryTab=new URLSearchParams(location.search).get('tab');
-    const tabs=[['overview','Overview'],['ads','Ads'],['moderation','Moderation'],['staff','Admin roles'],['settings','Platform settings'],['audit','Audit log']];
+    const tabs=[['overview','Overview'],['ads','Ads'],['moderation','Moderation'],['reports','Reports'],['appeals','Appeals'],['staff','Admin roles'],['settings','Platform settings'],['audit','Audit log']];
     const role=ctx.adminRole;
     if(!role){app.replaceChildren(heading('ATHARO ADMIN','অনুমতি নেই','এই panel শুধু অনুমোদিত Admin/Moderator-এর জন্য।'));return;}
     let activeTab=chosenTab||queryTab||'overview';
-    if((['ads','audit'].includes(activeTab)&&!['owner','admin'].includes(role))||(['staff','settings'].includes(activeTab)&&role!=='owner')) activeTab='overview';
+    if((['ads','audit','appeals'].includes(activeTab)&&!['owner','admin'].includes(role))||(['staff','settings'].includes(activeTab)&&role!=='owner')||(activeTab==='reports'&&!['owner','admin','moderator'].includes(role))) activeTab='overview';
     app.replaceChildren(heading('ATHARO ADMIN','Admin control panel','নিরাপদ staff roles, ads, monetization controls এবং creator/content moderation.'));
     const nav=el('nav',{class:'console-tabs','aria-label':'Admin sections'});
-    tabs.forEach(([id,label])=>{if(id==='staff'&&role!=='owner')return;if(id==='settings'&&role!=='owner')return;if(['ads','audit'].includes(id)&&!['owner','admin'].includes(role))return;nav.append(el('button',{type:'button',class:'console-tab'+(activeTab===id?' active':''),text:label,onClick:()=>ctx.navigate('/admin?tab='+id)}));});
+    tabs.forEach(([id,label])=>{if(id==='staff'&&role!=='owner')return;if(id==='settings'&&role!=='owner')return;if(['ads','audit','appeals'].includes(id)&&!['owner','admin'].includes(role))return;if(id==='reports'&&!['owner','admin','moderator'].includes(role))return;nav.append(el('button',{type:'button',class:'console-tab'+(activeTab===id?' active':''),text:label,onClick:()=>ctx.navigate('/admin?tab='+id)}));});
     app.append(nav,el('div',{class:'console-notice',text:'Owner email server-side-এ যাচাই হয়। Moderation action-গুলো reversible record হিসেবে রাখা হয়; video remove করলে R2 file স্থায়ীভাবে মুছে যায় না।'}));
     const content=el('div');app.append(content);
     try {
@@ -95,6 +154,8 @@
         content.append(panel('Recent admin actions','Audit trail-এ action, actor ও reason নথিভুক্ত হয়.',rows.length?table(['Action','Admin','Date','Target'],rows):empty('এখনো কোনো admin action নেই।')));
       } else if(activeTab==='ads') await renderAds(content,ctx,role);
       else if(activeTab==='moderation') await renderModeration(content,ctx,role);
+      else if(activeTab==='reports') await renderReports(content,ctx);
+      else if(activeTab==='appeals') await renderAppeals(content,ctx);
       else if(activeTab==='staff'&&role==='owner') await renderStaff(content,ctx);
       else if(activeTab==='settings'&&role==='owner') await renderSettings(content,ctx);
       else if(activeTab==='audit') {
@@ -188,5 +249,5 @@
     root.append(panel('Platform monetization settings','Ads default-off থাকে। Share percentage নিজের commercial policy অনুযায়ী নির্ধারণ করুন—এখানে কোনো default ভাগ ধরে নেওয়া হয়নি.',form));
   }
 
-  window.ClipNestConsole={renderStudio,renderAdmin};
+  window.AtharoConsole={renderStudio,renderAdmin};
 })();

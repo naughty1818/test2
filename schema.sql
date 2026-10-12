@@ -241,3 +241,115 @@ CREATE TABLE IF NOT EXISTS admin_audit_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS admin_audit_created_idx ON admin_audit_logs (created_at DESC);
+
+
+-- Learning-first creator/video features. These changes are additive and safe to re-run at startup.
+ALTER TABLE videos
+  ADD COLUMN IF NOT EXISTS thumbnail_object_name TEXT,
+  ADD COLUMN IF NOT EXISTS class_level TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS subject TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS syllabus_tags TEXT[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS duration_seconds INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE upload_intents
+  ADD COLUMN IF NOT EXISTS class_level TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS subject TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS syllabus_tags TEXT[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS duration_seconds INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS videos_public_education_idx
+  ON videos (class_level, subject, duration_seconds, created_at DESC)
+  WHERE visibility='Public' AND moderation_status='active';
+CREATE INDEX IF NOT EXISTS videos_syllabus_tags_gin_idx ON videos USING GIN (syllabus_tags);
+
+CREATE TABLE IF NOT EXISTS video_captions (
+  video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  language_code TEXT NOT NULL CHECK (language_code ~ '^[a-z]{2,3}(-[a-z0-9]{2,8})*$'),
+  label TEXT NOT NULL DEFAULT '',
+  vtt_body TEXT NOT NULL CHECK (char_length(vtt_body) BETWEEN 6 AND 2000000),
+  transcript_text TEXT NOT NULL DEFAULT '',
+  is_default BOOLEAN NOT NULL DEFAULT FALSE,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (video_id, language_code)
+);
+CREATE INDEX IF NOT EXISTS video_captions_search_gin_idx
+  ON video_captions USING GIN (to_tsvector('simple', transcript_text));
+CREATE UNIQUE INDEX IF NOT EXISTS video_captions_one_default_idx
+  ON video_captions (video_id) WHERE is_default=TRUE;
+
+CREATE TABLE IF NOT EXISTS video_chapters (
+  video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  position SMALLINT NOT NULL CHECK (position BETWEEN 0 AND 99),
+  start_seconds INTEGER NOT NULL CHECK (start_seconds >= 0),
+  title TEXT NOT NULL CHECK (char_length(title) BETWEEN 1 AND 120),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (video_id, position),
+  UNIQUE (video_id, start_seconds)
+);
+CREATE INDEX IF NOT EXISTS video_chapters_time_idx ON video_chapters (video_id, start_seconds);
+
+CREATE TABLE IF NOT EXISTS watch_progress (
+  user_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  current_seconds REAL NOT NULL DEFAULT 0 CHECK (current_seconds >= 0),
+  duration_seconds REAL NOT NULL DEFAULT 0 CHECK (duration_seconds >= 0),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_sub, video_id)
+);
+CREATE INDEX IF NOT EXISTS watch_progress_recent_idx ON watch_progress (user_sub, updated_at DESC);
+
+-- Pseudonymous daily aggregates: no raw IP address or Google identifier is retained here.
+CREATE TABLE IF NOT EXISTS video_watch_sessions (
+  video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  viewer_hash TEXT NOT NULL CHECK (char_length(viewer_hash)=64),
+  watch_day DATE NOT NULL DEFAULT CURRENT_DATE,
+  watch_seconds REAL NOT NULL DEFAULT 0 CHECK (watch_seconds >= 0),
+  max_position_seconds REAL NOT NULL DEFAULT 0 CHECK (max_position_seconds >= 0),
+  duration_seconds REAL NOT NULL DEFAULT 0 CHECK (duration_seconds >= 0),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (video_id, viewer_hash, watch_day)
+);
+CREATE INDEX IF NOT EXISTS video_watch_sessions_video_day_idx ON video_watch_sessions (video_id, watch_day);
+
+CREATE TABLE IF NOT EXISTS video_retention_buckets (
+  video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  viewer_hash TEXT NOT NULL CHECK (char_length(viewer_hash)=64),
+  watch_day DATE NOT NULL DEFAULT CURRENT_DATE,
+  bucket SMALLINT NOT NULL CHECK (bucket BETWEEN 0 AND 19),
+  PRIMARY KEY (video_id, viewer_hash, watch_day, bucket)
+);
+CREATE INDEX IF NOT EXISTS video_retention_video_bucket_idx ON video_retention_buckets (video_id, bucket, watch_day);
+
+CREATE TABLE IF NOT EXISTS content_reports (
+  id UUID PRIMARY KEY,
+  reporter_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  target_type TEXT NOT NULL CHECK (target_type IN ('video','channel','comment')),
+  target_id TEXT NOT NULL,
+  video_id TEXT REFERENCES videos(id) ON DELETE SET NULL,
+  channel_sub TEXT REFERENCES app_users(google_sub) ON DELETE SET NULL,
+  comment_id UUID REFERENCES comments(id) ON DELETE SET NULL,
+  reason_code TEXT NOT NULL CHECK (reason_code IN ('spam','harassment','harmful','copyright','misinformation','other')),
+  details TEXT NOT NULL DEFAULT '' CHECK (char_length(details) <= 2000),
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','reviewing','action_taken','dismissed')),
+  resolution TEXT NOT NULL DEFAULT '',
+  reviewed_by_email TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  reviewed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS content_reports_status_created_idx ON content_reports (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS content_reports_reporter_created_idx ON content_reports (reporter_sub, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS content_reports_one_open_per_reporter_idx
+  ON content_reports (reporter_sub, target_type, target_id) WHERE status IN ('open','reviewing');
+
+CREATE TABLE IF NOT EXISTS moderation_appeals (
+  id UUID PRIMARY KEY,
+  video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  appellant_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  appeal_text TEXT NOT NULL CHECK (char_length(appeal_text) BETWEEN 10 AND 2000),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  decision_note TEXT NOT NULL DEFAULT '',
+  reviewed_by_email TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  reviewed_at TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS moderation_appeals_one_pending_idx
+  ON moderation_appeals (video_id, appellant_sub) WHERE status='pending';
+CREATE INDEX IF NOT EXISTS moderation_appeals_status_created_idx ON moderation_appeals (status, created_at DESC);
