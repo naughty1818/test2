@@ -935,3 +935,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible 
 .player-speed-dock select { color: #71e5af !important; border-color: #42c88b99; }
 .player-caption-select:focus,
 .player-speed-dock select:focus { outline: 2px solid #71e5af; outline-offset: 1px; }
+
+/* Hide the pointer together with the faded player controls. */
+.player-stage:not(.player-controls-visible),
+.player-stage:not(.player-controls-visible) .player-media { cursor: none; }
+.player-stage.player-controls-visible,
+.player-stage.player-controls-visible .player-media { cursor: default; }
