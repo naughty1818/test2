@@ -76,7 +76,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const channelHandle = req.query.handle ? String(req.query.handle).replace(/^@/,'').trim() : null;
       if (!['feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'].includes(placement)) return fail(res, 'Invalid ad placement.');
       if (placement === 'channel' && !channelHandle) return fail(res, 'Channel handle is required.');
-      const settings = await pool.query('SELECT ads_enabled,ad_feed_enabled,ad_watch_sidebar_enabled,ad_channel_enabled,ad_sticky_enabled,ad_postroll_enabled,ad_l_banner_enabled FROM platform_settings WHERE id=1');
+      const settings = await pool.query('SELECT ads_enabled,ad_feed_enabled,ad_watch_sidebar_enabled,ad_channel_enabled,ad_sticky_enabled,ad_postroll_enabled,ad_l_banner_enabled,l_banner_duration_seconds FROM platform_settings WHERE id=1');
       const settingKey = {feed:'ad_feed_enabled',watch_sidebar:'ad_watch_sidebar_enabled',channel:'ad_channel_enabled',sticky_banner:'ad_sticky_enabled',postroll:'ad_postroll_enabled',l_banner:'ad_l_banner_enabled'}[placement];
       if (!settings.rows[0]?.ads_enabled || !settings.rows[0]?.[settingKey]) return res.json({ ad: null });
       const result = await pool.query(`SELECT c.id,c.title,c.sponsor_name,c.placement,c.creative_url,c.destination_url
@@ -86,7 +86,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
                  c.created_at ASC LIMIT 1`, [placement]);
       const row = result.rows[0];
       res.set('Cache-Control', 'no-store');
-      res.json({ ad: row ? { id: row.id, title: row.title, sponsorName: row.sponsor_name, placement: row.placement, creativeUrl: row.creative_url, destinationUrl: row.destination_url } : null });
+      res.json({ ad: row ? { id: row.id, title: row.title, sponsorName: row.sponsor_name, placement: row.placement, creativeUrl: row.creative_url, destinationUrl: row.destination_url, durationSeconds: Number(settings.rows[0]?.l_banner_duration_seconds || 10) } : null });
     } catch (error) { next(error); }
   });
 
@@ -357,9 +357,9 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
 
   app.get('/api/admin/settings', adminAuth(), async (req, res, next) => {
     try {
-      const result = await pool.query('SELECT ads_enabled,monetization_enabled,creator_share_percent,ad_feed_enabled,ad_watch_sidebar_enabled,ad_channel_enabled,ad_sticky_enabled,ad_postroll_enabled,ad_l_banner_enabled,updated_at FROM platform_settings WHERE id=1');
+      const result = await pool.query('SELECT ads_enabled,monetization_enabled,creator_share_percent,ad_feed_enabled,ad_watch_sidebar_enabled,ad_channel_enabled,ad_sticky_enabled,ad_postroll_enabled,ad_l_banner_enabled,l_banner_duration_seconds,updated_at FROM platform_settings WHERE id=1');
       const row = result.rows[0] || {};
-      res.json({adsEnabled:Boolean(row.ads_enabled),monetizationEnabled:Boolean(row.monetization_enabled),creatorSharePercent:row.creator_share_percent===null||row.creator_share_percent===undefined?null:Number(row.creator_share_percent),adToggles:{feed:Boolean(row.ad_feed_enabled),watchSidebar:Boolean(row.ad_watch_sidebar_enabled),channel:Boolean(row.ad_channel_enabled),sticky:Boolean(row.ad_sticky_enabled),postroll:Boolean(row.ad_postroll_enabled),lBanner:Boolean(row.ad_l_banner_enabled)},updatedAt:row.updated_at});
+      res.json({adsEnabled:Boolean(row.ads_enabled),monetizationEnabled:Boolean(row.monetization_enabled),creatorSharePercent:row.creator_share_percent===null||row.creator_share_percent===undefined?null:Number(row.creator_share_percent),adToggles:{feed:Boolean(row.ad_feed_enabled),watchSidebar:Boolean(row.ad_watch_sidebar_enabled),channel:Boolean(row.ad_channel_enabled),sticky:Boolean(row.ad_sticky_enabled),postroll:Boolean(row.ad_postroll_enabled),lBanner:Boolean(row.ad_l_banner_enabled)},lBannerDurationSeconds:Number(row.l_banner_duration_seconds || 10),updatedAt:row.updated_at});
     } catch (error) { next(error); }
   });
 
@@ -369,15 +369,17 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const monetizationEnabled = req.body?.monetizationEnabled;
       const shareRaw = req.body?.creatorSharePercent;
       const toggles = req.body?.adToggles || {};
+      const durationRaw = req.body?.lBannerDurationSeconds;
+      const lBannerDurationSeconds = durationRaw === undefined || durationRaw === '' ? 10 : Number(durationRaw);
       const adFeed = toggles.feed !== false, adWatchSidebar = toggles.watchSidebar !== false, adChannel = toggles.channel !== false, adSticky = toggles.sticky === true, adPostroll = toggles.postroll === true, adLBanner = toggles.lBanner === true;
       const share = shareRaw === null || shareRaw === '' || shareRaw === undefined ? null : Number(shareRaw);
-      if (typeof adsEnabled !== 'boolean' || typeof monetizationEnabled !== 'boolean' || (share !== null && (!Number.isFinite(share) || share < 0 || share > 100))) return fail(res,'Settings values invalid.');
+      if (typeof adsEnabled !== 'boolean' || typeof monetizationEnabled !== 'boolean' || !Number.isInteger(lBannerDurationSeconds) || lBannerDurationSeconds < 3 || lBannerDurationSeconds > 60 || (share !== null && (!Number.isFinite(share) || share < 0 || share > 100))) return fail(res,'Settings values invalid.');
       if (monetizationEnabled && (share === null || share <= 0)) return fail(res,'Monetization চালু করতে 0-এর বেশি creator share percentage সেট করুন।');
       await withTransaction(async client => {
-        await client.query(`UPDATE platform_settings SET ads_enabled=$1,monetization_enabled=$2,creator_share_percent=$3,ad_feed_enabled=$4,ad_watch_sidebar_enabled=$5,ad_channel_enabled=$6,ad_sticky_enabled=$7,ad_postroll_enabled=$8,ad_l_banner_enabled=$9,updated_by_email=$10,updated_at=NOW() WHERE id=1`, [adsEnabled,monetizationEnabled,share,adFeed,adWatchSidebar,adChannel,adSticky,adPostroll,adLBanner,req.admin.email]);
-        await writeAudit(client,req.admin,'platform_settings','settings','1','', {adsEnabled,monetizationEnabled,creatorSharePercent:share,adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll,lBanner:adLBanner}});
+        await client.query(`UPDATE platform_settings SET ads_enabled=$1,monetization_enabled=$2,creator_share_percent=$3,ad_feed_enabled=$4,ad_watch_sidebar_enabled=$5,ad_channel_enabled=$6,ad_sticky_enabled=$7,ad_postroll_enabled=$8,ad_l_banner_enabled=$9,l_banner_duration_seconds=$10,updated_by_email=$11,updated_at=NOW() WHERE id=1`, [adsEnabled,monetizationEnabled,share,adFeed,adWatchSidebar,adChannel,adSticky,adPostroll,adLBanner,lBannerDurationSeconds,req.admin.email]);
+        await writeAudit(client,req.admin,'platform_settings','settings','1','', {adsEnabled,monetizationEnabled,creatorSharePercent:share,adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll,lBanner:adLBanner},lBannerDurationSeconds});
       });
-      res.json({ok:true,adsEnabled,monetizationEnabled,creatorSharePercent:share,adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll,lBanner:adLBanner}});
+      res.json({ok:true,adsEnabled,monetizationEnabled,creatorSharePercent:share,adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll,lBanner:adLBanner},lBannerDurationSeconds});
     } catch (error) { next(error); }
   });
 

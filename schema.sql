@@ -181,6 +181,7 @@ CREATE TABLE IF NOT EXISTS platform_settings (
   ad_sticky_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   ad_postroll_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   ad_l_banner_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  l_banner_duration_seconds INTEGER NOT NULL DEFAULT 10,
   updated_by_email TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CHECK (creator_share_percent IS NULL OR (creator_share_percent >= 0 AND creator_share_percent <= 100))
@@ -191,6 +192,7 @@ ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS ad_channel_enabled BOOLEA
 ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS ad_sticky_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS ad_postroll_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS ad_l_banner_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS l_banner_duration_seconds INTEGER NOT NULL DEFAULT 10;
 INSERT INTO platform_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS ad_campaigns (

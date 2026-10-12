@@ -243,17 +243,18 @@
     const adSticky=el('input',{type:'checkbox',checked:toggles.sticky===true});
     const adPostroll=el('input',{type:'checkbox',checked:toggles.postroll===true});
     const adLBanner=el('input',{type:'checkbox',checked:toggles.lBanner===true});
+    const lBannerDuration=el('input',{type:'number',min:'3',max:'60',step:'1',value:data.lBannerDurationSeconds||10});
     const monet=el('input',{type:'checkbox',checked:data.monetizationEnabled});
     const share=el('input',{type:'number',min:'0',max:'100',step:'0.01',value:data.creatorSharePercent==null?'':data.creatorSharePercent,placeholder:'0–100'});
     const form=el('form',{class:'console-form'},[
       field('Ads delivery',el('span',{class:'console-toggle'},[ads,el('span',{text:'Active campaign থাকলে public ad slot দেখাও'})]),'span-2'),
-      field('Feed ads',el('span',{class:'console-toggle'},[adFeed,el('span',{text:'Home native cards · 16:9'})])),field('Watch sidebar ads',el('span',{class:'console-toggle'},[adWatch,el('span',{text:'Desktop sidebar · 4:3'})])),field('Creator channel ads',el('span',{class:'console-toggle'},[adChannel,el('span',{text:'Channel sponsor · 16:9'})])),field('Sticky banner ads',el('span',{class:'console-toggle'},[adSticky,el('span',{text:'Reserved · 3:1'})])),field('Post-roll ads',el('span',{class:'console-toggle'},[adPostroll,el('span',{text:'Reserved · 16:9'})])),field('L-shape ads',el('span',{class:'console-toggle'},[adLBanner,el('span',{text:'Video squeeze-back · 4:3 image'})])),
+      field('Feed ads',el('span',{class:'console-toggle'},[adFeed,el('span',{text:'Home native cards · 16:9'})])),field('Watch sidebar ads',el('span',{class:'console-toggle'},[adWatch,el('span',{text:'Desktop sidebar · 4:3'})])),field('Creator channel ads',el('span',{class:'console-toggle'},[adChannel,el('span',{text:'Channel sponsor · 16:9'})])),field('Sticky banner ads',el('span',{class:'console-toggle'},[adSticky,el('span',{text:'Reserved · 3:1'})])),field('Post-roll ads',el('span',{class:'console-toggle'},[adPostroll,el('span',{text:'Reserved · 16:9'})])),field('L-shape ads',el('span',{class:'console-toggle'},[adLBanner,el('span',{text:'Video squeeze-back · 4:3 image'})])),field('L-shape duration (seconds)',lBannerDuration),
       field('Creator monetization',el('span',{class:'console-toggle'},[monet,el('span',{text:'Eligible channel-গুলোর estimated revenue হিসাব করো'})]),'span-2'),
       field('Creator share (%)',share),
       el('div',{class:'console-notice span-2',text:'Creator share এবং CPM কেবল estimate গণনা করে। এটি advertiser payment বা creator payout নিশ্চিত করে না। 0% share দিয়ে monetization enable করা যাবে না.'}),
       el('div',{class:'console-form-actions'},[el('button',{type:'submit',class:'primary-cta',text:'Settings save'})])
     ]);
-    form.addEventListener('submit',async event=>{event.preventDefault();try{await ctx.jsonFetch('/api/admin/settings',{method:'PUT',body:{adsEnabled:ads.checked,monetizationEnabled:monet.checked,creatorSharePercent:share.value===''?null:Number(share.value),adToggles:{feed:adFeed.checked,watchSidebar:adWatch.checked,channel:adChannel.checked,sticky:adSticky.checked,postroll:adPostroll.checked,lBanner:adLBanner.checked}}});ctx.notify('Platform settings save হয়েছে।');await renderSettings(root,ctx);}catch(error){ctx.notify(error.message,'error');}});
+    form.addEventListener('submit',async event=>{event.preventDefault();try{await ctx.jsonFetch('/api/admin/settings',{method:'PUT',body:{adsEnabled:ads.checked,monetizationEnabled:monet.checked,creatorSharePercent:share.value===''?null:Number(share.value),adToggles:{feed:adFeed.checked,watchSidebar:adWatch.checked,channel:adChannel.checked,sticky:adSticky.checked,postroll:adPostroll.checked,lBanner:adLBanner.checked},lBannerDurationSeconds:Number(lBannerDuration.value)}});ctx.notify('Platform settings save হয়েছে।');await renderSettings(root,ctx);}catch(error){ctx.notify(error.message,'error');}});
     root.append(panel('Platform monetization settings','Ads default-off থাকে। Share percentage নিজের commercial policy অনুযায়ী নির্ধারণ করুন—এখানে কোনো default ভাগ ধরে নেওয়া হয়নি.',form));
   }
 
