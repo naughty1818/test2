@@ -281,16 +281,16 @@
       return url.toString();
     } catch (_) { return ''; }
   }
-  function sponsoredCard(ad, videoId = null, compact = false) {
-    const card = $('article', { class: 'sponsored-card' + (compact ? ' sponsored-watch' : '') });
+  function sponsoredCard(ad, videoId = null, compact = false, channelHandle = null) {
+    const card = $('article', { class: 'sponsored-card sponsored-' + text(ad.placement, 'feed') + (compact ? ' sponsored-watch' : '') });
     const link = $('a', { href: text(ad.destinationUrl, '#'), target: '_blank', rel: 'noopener noreferrer', 'aria-label': text(ad.title, 'Sponsored') });
     const image = $('img', { src: embeddedImageUrl(ad.creativeUrl), alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' });
     image.addEventListener('error', () => image.remove());
     const copy = $('div', { class: 'sponsored-copy' }, [$('span', { class: 'sponsored-label', text: 'Sponsored · ' + text(ad.sponsorName, 'Partner') }), $('strong', { text: text(ad.title, 'Partner message') }), $('small', { text: 'প্রমোটেড কনটেন্ট' }), $('span', { class: 'sponsored-cta', text: 'আরও জানো ↗' })]);
     link.append(image, copy);
-    link.addEventListener('click', () => { jsonFetch('/api/sponsor/events', { method: 'POST', body: { campaignId: ad.id, eventType: 'click', videoId } }).catch(() => {}); });
+    link.addEventListener('click', () => { jsonFetch('/api/sponsor/events', { method: 'POST', body: { campaignId: ad.id, eventType: 'click', videoId, channelHandle } }).catch(() => {}); });
     card.append(link);
-    jsonFetch('/api/sponsor/events', { method: 'POST', body: { campaignId: ad.id, eventType: 'impression', videoId } }).catch(() => {});
+    jsonFetch('/api/sponsor/events', { method: 'POST', body: { campaignId: ad.id, eventType: 'impression', videoId, channelHandle } }).catch(() => {});
     return card;
   }
   function videoGrid(videos, message = 'এখনো কোনো প্রকাশিত ভিডিও নেই।', options = {}) {
@@ -339,14 +339,15 @@
     const heading = $('div', { class: 'feed-heading' }, [$('div', {}, [$('span', { class: 'section-kicker', text: 'তোমার জন্য' }), $('h2', { text: 'আজকের ভিডিও' })]), linkButton('সব দেখো  ↗', '/search', 'see-all')]);
     const chips = categoryChips(state.category, value => { state.category = value; renderRoute(); });
     const grid = $('div', { class: 'video-grid' }, [emptyState('ভিডিও খুঁজছি…', 'একটু অপেক্ষা করো।')]);
-    feed.append(heading, chips, grid); setPage([heroPanel(null), feed, creatorCallout()]);
+    feed.append(heading, chips, grid); const homeStickyAdSlot = $('div', { class: 'home-sticky-ad-slot' }); setPage([heroPanel(null), homeStickyAdSlot, feed, creatorCallout()]);
     try {
       const data = await jsonFetch(queryUrl('', state.category, 0, 24)); if (token !== state.routeToken) return;
-      const videos = data.videos || []; app.replaceChildren(heroPanel(videos[0] || null), feed, creatorCallout());
+      const videos = data.videos || []; app.replaceChildren(heroPanel(videos[0] || null), homeStickyAdSlot, feed, creatorCallout());
       chips.replaceWith(categoryChips(state.category, value => { state.category = value; renderRoute(); }));
       const nextGrid = videoGrid(videos, 'এখনো কোনো public video নেই। প্রথম ভিডিওটি তোমার হতে পারে.'); grid.replaceWith(nextGrid);
       if (data.hasMore) appendLoadMore(feed, nextGrid, '', state.category, 24, token);
       jsonFetch('/api/sponsor/serve?placement=feed').then(result => { if (token === state.routeToken && result.ad) nextGrid.append(sponsoredCard(result.ad)); }).catch(() => {});
+      jsonFetch('/api/sponsor/serve?placement=sticky_banner').then(result => { if (token === state.routeToken && result.ad) homeStickyAdSlot.append(sponsoredCard(result.ad)); }).catch(() => {});
       if(state.session.user)jsonFetch('/api/me/watch-progress?limit=6').then(result=>{if(token!==state.routeToken||!(result.videos||[]).length)return;const resume=$('section',{class:'resume-section'});resume.append($('div',{class:'feed-heading'},[$('div',{},[$('span',{class:'section-kicker',text:'যেখান থেকে থেমেছিলে'}),$('h2',{text:'আবার দেখা চালিয়ে যাও'})]),linkButton('ইতিহাস দেখো ↗','/history','see-all')]));resume.append(videoGrid((result.videos || []).slice(0, 3),'এখনো কোনো অসমাপ্ত ভিডিও নেই।',{resume:true}));app.insertBefore(resume,feed);}).catch(()=>{});
     } catch (error) { if (token === state.routeToken) grid.replaceWith(emptyState('ভিডিও লোড করা যায়নি', error.message, 'আবার চেষ্টা করো', '/')); }
   }
@@ -466,6 +467,9 @@
       stage.addEventListener('mousemove',()=>{stage.classList.add('player-controls-visible');clearTimeout(stage._controlsTimer);stage._controlsTimer=setTimeout(()=>stage.classList.remove('player-controls-visible'),2500);});
       stage.addEventListener('mouseleave',()=>stage.classList.remove('player-controls-visible'));
       stage.append(player,playerStatus,retryPlayback,playerControls,settingsMenu);if(player.readyState>=1)playerStatus.hidden=true;
+      const postrollSlot = $('div', { class: 'postroll-ad-slot' });
+      let postrollLoaded = false;
+      player.addEventListener('ended', () => { if (postrollLoaded) return; postrollLoaded = true; jsonFetch('/api/sponsor/serve?placement=postroll').then(result => { if (token === state.routeToken && result.ad) postrollSlot.append(sponsoredCard(result.ad)); }).catch(() => {}); });
       const title = $('h1', { class: 'watch-title', text: text(video.title, 'শিরোনামহীন ভিডিও') });
       const subtitle = $('div', { class: 'watch-subtitle' }, [$('span', { text: number(data.viewsCount) + ' ভিউ' }), $('span', { class: 'meta-dot' }), $('span', { text: fmtDate(video.created) }), $('span', { class: 'watch-category', text: text(video.category, 'অন্যান্য') })]);
       const ownerName = text(video.ownerName, 'Atharo নির্মাতা'); const ownerHandle = text(video.ownerHandle, '');
@@ -624,10 +628,13 @@
         edit.addEventListener('submit', async event => { event.preventDefault(); const save = editActions.querySelector('[type="submit"]'); save.disabled = true; formNotice.hidden = true; try { const result = await jsonFetch('/api/me/profile', { method: 'POST', body: { displayName: nameInput.value.trim(), handle: handleInput.value.trim(), bio: bioInput.value.trim() } }); state.session.profile = result.profile; renderAccount(); notify('চ্যানেল প্রোফাইল আপডেট হয়েছে।'); navigate('/channel/' + escapePath(result.profile.handle)); } catch (error) { formNotice.textContent = error.message; formNotice.hidden = false; } finally { save.disabled = false; } });
         page.append(edit);
       }
+      const channelAdSlot = $('div', { class: 'channel-ad-slot' });
+      page.append(channelAdSlot);
       page.append($('div', { class: 'channel-tabs' }, [button('▤  ভিডিও', 'channel-tab-active'), $('span', { class: 'channel-tab-note', text: 'সাম্প্রতিক প্রকাশনা' }), own ? linkButton('ভিডিও যোগ করো  ↗', '/upload', 'channel-upload-link') : $('span', { class: 'channel-tab-note', text: number(videos.length) + 'টি public video' })]));
       page.append(videoGrid(videos, 'এখনো কোনো প্রকাশিত ভিডিও নেই।'));
       setPage([page]); state.currentChannelHandle = profile.handle;
       if (socket && profile.handle) socket.emit('channel:join', profile.handle);
+      jsonFetch('/api/sponsor/serve?placement=channel&handle='+encodeURIComponent(profile.handle || handle)).then(result => { if (token === state.routeToken && result.ad) channelAdSlot.append(sponsoredCard(result.ad, null, false, profile.handle || handle)); }).catch(() => {});
     } catch (error) { if (token === state.routeToken) setPage([emptyState('চ্যানেলটি পাওয়া যায়নি', error.message, 'হোমে ফিরে যাও', '/')]); }
   }
   async function renderChannels(token) {

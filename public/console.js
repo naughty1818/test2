@@ -172,15 +172,15 @@
     root.append(panel('Campaign controls','নতুন campaign default-ভাবে Paused থাকবে। কোনো বাইরের ad network বা payout provider এখানে সংযুক্ত নয়.',el('div',{class:'console-grid'},[stat('Ads delivery',settings.adsEnabled?'চালু':'বন্ধ'),stat('Creator monetization',settings.monetizationEnabled?'চালু':'বন্ধ'),stat('Creator share',settings.creatorSharePercent==null?'Set করা নেই':num(settings.creatorSharePercent)+'%'),stat('Campaigns',num((campaignData.campaigns||[]).length))])));
     const title=el('input',{type:'text',maxlength:'120',required:'',placeholder:'যেমন: Brand campaign'});
     const sponsor=el('input',{type:'text',maxlength:'120',required:'',placeholder:'Sponsor name'});
-    const placement=select([['feed','Home feed card'],['watch_sidebar','Watch page sidebar']]);
-    const creative=el('input',{type:'url',required:'',placeholder:'https://.../campaign-image.jpg'});
+    const placement=select([['feed','Home feed native card · 16:9'],['watch_sidebar','Watch page sidebar · 4:3'],['channel','Creator channel sponsor · 16:9'],['sticky_banner','Sticky banner · 3:1'],['postroll','Post-roll sponsor · 16:9']]);
+    const creative=el('input',{type:'url',required:'',placeholder:'HTTPS image URL'});
     const destination=el('input',{type:'url',required:'',placeholder:'https://sponsor.example'});
     const cpm=el('input',{type:'number',min:'0',max:'1000000',step:'0.01',value:'0',required:''});
     const starts=el('input',{type:'datetime-local'}),ends=el('input',{type:'datetime-local'});
-    const form=el('form',{class:'console-form'},[field('Campaign title',title),field('Sponsor',sponsor),field('Placement',placement),field('CPM (BDT / 1,000 impressions)',cpm),field('Creative image URL (HTTPS)',creative,'span-2'),field('Landing page URL (HTTPS)',destination,'span-2'),field('Start (optional)',starts),field('End (optional)',ends),el('div',{class:'console-form-actions'},[el('button',{type:'submit',class:'primary-cta',text:'Paused campaign তৈরি করো'})])]);
+    const form=el('form',{class:'console-form'},[field('Campaign title',title),field('Sponsor',sponsor),field('Placement',placement),field('CPM (BDT / 1,000 impressions)',cpm),field('Creative image URL (HTTPS)',creative,'span-2'),el('div',{class:'console-notice span-2',text:'Creative ratio: Feed / Channel / Post-roll = 16:9 (যেমন 1280×720), Watch sidebar = 4:3 (যেমন 800×600), Sticky banner = 3:1 (যেমন 1200×400)। URL-এ সেই ratio-এর image দিন।'}),field('Landing page URL (HTTPS)',destination,'span-2'),field('Start (optional)',starts),field('End (optional)',ends),el('div',{class:'console-form-actions'},[el('button',{type:'submit',class:'primary-cta',text:'Paused campaign তৈরি করো'})])]);
     form.addEventListener('submit',async event=>{event.preventDefault();const submit=form.querySelector('[type="submit"]');submit.disabled=true;try{await ctx.jsonFetch('/api/admin/campaigns',{method:'POST',body:{title:title.value,sponsorName:sponsor.value,placement:placement.value,creativeUrl:creative.value,destinationUrl:destination.value,cpmBdt:Number(cpm.value),startsAt:starts.value?new Date(starts.value).toISOString():null,endsAt:ends.value?new Date(ends.value).toISOString():null}});ctx.notify('Campaign তৈরি হয়েছে—এখন Paused.');await renderAds(root,ctx,role);}catch(error){ctx.notify(error.message,'error');}finally{submit.disabled=false;}});
     root.append(panel('নতুন campaign','শুধু HTTPS URL গ্রহণ করা হয়. Campaign activate এবং global ads enable না করা পর্যন্ত visitors-কে ads দেখানো হবে না.',form));
-    const rows=(campaignData.campaigns||[]).map(c=>tr(cell(el('strong',{text:c.title}),el('div',{class:'console-muted',text:c.sponsorName+' · '+(c.placement==='feed'?'Feed':'Watch page')})),cell(statusBadge(c.status)),cell(num(c.impressions)),cell(num(c.clicks)),cell(money(c.cpmBdt)+' CPM'),cell(el('div',{class:'console-actions'},[button(c.status==='active'?'Pause':'Activate',async()=>{try{await ctx.jsonFetch('/api/admin/campaigns/'+encodeURIComponent(c.id)+'/status',{method:'PATCH',body:{status:c.status==='active'?'paused':'active'}});ctx.notify('Campaign status update হয়েছে।');await renderAds(root,ctx,role);}catch(error){ctx.notify(error.message,'error');}})]))));
+    const rows=(campaignData.campaigns||[]).map(c=>tr(cell(el('strong',{text:c.title}),el('div',{class:'console-muted',text:c.sponsorName+' · '+({feed:'Feed · 16:9',watch_sidebar:'Watch sidebar · 4:3',channel:'Channel · 16:9',sticky_banner:'Sticky banner · 3:1',postroll:'Post-roll · 16:9'}[c.placement]||c.placement)})),cell(statusBadge(c.status)),cell(num(c.impressions)),cell(num(c.clicks)),cell(money(c.cpmBdt)+' CPM'),cell(el('div',{class:'console-actions'},[button(c.status==='active'?'Pause':'Activate',async()=>{try{await ctx.jsonFetch('/api/admin/campaigns/'+encodeURIComponent(c.id)+'/status',{method:'PATCH',body:{status:c.status==='active'?'paused':'active'}});ctx.notify('Campaign status update হয়েছে।');await renderAds(root,ctx,role);}catch(error){ctx.notify(error.message,'error');}})]))));
     root.append(panel('Campaign list','CPM এবং creator revenue estimate-এর হিসাব কোনো confirmed advertiser payment নয়.',rows.length?table(['Campaign','Status','Impressions','Clicks','Rate','Action'],rows):empty('এখনো campaign নেই।')));
   }
 
@@ -236,16 +236,23 @@
     root.replaceChildren();
     const data=await ctx.jsonFetch('/api/admin/settings');
     const ads=el('input',{type:'checkbox',checked:data.adsEnabled});
+    const toggles=data.adToggles||{};
+    const adFeed=el('input',{type:'checkbox',checked:toggles.feed!==false});
+    const adWatch=el('input',{type:'checkbox',checked:toggles.watchSidebar!==false});
+    const adChannel=el('input',{type:'checkbox',checked:toggles.channel!==false});
+    const adSticky=el('input',{type:'checkbox',checked:toggles.sticky===true});
+    const adPostroll=el('input',{type:'checkbox',checked:toggles.postroll===true});
     const monet=el('input',{type:'checkbox',checked:data.monetizationEnabled});
     const share=el('input',{type:'number',min:'0',max:'100',step:'0.01',value:data.creatorSharePercent==null?'':data.creatorSharePercent,placeholder:'0–100'});
     const form=el('form',{class:'console-form'},[
       field('Ads delivery',el('span',{class:'console-toggle'},[ads,el('span',{text:'Active campaign থাকলে public ad slot দেখাও'})]),'span-2'),
+      field('Feed ads',el('span',{class:'console-toggle'},[adFeed,el('span',{text:'Home native cards · 16:9'})])),field('Watch sidebar ads',el('span',{class:'console-toggle'},[adWatch,el('span',{text:'Desktop sidebar · 4:3'})])),field('Creator channel ads',el('span',{class:'console-toggle'},[adChannel,el('span',{text:'Channel sponsor · 16:9'})])),field('Sticky banner ads',el('span',{class:'console-toggle'},[adSticky,el('span',{text:'Reserved · 3:1'})])),field('Post-roll ads',el('span',{class:'console-toggle'},[adPostroll,el('span',{text:'Reserved · 16:9'})])),
       field('Creator monetization',el('span',{class:'console-toggle'},[monet,el('span',{text:'Eligible channel-গুলোর estimated revenue হিসাব করো'})]),'span-2'),
       field('Creator share (%)',share),
       el('div',{class:'console-notice span-2',text:'Creator share এবং CPM কেবল estimate গণনা করে। এটি advertiser payment বা creator payout নিশ্চিত করে না। 0% share দিয়ে monetization enable করা যাবে না.'}),
       el('div',{class:'console-form-actions'},[el('button',{type:'submit',class:'primary-cta',text:'Settings save'})])
     ]);
-    form.addEventListener('submit',async event=>{event.preventDefault();try{await ctx.jsonFetch('/api/admin/settings',{method:'PUT',body:{adsEnabled:ads.checked,monetizationEnabled:monet.checked,creatorSharePercent:share.value===''?null:Number(share.value)}});ctx.notify('Platform settings save হয়েছে।');await renderSettings(root,ctx);}catch(error){ctx.notify(error.message,'error');}});
+    form.addEventListener('submit',async event=>{event.preventDefault();try{await ctx.jsonFetch('/api/admin/settings',{method:'PUT',body:{adsEnabled:ads.checked,monetizationEnabled:monet.checked,creatorSharePercent:share.value===''?null:Number(share.value),adToggles:{feed:adFeed.checked,watchSidebar:adWatch.checked,channel:adChannel.checked,sticky:adSticky.checked,postroll:adPostroll.checked}}});ctx.notify('Platform settings save হয়েছে।');await renderSettings(root,ctx);}catch(error){ctx.notify(error.message,'error');}});
     root.append(panel('Platform monetization settings','Ads default-off থাকে। Share percentage নিজের commercial policy অনুযায়ী নির্ধারণ করুন—এখানে কোনো default ভাগ ধরে নেওয়া হয়নি.',form));
   }
 

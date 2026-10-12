@@ -953,3 +953,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible 
   .resume-section .resume-grid .video-title { font-size: 12px; }
   .sidebar { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 }
+
+.channel-ad-slot { margin: 18px 0 4px; }
+.channel-ad-slot:empty { display: none; }
+.channel-ad-slot .sponsored-card { max-width: 720px; }
+
+.home-sticky-ad-slot { min-height: 0; }
+.home-sticky-ad-slot:empty { display: none; }
+.home-sticky-ad-slot .sponsored-sticky_banner { position: sticky; top: 84px; z-index: 8; margin: 16px 0 0; }
+.postroll-ad-slot:empty { display: none; }
+.postroll-ad-slot { margin-top: 14px; }
+.sponsored-postroll { max-width: 720px; }

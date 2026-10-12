@@ -73,9 +73,12 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
   app.get('/api/sponsor/serve', async (req, res, next) => {
     try {
       const placement = String(req.query.placement || '');
-      if (!['feed','watch_sidebar'].includes(placement)) return fail(res, 'Invalid ad placement.');
-      const settings = await pool.query('SELECT ads_enabled FROM platform_settings WHERE id=1');
-      if (!settings.rows[0]?.ads_enabled) return res.json({ ad: null });
+      const channelHandle = req.query.handle ? String(req.query.handle).replace(/^@/,'').trim() : null;
+      if (!['feed','watch_sidebar','channel','sticky_banner','postroll'].includes(placement)) return fail(res, 'Invalid ad placement.');
+      if (placement === 'channel' && !channelHandle) return fail(res, 'Channel handle is required.');
+      const settings = await pool.query('SELECT ads_enabled,ad_feed_enabled,ad_watch_sidebar_enabled,ad_channel_enabled,ad_sticky_enabled,ad_postroll_enabled FROM platform_settings WHERE id=1');
+      const settingKey = {feed:'ad_feed_enabled',watch_sidebar:'ad_watch_sidebar_enabled',channel:'ad_channel_enabled',sticky_banner:'ad_sticky_enabled',postroll:'ad_postroll_enabled'}[placement];
+      if (!settings.rows[0]?.ads_enabled || !settings.rows[0]?.[settingKey]) return res.json({ ad: null });
       const result = await pool.query(`SELECT c.id,c.title,c.sponsor_name,c.placement,c.creative_url,c.destination_url
         FROM ad_campaigns c WHERE c.placement=$1 AND c.status='active'
           AND (c.starts_at IS NULL OR c.starts_at<=NOW()) AND (c.ends_at IS NULL OR c.ends_at>NOW())
@@ -92,16 +95,22 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const campaignId = String(req.body?.campaignId || '');
       const eventType = String(req.body?.eventType || '');
       const videoId = req.body?.videoId ? String(req.body.videoId) : null;
+      const channelHandle = req.body?.channelHandle ? String(req.body.channelHandle).replace(/^@/,'').trim() : null;
       if (!validUuid(campaignId) || !['impression','click'].includes(eventType)) return fail(res, 'Invalid ad event.');
       if (videoId && !validVideoId(videoId)) return fail(res, 'Invalid video id.');
       const campaignResult = await pool.query(`SELECT id,cpm_bdt,placement FROM ad_campaigns WHERE id=$1 AND status='active'
         AND (starts_at IS NULL OR starts_at<=NOW()) AND (ends_at IS NULL OR ends_at>NOW())`, [campaignId]);
       if (!campaignResult.rowCount) return jsonError(res, 404, 'Ad campaign unavailable.');
       const placement = campaignResult.rows[0].placement;
-      if ((placement === 'watch_sidebar' && !videoId) || (placement === 'feed' && videoId)) return fail(res, 'Ad placement and video context do not match.');
+      if ((placement === 'watch_sidebar' && !videoId) || (['feed','sticky_banner','postroll'].includes(placement) && (videoId || channelHandle)) || (placement === 'channel' && (!channelHandle || videoId))) return fail(res, 'Ad placement and context do not match.');
       let creatorSub = null;
       let creatorEligible = false;
-      if (videoId) {
+      if (channelHandle) {
+        const channel = await pool.query(`SELECT p.sub,p.monetization_status FROM profiles p WHERE lower(p.handle)=lower($1)`, [channelHandle]);
+        if (!channel.rowCount) return jsonError(res, 404, 'Ad channel context unavailable.');
+        creatorSub = channel.rows[0].sub || null;
+        creatorEligible = channel.rows[0].monetization_status === 'enabled';
+      } else if (videoId) {
         const video = await pool.query(`SELECT v.owner_sub,v.visibility,v.moderation_status,u.account_status,p.monetization_status
           FROM videos v LEFT JOIN app_users u ON u.google_sub=v.owner_sub LEFT JOIN profiles p ON p.sub=v.owner_sub WHERE v.id=$1`, [videoId]);
         const row = video.rows[0];
@@ -113,7 +122,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const settings = settingsResult.rows[0] || {};
       const grossPerImpression = Number(campaignResult.rows[0].cpm_bdt || 0) / 1000;
       const share = Number(settings.creator_share_percent || 0) / 100;
-      const estimate = eventType === 'impression' && placement === 'watch_sidebar' && creatorSub && creatorEligible && settings.monetization_enabled ? grossPerImpression * share : 0;
+      const estimate = eventType === 'impression' && ['watch_sidebar','channel'].includes(placement) && creatorSub && creatorEligible && settings.monetization_enabled ? grossPerImpression * share : 0;
       const visitor = adVisitor(req, res);
       const dayKey = new Date().toISOString().slice(0,10);
       const dedupe = sha(`${visitor}|${campaignId}|${eventType}|${videoId || 'feed'}|${dayKey}`);
@@ -318,7 +327,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const cpm = Number(req.body?.cpmBdt);
       const startsAt = req.body?.startsAt ? new Date(req.body.startsAt) : null;
       const endsAt = req.body?.endsAt ? new Date(req.body.endsAt) : null;
-      if (!title || !sponsor || !['feed','watch_sidebar'].includes(placement) || !creativeUrl || !destinationUrl || !Number.isFinite(cpm) || cpm < 0 || cpm > 1000000) return fail(res, 'Campaign-এর title, sponsor, HTTPS creative/landing URL, placement ও valid CPM দিন।');
+      if (!title || !sponsor || !['feed','watch_sidebar','channel','sticky_banner','postroll'].includes(placement) || !creativeUrl || !destinationUrl || !Number.isFinite(cpm) || cpm < 0 || cpm > 1000000) return fail(res, 'Campaign-এর title, sponsor, HTTPS creative/landing URL, placement ও valid CPM দিন।');
       if ((startsAt && Number.isNaN(startsAt.getTime())) || (endsAt && Number.isNaN(endsAt.getTime())) || (startsAt && endsAt && endsAt <= startsAt)) return fail(res, 'Campaign date range ঠিক নয়।');
       const id = crypto.randomUUID();
       await withTransaction(async client => {
@@ -348,9 +357,9 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
 
   app.get('/api/admin/settings', adminAuth(), async (req, res, next) => {
     try {
-      const result = await pool.query('SELECT ads_enabled,monetization_enabled,creator_share_percent,updated_at FROM platform_settings WHERE id=1');
+      const result = await pool.query('SELECT ads_enabled,monetization_enabled,creator_share_percent,ad_feed_enabled,ad_watch_sidebar_enabled,ad_channel_enabled,ad_sticky_enabled,ad_postroll_enabled,updated_at FROM platform_settings WHERE id=1');
       const row = result.rows[0] || {};
-      res.json({adsEnabled:Boolean(row.ads_enabled),monetizationEnabled:Boolean(row.monetization_enabled),creatorSharePercent:row.creator_share_percent===null||row.creator_share_percent===undefined?null:Number(row.creator_share_percent),updatedAt:row.updated_at});
+      res.json({adsEnabled:Boolean(row.ads_enabled),monetizationEnabled:Boolean(row.monetization_enabled),creatorSharePercent:row.creator_share_percent===null||row.creator_share_percent===undefined?null:Number(row.creator_share_percent),adToggles:{feed:Boolean(row.ad_feed_enabled),watchSidebar:Boolean(row.ad_watch_sidebar_enabled),channel:Boolean(row.ad_channel_enabled),sticky:Boolean(row.ad_sticky_enabled),postroll:Boolean(row.ad_postroll_enabled)},updatedAt:row.updated_at});
     } catch (error) { next(error); }
   });
 
@@ -359,14 +368,16 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const adsEnabled = req.body?.adsEnabled;
       const monetizationEnabled = req.body?.monetizationEnabled;
       const shareRaw = req.body?.creatorSharePercent;
+      const toggles = req.body?.adToggles || {};
+      const adFeed = toggles.feed !== false, adWatchSidebar = toggles.watchSidebar !== false, adChannel = toggles.channel !== false, adSticky = toggles.sticky === true, adPostroll = toggles.postroll === true;
       const share = shareRaw === null || shareRaw === '' || shareRaw === undefined ? null : Number(shareRaw);
       if (typeof adsEnabled !== 'boolean' || typeof monetizationEnabled !== 'boolean' || (share !== null && (!Number.isFinite(share) || share < 0 || share > 100))) return fail(res,'Settings values invalid.');
       if (monetizationEnabled && (share === null || share <= 0)) return fail(res,'Monetization চালু করতে 0-এর বেশি creator share percentage সেট করুন।');
       await withTransaction(async client => {
-        await client.query(`UPDATE platform_settings SET ads_enabled=$1,monetization_enabled=$2,creator_share_percent=$3,updated_by_email=$4,updated_at=NOW() WHERE id=1`, [adsEnabled,monetizationEnabled,share,req.admin.email]);
-        await writeAudit(client,req.admin,'platform_settings','settings','1','', {adsEnabled,monetizationEnabled,creatorSharePercent:share});
+        await client.query(`UPDATE platform_settings SET ads_enabled=$1,monetization_enabled=$2,creator_share_percent=$3,ad_feed_enabled=$4,ad_watch_sidebar_enabled=$5,ad_channel_enabled=$6,ad_sticky_enabled=$7,ad_postroll_enabled=$8,updated_by_email=$9,updated_at=NOW() WHERE id=1`, [adsEnabled,monetizationEnabled,share,adFeed,adWatchSidebar,adChannel,adSticky,adPostroll,req.admin.email]);
+        await writeAudit(client,req.admin,'platform_settings','settings','1','', {adsEnabled,monetizationEnabled,creatorSharePercent:share,adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll}});
       });
-      res.json({ok:true,adsEnabled,monetizationEnabled,creatorSharePercent:share});
+      res.json({ok:true,adsEnabled,monetizationEnabled,creatorSharePercent:share,adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll}});
     } catch (error) { next(error); }
   });
 
