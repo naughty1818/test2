@@ -895,3 +895,43 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible 
 .console-form .console-small-button { align-self:end; min-height:38px; }
 .console-list-row .console-small-button { flex:none; }
 @media(max-width:760px){.player-tools{top:7px;right:7px}.player-status{top:7px;left:7px;font-size:9px}.player-speed-label{padding:4px 5px;font-size:9px}.player-speed{max-width:72px}.report-dialog{padding:17px}.console-list-row{align-items:flex-start}}
+
+/* Custom YouTube-style player controls */
+.player-stage-has-video .player-media { cursor: pointer; }
+.player-controls { opacity: 0; transform: translateY(5px); transition: opacity .2s ease, transform .2s ease; padding: 9px 10px 7px; left: 8px; right: 8px; bottom: 8px; gap: 8px; border-radius: 10px; background: linear-gradient(180deg,transparent,#06130dcc 42%); }
+.player-stage:hover .player-controls, .player-stage.player-controls-visible .player-controls, .player-stage:focus-within .player-controls { opacity: 1; transform: translateY(0); }
+.player-control-button { width: 30px !important; height: 30px !important; flex: 0 0 auto; color: #71e5af !important; border-radius: 7px !important; font-size: 15px; font-weight: 700; }
+.player-control-button:hover { color: #b4f8d2 !important; background: #1a704d88 !important; }
+.player-play-button { font-size: 17px; }
+.player-progress { min-width: 40px; flex: 1; accent-color: #35c982; cursor: pointer; }
+.player-progress::-webkit-slider-runnable-track, .player-volume-range::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: #ffffff66; }
+.player-progress::-webkit-slider-thumb, .player-volume-range::-webkit-slider-thumb { width: 12px; height: 12px; margin-top: -4px; }
+.player-time { flex: 0 0 auto; color: #d8f7e6; font: 10px Inter,system-ui,sans-serif; white-space: nowrap; }
+.player-volume-range { width: 64px; accent-color: #35c982; cursor: pointer; }
+.player-caption-select, .player-speed-dock select, .player-settings-menu select { min-height: 28px; padding: 3px 5px; border: 1px solid #42c88b99; border-radius: 6px; color: #8cf0bd; background: #071b12e8; font-size: 10px; }
+.player-controls .text-link { flex: 0 0 auto; margin: 0; padding: 6px 4px; color: #71e5af; font-size: 10px; font-weight: 700; }
+.player-controls .text-link:hover { color: #c0fbd9; }
+.player-speed-dock { position: absolute; z-index: 4; left: 12px; bottom: 10px; display: flex; align-items: center; gap: 5px; padding: 4px 6px; border: 1px solid #42c88b99; border-radius: 7px; color: #71e5af; background: #06130de8; font-size: 10px; font-weight: 700; }
+.player-stage:hover .player-speed-dock, .player-stage.player-controls-visible .player-speed-dock { bottom: 56px; }
+.player-settings-menu { position: absolute; z-index: 5; right: 12px; bottom: 55px; display: flex; align-items: center; gap: 7px; padding: 8px; border: 1px solid #42c88b99; border-radius: 8px; color: #8cf0bd; background: #071b12f2; font-size: 10px; }
+.player-settings-menu[hidden] { display: none; }
+@media(max-width:760px){.player-controls{gap:3px;padding-left:5px;padding-right:5px}.player-volume-range{width:42px}.player-time{font-size:9px}.player-caption-select{max-width:37px}.player-controls .text-link{font-size:0}.player-controls .text-link::before{content:'⚑';font-size:14px}.player-speed-dock{left:8px}.player-stage:hover .player-speed-dock,.player-stage.player-controls-visible .player-speed-dock{bottom:56px}}
+
+/* Updated behavior: every control, including speed, fades together after idle. */
+.player-controls,
+.player-speed-dock { opacity: 0; transform: translateY(5px); transition: opacity .2s ease, transform .2s ease, bottom .2s ease; }
+.player-stage.player-controls-visible .player-controls,
+.player-stage.player-controls-visible .player-speed-dock,
+.player-stage:focus-within .player-controls,
+.player-stage:focus-within .player-speed-dock { opacity: 1; transform: translateY(0); }
+.player-stage:hover .player-controls,
+.player-stage:hover .player-speed-dock { opacity: 0; transform: translateY(5px); }
+.player-stage:hover.player-controls-visible .player-controls,
+.player-stage:hover.player-controls-visible .player-speed-dock { opacity: 1; transform: translateY(0); }
+.player-caption-select,
+.player-controls .text-link,
+.player-settings-button,
+.player-speed-dock,
+.player-speed-dock select { color: #71e5af !important; border-color: #42c88b99; }
+.player-caption-select:focus,
+.player-speed-dock select:focus { outline: 2px solid #71e5af; outline-offset: 1px; }
