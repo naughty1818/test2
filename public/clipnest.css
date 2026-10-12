@@ -941,3 +941,15 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible 
 .player-stage:not(.player-controls-visible) .player-media { cursor: none; }
 .player-stage.player-controls-visible,
 .player-stage.player-controls-visible .player-media { cursor: default; }
+
+/* Home resume shelf: three larger desktop cards, hidden when there is no history. */
+.resume-section .resume-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 22px; }
+.resume-section .resume-grid .video-thumb { aspect-ratio: 16 / 9; }
+.resume-section .resume-grid .video-title { font-size: 14px; }
+.sidebar { overscroll-behavior: contain; }
+@media (max-width: 760px) {
+  .video-grid, .resume-section .resume-grid { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+  .video-card-featured { grid-column: auto; }
+  .resume-section .resume-grid .video-title { font-size: 12px; }
+  .sidebar { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+}

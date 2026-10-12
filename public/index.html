@@ -154,6 +154,7 @@
   function setPage(children) { app.replaceChildren(...children); app.focus({ preventScroll: true }); }
   function loadingPage(message = 'লোড হচ্ছে…') { setPage([$ ('div', { class: 'empty-state' }, [$('span', { class: 'empty-state-icon', text: '…' }), $('h3', { text: message })])]); }
   function closeMobile() { sidebar.classList.remove('sidebar-open'); mobileToggle.setAttribute('aria-expanded', 'false'); }
+  function closeAccountMenu() { document.querySelectorAll('.account-menu.open').forEach(menu => { menu.classList.remove('open'); const toggle = menu.previousElementSibling; if (toggle) toggle.setAttribute('aria-expanded', 'false'); }); }
   function leaveRealtimeRooms() {
     if (socket && state.currentVideoId) socket.emit('video:leave', state.currentVideoId);
     if (socket && state.currentChannelHandle) socket.emit('channel:leave', state.currentChannelHandle);
@@ -293,9 +294,9 @@
     return card;
   }
   function videoGrid(videos, message = 'এখনো কোনো প্রকাশিত ভিডিও নেই।', options = {}) {
-    const grid = $('div', { class: 'video-grid' });
+    const grid = $('div', { class: 'video-grid' + (options.resume ? ' resume-grid' : '') });
     if (!Array.isArray(videos) || !videos.length) { grid.append(emptyState(message, 'নতুন ভিডিও যোগ হলে এখানে দেখা যাবে।', state.session.user ? 'ভিডিও আপলোড করো' : 'লগইন করে আপলোড করো', state.session.user ? '/upload' : '/login')); return grid; }
-    videos.forEach((video, index) => grid.append(videoCard(video, { featured: index === 0 && !state.category, playlistId: options.playlistId })));
+    videos.forEach((video, index) => grid.append(videoCard(video, { featured: !options.resume && index === 0 && !state.category, playlistId: options.playlistId })));
     return grid;
   }
   function queryUrl(query = state.query, category = state.category, offset = 0, limit = 24, filters = {}) {
@@ -346,7 +347,7 @@
       const nextGrid = videoGrid(videos, 'এখনো কোনো public video নেই। প্রথম ভিডিওটি তোমার হতে পারে.'); grid.replaceWith(nextGrid);
       if (data.hasMore) appendLoadMore(feed, nextGrid, '', state.category, 24, token);
       jsonFetch('/api/sponsor/serve?placement=feed').then(result => { if (token === state.routeToken && result.ad) nextGrid.append(sponsoredCard(result.ad)); }).catch(() => {});
-      if(state.session.user)jsonFetch('/api/me/watch-progress?limit=6').then(result=>{if(token!==state.routeToken||!(result.videos||[]).length)return;const resume=$('section',{class:'resume-section'});resume.append($('div',{class:'feed-heading'},[$('div',{},[$('span',{class:'section-kicker',text:'যেখান থেকে থেমেছিলে'}),$('h2',{text:'আবার দেখা চালিয়ে যাও'})]),linkButton('ইতিহাস দেখো ↗','/history','see-all')]));resume.append(videoGrid(result.videos,'এখনো কোনো অসমাপ্ত ভিডিও নেই।'));app.insertBefore(resume,feed);}).catch(()=>{});
+      if(state.session.user)jsonFetch('/api/me/watch-progress?limit=6').then(result=>{if(token!==state.routeToken||!(result.videos||[]).length)return;const resume=$('section',{class:'resume-section'});resume.append($('div',{class:'feed-heading'},[$('div',{},[$('span',{class:'section-kicker',text:'যেখান থেকে থেমেছিলে'}),$('h2',{text:'আবার দেখা চালিয়ে যাও'})]),linkButton('ইতিহাস দেখো ↗','/history','see-all')]));resume.append(videoGrid((result.videos || []).slice(0, 3),'এখনো কোনো অসমাপ্ত ভিডিও নেই।',{resume:true}));app.insertBefore(resume,feed);}).catch(()=>{});
     } catch (error) { if (token === state.routeToken) grid.replaceWith(emptyState('ভিডিও লোড করা যায়নি', error.message, 'আবার চেষ্টা করো', '/')); }
   }
   async function renderSearch(token) {
@@ -765,7 +766,12 @@
     event.preventDefault(); navigate(url.pathname + url.search);
   });
   window.addEventListener('popstate', renderRoute);
-  mobileToggle.addEventListener('click', () => { const open = sidebar.classList.toggle('sidebar-open'); mobileToggle.setAttribute('aria-expanded', String(open)); });
+  mobileToggle.addEventListener('click', event => { event.stopPropagation(); closeAccountMenu(); const open = sidebar.classList.toggle('sidebar-open'); mobileToggle.setAttribute('aria-expanded', String(open)); });
+  document.addEventListener('pointerdown', event => {
+    if (!sidebar.contains(event.target) && event.target !== mobileToggle && !mobileToggle.contains(event.target)) closeMobile();
+    if (!event.target.closest('.account-wrap')) closeAccountMenu();
+  }, true);
+  sidebar.addEventListener('touchmove', event => { if (sidebar.scrollHeight > sidebar.clientHeight) event.stopPropagation(); }, { passive: true });
   searchForm.addEventListener('submit', event => { event.preventDefault(); state.query = globalSearch.value.trim(); state.category = ''; navigate('/search' + (state.query ? '?q=' + encodeURIComponent(state.query) : '')); });
   if (socket) {
     socket.on('connect', () => { if (state.currentVideoId) socket.emit('video:join', state.currentVideoId); if (state.currentChannelHandle) socket.emit('channel:join', state.currentChannelHandle); });
