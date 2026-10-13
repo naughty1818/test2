@@ -9,7 +9,7 @@ Node.js/Express-ভিত্তিক বাংলা-first video sharing site�
 - Neon-এ video metadata, likes, unique visitor views, comments/replies, creator subscriptions, playlists, Watch Later, watch history ও upload intents
 - Socket.IO দিয়ে video page-এ live like/view/comment counts এবং channel-এ live subscriber count
 - Home/discovery feed, category/search, subscription feed, recommendations, channel pages, history ও playlists
-- **Creator Studio** (`/studio`): views, likes, comments, subscribers, ad impressions/clicks, estimated creator earnings ও copyright notices
+- **Creator Studio** (`/studio`, account menu থেকে নতুন tab-এ খোলে): content library ও metadata/thumbnail/visibility/scheduled publish/comments controls; upload intents; comments reply/pin/hide; views, subscriber growth, CTR, watch time ও sampled retention analytics; audience activity; playlist/series ordering; channel avatar/cover/profile customization; creator notifications/resources; estimated creator earnings ও copyright appeals
 - **Role-based Admin Panel** (`/admin`): campaign/ads controls, platform monetization settings, creator approval, channel suspend/ban, video remove/restore, copyright strikes/appeals, multiple staff accounts ও audit log
 - Admin-controlled sponsored cards in feed/watch page. Ads global default-এ বন্ধ এবং নতুন campaigns Paused থাকে
 - Responsive Bengali UI, mobile navigation, share link ও owner-only video deletion
@@ -21,7 +21,7 @@ Node.js/Express-ভিত্তিক বাংলা-first video sharing site�
 2. Creator `.vtt` captions upload/edit করতে পারেন। Transcript search index হয়; player-এ browser-native captions toggle এবং transcript panel থাকে।
 3. Upload থেকে duration best-effort পড়া হয়, custom thumbnail R2-তে আলাদাভাবে রাখা হয় এবং creator timestamp chapters সম্পাদনা করতে পারেন।
 4. Player-এ 0.75×–2× playback speed, buffering/error/retry state, signed R2 direct URL এবং account-based resume/continue-watching আছে। Video bytes Node server দিয়ে proxy হয় না; watch page playback-এর আগে R2 `HEAD` request করে না।
-5. Creator Studio-তে best-effort sampled watch seconds, session counts, completion estimate ও 5%-bucket audience-retention curve আছে। এগুলো analytics signal, unique-person guarantee বা payout proof নয়।
+5. Creator Studio-তে best-effort sampled watch seconds, session counts, completion estimate ও 5%-bucket audience-retention curve আছে। Studio audience ও analytics view anonymous viewer hashes-ভিত্তিক aggregate signal দেখায়; traffic source বা demographic profile সংগ্রহ করে না। এগুলো unique-person guarantee বা payout proof নয়।
 6. Signed-in viewers video/channel/comment report জমা দিতে পারেন; Admin/Moderator report triage করেন, Admin removed-video appeal reason-সহ review করতে পারেন এবং decisions audit হয়।
 
 **Streaming limitation:** এই revision-এ upload file-কে HLS/DASH multi-bitrate renditions-এ transcode করার background worker নেই; তাই quality/adaptive bitrate selector-ও নেই। Direct R2 signed playback Node hop কমায়, কিন্তু source file-এর codec/bitrate অনুযায়ী mobile/slow-network performance এখনও বদলাতে পারে। Production-grade adaptive streaming-এর জন্য আলাদা queue/transcoding worker, HLS renditions, manifest access policy এবং end-to-end device/network testing লাগবে।

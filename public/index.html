@@ -11,7 +11,7 @@
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/atharo-favicon.png?v=atharo-icon-2">
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/atharo-apple-touch-icon.png?v=atharo-icon-2">
   <link rel="manifest" href="/manifest.webmanifest?v=atharo-icon-2">
-  <link rel="stylesheet" href="/clipnest.css?v=atharo-1">
+  <link rel="stylesheet" href="/clipnest.css?v=atharo-2">
 </head>
 <body>
   <div class="app-frame">
@@ -67,6 +67,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/console.js"></script>
+  <script src="/studio.js?v=studio-1"></script>
   <script>
   'use strict';
   const app = document.getElementById('app');
@@ -190,7 +191,7 @@
     const toggle = $('button', { type: 'button', class: 'account-toggle', 'aria-expanded': 'false', 'aria-label': 'অ্যাকাউন্ট মেনু' }, [avatar, $('span', { class: 'account-name', text: name }), $('span', { class: 'chevron', text: '⌄' })]);
     const menu = $('div', { class: 'account-menu' });
     menu.append($('div', { class: 'menu-note', text: name }));
-    [['আমার চ্যানেল', '/channel/me'], ['Creator Studio', '/studio'], ['সাবস্ক্রিপশন', '/subscriptions'], ['প্লেলিস্ট', '/playlists'], ['ভিডিও আপলোড', '/upload']].forEach(([label, href]) => menu.append($('a', { href, 'data-route': '', text: label })));
+    [['আমার চ্যানেল', '/channel/me'], ['Creator Studio', '/studio'], ['সাবস্ক্রিপশন', '/subscriptions'], ['প্লেলিস্ট', '/playlists'], ['ভিডিও আপলোড', '/upload']].forEach(([label, href]) => menu.append($('a', href === '/studio' ? { href, target: '_blank', rel: 'noopener noreferrer', text: label } : { href, 'data-route': '', text: label })));
     if (state.admin?.role) menu.append($('a', { href: '/admin', 'data-route': '', text: 'Admin control panel' }));
     menu.append($('button', { type: 'button', class: 'logout-item', text: 'লগআউট', onClick: async () => {
       try { await jsonFetch('/auth/logout', { method: 'POST', body: {} }); state.session = { user: null, profile: null }; renderAccount(); notify('লগআউট হয়েছে।'); renderRoute(); }
@@ -538,7 +539,7 @@
       const description = $('details', { class: 'video-description' }, [$('summary', { text: 'ভিডিওর বিবরণ  ·  ' + fmtDate(video.created) }), $('p', { text: text(video.description, 'এই ভিডিওটির কোনো বিবরণ নেই।') }), $('span', { text: 'Atharo · সরাসরি Cloudflare R2 playback' })]);
       const chaptersPanel=$('section',{class:'chapters-panel',hidden:true}),transcript=$('details',{class:'transcript-details',hidden:true});transcript.append($('summary',{text:'ভিডিও transcript দেখো'}),$('pre',{class:'transcript-copy',text:'Transcript লোড হচ্ছে…'}));
       const discussion = $('section', { class: 'discussion' });
-      const commentsHeadingCount = $('span', { class: 'comment-count', text: number(data.commentsCount) + 'টি মন্তব্য' });
+      const commentsHeadingCount = $('span', { class: 'comment-count', text: video.commentsEnabled === false ? 'মন্তব্য বন্ধ' : number(data.commentsCount) + 'টি মন্তব্য' });
       discussion.append($('div', { class: 'comments-heading' }, [$('h2', { text: 'মন্তব্য ও আলোচনা' }), commentsHeadingCount]));
       const replyNotice = $('div', { class: 'reply-notice', hidden: true });
       let replyTo = null;
@@ -566,7 +567,7 @@
         try { const result = await jsonFetch('/api/videos/' + encodeURIComponent(id) + '/comments', { method: 'POST', body: { body, parentId: replyTo } }); addComment(result.comment); commentInput.value = ''; replyTo = null; replyNotice.hidden = true; commentInput.placeholder = 'মন্তব্য যোগ করো…'; updateStats({ commentsCount: result.commentsCount }); }
         catch (error) { notify(error.message, 'error'); } finally { commentSubmit.disabled = !state.session.user; }
       });
-      discussion.append(commentForm, commentsList);
+      discussion.append(video.commentsEnabled === false ? $('div', { class: 'console-notice', text: 'এই ভিডিওতে নির্মাতা মন্তব্য বন্ধ রেখেছেন।' }) : commentForm, commentsList);
       if(ownerHandle&&(!state.session.profile||state.session.profile.handle?.toLowerCase()!==ownerHandle.toLowerCase()))creator.append(reportButton('channel',ownerHandle));
       creator.append(actions); main.append(stage, postrollSlot, title, subtitle, creator, playlistPicker, description, chaptersPanel, transcript, discussion);
       const aside = $('aside', { class: 'recommendations' }, [$('div', { class: 'recommendations-title' }, [$('h2', { text: 'এরপর দেখো' }), $('span', { text: 'এই বিভাগের আরও ভিডিও' })])]);
@@ -616,7 +617,7 @@
       const profile = data.profile || {}; const videos = Array.isArray(data.videos) ? data.videos : [];
       const own = Boolean(data.isOwner || (state.session.profile?.handle && state.session.profile.handle.toLowerCase() === text(profile.handle, handle).toLowerCase()));
       const page = $('div');
-      const cover = $('div', { class: 'channel-cover' }, [$('div', { class: 'cover-orbit cover-orbit-one' }), $('div', { class: 'cover-orbit cover-orbit-two' }), $('span', { class: 'cover-caption', text: 'নিজের গল্প, নিজের ভাষায়' })]);
+      const cover = $('div', { class: 'channel-cover', style: profile.coverUrl ? { backgroundImage: `linear-gradient(0deg,#07120fbb,transparent 70%),url("${profile.coverUrl.replace(/["\\]/g, '')}")`, backgroundSize: 'cover', backgroundPosition: 'center' } : {} }, [$('div', { class: 'cover-orbit cover-orbit-one' }), $('div', { class: 'cover-orbit cover-orbit-two' }), $('span', { class: 'cover-caption', text: 'নিজের গল্প, নিজের ভাষায়' })]);
       const profileSection = $('section', { class: 'channel-profile' }); const name = text(profile.displayName, text(profile.handle, 'Atharo channel'));
       profileSection.append(avatar(name, profile.avatarUrl, 'channel-avatar'));
       const subscriberLabel = $('span', { class: 'channel-subscribers', text: number(data.subscribersCount || 0) + ' জন সাবস্ক্রাইবার' });
@@ -767,7 +768,7 @@
     if (path === '/search') { document.title = 'খুঁজে দেখো · Atharo | আঠারো'; return renderSearch(token); }
     if (path === '/login') { document.title = 'লগইন · Atharo | আঠারো'; return renderLogin(); }
     if (path === '/upload') { document.title = 'ভিডিও আপলোড · Atharo | আঠারো'; return renderUpload(); }
-    if (path === '/studio') { document.title = 'Creator Studio · Atharo | আঠারো'; return window.AtharoConsole.renderStudio(app, { jsonFetch, notify }); }
+    if (path === '/studio') { document.title = 'Creator Studio · Atharo | আঠারো'; window.__atharoProfile = state.session.profile || {}; return window.AtharoStudio.renderStudio(app, { jsonFetch, notify }); }
     if (path === '/admin') { document.title = 'Admin · Atharo | আঠারো'; return window.AtharoConsole.renderAdmin(app, { jsonFetch, notify, adminRole: state.admin?.role || null, navigate }); }
     if (path === '/channels') { document.title = 'চ্যানেল · Atharo | আঠারো'; return renderChannels(token); }
     if (path === '/subscriptions') { document.title = 'সাবস্ক্রিপশন · Atharo | আঠারো'; return renderSubscriptions(token); }

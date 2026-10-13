@@ -79,7 +79,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const VIDEO_SELECT = `
   SELECT v.id, v.object_name, v.owner_sub, v.title, v.description, v.category,
          v.visibility, v.size, v.created_at, v.legacy, v.likes_count,
-         v.views_count, v.comments_count, v.moderation_status,
+         v.views_count, v.comments_count, v.moderation_status,v.scheduled_at,v.comments_enabled,
          v.thumbnail_object_name, v.class_level, v.subject, v.syllabus_tags, v.duration_seconds,
          EXISTS(SELECT 1 FROM video_captions vc WHERE vc.video_id=v.id) AS has_captions,
          p.handle AS owner_handle,
@@ -152,7 +152,7 @@ function suggestedHandle(user) {
 }
 function publicProfile(profile) {
   if (!profile) return null;
-  return { displayName: profile.display_name || profile.displayName || 'Creator', handle: profile.handle || null, bio: profile.bio || '', avatarUrl: profile.avatar_url || profile.avatarUrl || null };
+  return { displayName: profile.display_name || profile.displayName || 'Creator', handle: profile.handle || null, bio: profile.bio || '', avatarUrl: profile.avatar_url || profile.avatarUrl || null, coverUrl: profile.cover_url || profile.coverUrl || null };
 }
 function toISO(value) { return value instanceof Date ? value.toISOString() : new Date(value).toISOString(); }
 function videoCard(row) {
@@ -164,7 +164,7 @@ function videoCard(row) {
     viewsCount: Number(row.views_count) || 0, commentsCount: Number(row.comments_count) || 0,
     thumbnailUrl: row.thumbnail_object_name ? `/api/videos/${encodeURIComponent(row.id)}/thumbnail` : null,
     classLevel: row.class_level || '', subject: row.subject || '', syllabusTags: row.syllabus_tags || [],
-    durationSeconds: Number(row.duration_seconds) || 0, hasCaptions: Boolean(row.has_captions),
+    durationSeconds: Number(row.duration_seconds) || 0, hasCaptions: Boolean(row.has_captions), scheduledAt:row.scheduled_at||null, commentsEnabled:row.comments_enabled!==false,
     liked: Boolean(row.liked), watchLater: Boolean(row.watch_later)
   };
 }
@@ -173,7 +173,7 @@ function requireValidId(req, res, next) {
   next();
 }
 async function loadProfile(sub, client = pool) {
-  const result = await client.query('SELECT sub,handle,display_name,bio,avatar_url,created_at,updated_at FROM profiles WHERE sub=$1', [sub]);
+  const result = await client.query('SELECT sub,handle,display_name,bio,avatar_url,cover_url,created_at,updated_at FROM profiles WHERE sub=$1', [sub]);
   return result.rows[0] || null;
 }
 async function loadSession(req) {
@@ -181,7 +181,7 @@ async function loadSession(req) {
   if (!raw || raw.length < 32) return null;
   const result = await pool.query(`
     SELECT s.sub, s.expires_at, u.email, u.google_name, u.google_picture, u.account_status,
-           p.handle, p.display_name, p.bio, p.avatar_url
+           p.handle, p.display_name, p.bio, p.avatar_url, p.cover_url
     FROM sessions s JOIN app_users u ON u.google_sub=s.sub
     LEFT JOIN profiles p ON p.sub=s.sub
     WHERE s.token_hash=$1 AND s.expires_at>NOW()
@@ -189,7 +189,7 @@ async function loadSession(req) {
   if (!result.rowCount) return null;
   const row = result.rows[0];
   const session = { sub: row.sub, email: row.email, name: row.google_name || '', picture: row.google_picture || null, accountStatus: row.account_status || 'active', emailVerified: true, expiresAt: toISO(row.expires_at) };
-  const profile = row.handle ? { sub: row.sub, handle: row.handle, display_name: row.display_name, bio: row.bio, avatar_url: row.avatar_url } : null;
+  const profile = row.handle ? { sub: row.sub, handle: row.handle, display_name: row.display_name, bio: row.bio, avatar_url: row.avatar_url, cover_url: row.cover_url } : null;
   return { token: raw, session, profile };
 }
 async function requireAuth(req, res, next) {
@@ -242,6 +242,7 @@ async function getVideo(id) {
 async function canView(video, sub) {
   if (video.moderation_status && video.moderation_status !== 'active') return false;
   if (video.owner_status && video.owner_status !== 'active') return false;
+  if (video.scheduled_at && new Date(video.scheduled_at).getTime() > Date.now() && video.owner_sub !== sub) return false;
   return video.visibility !== 'Private' || Boolean(sub && video.owner_sub === sub);
 }
 async function loadCards({ category = '', query = '', limit = 24, offset = 0, userSub = null, ownerSub = null, subscriptions = false, playlistId = null, history = false, classLevel = '', subject = '', syllabusTag = '', durationMin = 0, durationMax = 0, captionsOnly = false, sort = '' } = {}) {
@@ -250,6 +251,8 @@ async function loadCards({ category = '', query = '', limit = 24, offset = 0, us
   const params = [];
   let from = `${VIDEO_SELECT}`;
   let where = ["COALESCE(v.moderation_status,'active')='active'", "COALESCE(u.account_status,'active')='active'"];
+  if(userSub){params.push(userSub);where.push(`(v.scheduled_at IS NULL OR v.scheduled_at<=NOW() OR v.owner_sub=$${params.length})`);}
+  else where.push('(v.scheduled_at IS NULL OR v.scheduled_at<=NOW())');
   if (subscriptions) {
     params.push(userSub);
     from += ' JOIN subscriptions fs ON fs.channel_sub=v.owner_sub';
@@ -389,15 +392,18 @@ app.post('/api/me/profile', requireAuth, requireActive, async (req, res, next) =
     const requestedHandle = safeHandle(req.body?.handle);
     const displayName = safeText(req.body?.displayName, 120);
     const bio = safeText(req.body?.bio, 1000);
+    const avatarUrl = req.body?.avatarUrl === undefined ? null : safeText(req.body.avatarUrl, 1000);
+    const coverUrl = req.body?.coverUrl === undefined ? null : safeText(req.body.coverUrl, 1000);
+    for (const url of [avatarUrl,coverUrl].filter(Boolean)) { try { const parsed=new URL(url); if(parsed.protocol!=='https:'||!parsed.hostname||parsed.username||parsed.password) throw new Error(); } catch (_) { return jsonError(res,400,'Avatar ও cover-এর জন্য valid HTTPS image URL দিন।'); } }
     if (!displayName) return jsonError(res, 400, 'displayName is required / নাম আবশ্যক।');
     if (!requestedHandle || requestedHandle.length < 3) return jsonError(res, 400, 'handle must be 3-30 letters, numbers, dots, dashes or underscores.');
     const existing = await loadProfile(req.auth.session.sub);
     const conflict = await pool.query('SELECT sub FROM profiles WHERE handle=$1 AND sub<>$2', [requestedHandle, req.auth.session.sub]);
     if (conflict.rowCount) return jsonError(res, 409, 'That handle is already taken / এই handle নেওয়া আছে।', { suggestedHandle: `${requestedHandle.slice(0, 24)}-${crypto.randomBytes(2).toString('hex')}` });
     const profile = await withTransaction(async client => {
-      const result = await client.query(`INSERT INTO profiles (sub,handle,display_name,bio,avatar_url)
-        VALUES ($1,$2,$3,$4,$5) ON CONFLICT (sub) DO UPDATE SET handle=EXCLUDED.handle,display_name=EXCLUDED.display_name,bio=EXCLUDED.bio,updated_at=NOW() RETURNING sub,handle,display_name,bio,avatar_url`,
-        [req.auth.session.sub, requestedHandle, displayName, bio, existing?.avatar_url || req.auth.session.picture || null]);
+      const result = await client.query(`INSERT INTO profiles (sub,handle,display_name,bio,avatar_url,cover_url)
+        VALUES ($1,$2,$3,$4,COALESCE($5,$6),$7) ON CONFLICT (sub) DO UPDATE SET handle=EXCLUDED.handle,display_name=EXCLUDED.display_name,bio=EXCLUDED.bio,avatar_url=COALESCE($5,profiles.avatar_url),cover_url=COALESCE($7,profiles.cover_url),updated_at=NOW() RETURNING sub,handle,display_name,bio,avatar_url,cover_url`,
+        [req.auth.session.sub, requestedHandle, displayName, bio, avatarUrl, existing?.avatar_url || req.auth.session.picture || null, coverUrl]);
       return result.rows[0];
     });
     res.json({ profile: publicProfile(profile) });
@@ -407,7 +413,7 @@ app.post('/api/me/profile', requireAuth, requireActive, async (req, res, next) =
 app.get('/api/channels', async (req, res, next) => {
   try {
     const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit || '50', 10) || 50));
-    const result = await pool.query(`SELECT p.handle,p.display_name,p.bio,p.avatar_url,
+    const result = await pool.query(`SELECT p.handle,p.display_name,p.bio,p.avatar_url,p.cover_url,
       (SELECT COUNT(*) FROM videos v WHERE v.owner_sub=p.sub AND v.visibility='Public' AND v.moderation_status='active')::bigint AS videos_count,
       (SELECT COALESCE(SUM(v.views_count),0) FROM videos v WHERE v.owner_sub=p.sub AND v.visibility='Public' AND v.moderation_status='active')::bigint AS views_count,
       (SELECT COUNT(*) FROM subscriptions s WHERE s.channel_sub=p.sub)::bigint AS subscribers_count,
@@ -421,7 +427,7 @@ app.get('/api/channels/:handle', async (req, res, next) => {
   try {
     const handle = safeHandle(decodeURIComponent(req.params.handle || ''));
     if (!handle || handle !== req.params.handle.toLowerCase()) return jsonError(res, 400, 'Invalid handle.');
-    const found = await pool.query(`SELECT p.sub,p.handle,p.display_name,p.bio,p.avatar_url,p.created_at,COUNT(DISTINCT s.subscriber_sub)::bigint AS subscribers_count
+    const found = await pool.query(`SELECT p.sub,p.handle,p.display_name,p.bio,p.avatar_url,p.cover_url,p.created_at,COUNT(DISTINCT s.subscriber_sub)::bigint AS subscribers_count
       FROM profiles p JOIN app_users u ON u.google_sub=p.sub LEFT JOIN subscriptions s ON s.channel_sub=p.sub WHERE p.handle=$1 AND u.account_status='active' GROUP BY p.sub`, [handle]);
     if (!found.rowCount) return jsonError(res, 404, 'Channel not found / চ্যানেল পাওয়া যায়নি।');
     const row = found.rows[0];
@@ -545,18 +551,20 @@ app.post('/api/videos/:id/like', requireAuth, requireActive, requireValidId, asy
 
 app.get('/api/videos/:id/comments', requireValidId, accessVideo, async (req, res, next) => {
   try {
+    if (req.video.comments_enabled === false) return res.json({ comments: [], commentsEnabled: false });
     const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit || '50', 10) || 50));
     const result = await pool.query(`SELECT c.id,c.video_id,c.parent_id,c.body,c.created_at,c.author_sub,
       p.handle,p.display_name,p.avatar_url,u.google_name
       FROM comments c JOIN app_users u ON u.google_sub=c.author_sub
       LEFT JOIN profiles p ON p.sub=c.author_sub
-      WHERE c.video_id=$1 ORDER BY c.created_at DESC LIMIT $2`, [req.video.id, limit]);
-    const comments = result.rows.reverse().map(row => ({ id: row.id, videoId: row.video_id, parentId: row.parent_id, body: row.body, createdAt: toISO(row.created_at), author: { handle: row.handle || null, displayName: row.display_name || row.google_name || 'Creator', avatarUrl: row.avatar_url || null } }));
+      WHERE c.video_id=$1 AND c.creator_hidden=FALSE AND (c.parent_id IS NULL OR EXISTS(SELECT 1 FROM comments parent WHERE parent.id=c.parent_id AND parent.creator_hidden=FALSE)) ORDER BY c.creator_pinned DESC,c.created_at ASC LIMIT $2`, [req.video.id, limit]);
+    const comments = result.rows.map(row => ({ id: row.id, videoId: row.video_id, parentId: row.parent_id, body: row.body, createdAt: toISO(row.created_at), author: { handle: row.handle || null, displayName: row.display_name || row.google_name || 'Creator', avatarUrl: row.avatar_url || null } }));
     res.json({ comments });
   } catch (error) { next(error); }
 });
 app.post('/api/videos/:id/comments', requireAuth, requireActive, requireValidId, accessVideo, async (req, res, next) => {
   try {
+    if (req.video.comments_enabled === false) return jsonError(res, 403, 'এই ভিডিওতে creator comments বন্ধ রেখেছেন।');
     const body = safeText(req.body?.body, 2000);
     const parentId = req.body?.parentId ? String(req.body.parentId) : null;
     if (!body) return jsonError(res, 400, 'Comment cannot be empty.');
@@ -617,6 +625,18 @@ app.post('/api/me/playlists', requireAuth, requireActive, async (req, res, next)
     res.status(201).json({ playlist: { id, name, description, isPublic: Boolean(req.body?.isPublic), isWatchLater: false, videosCount: 0 } });
   } catch (error) { next(error); }
 });
+app.put('/api/me/playlists/:id', requireAuth, requireActive, async (req, res, next) => {
+  try {
+    if (!validUuid(req.params.id)) return jsonError(res, 400, 'Invalid playlist id.');
+    const name = safeText(req.body?.name, 80), description = safeText(req.body?.description, 1000);
+    if (!name) return jsonError(res, 400, 'Playlist-এর নাম দিন।');
+    const result = await pool.query(`UPDATE playlists SET name=$3,description=$4,is_public=$5,updated_at=NOW()
+      WHERE id=$1 AND owner_sub=$2 AND is_watch_later=FALSE RETURNING id,name,description,is_public`,
+      [req.params.id, req.auth.session.sub, name, description, Boolean(req.body?.isPublic)]);
+    if (!result.rowCount) return jsonError(res, 404, 'Playlist পাওয়া যায়নি।');
+    const p = result.rows[0]; res.json({ playlist: { id:p.id,name:p.name,description:p.description,isPublic:p.is_public } });
+  } catch (error) { next(error); }
+});
 app.get('/api/playlists/:id', async (req, res, next) => {
   try {
     if (!validUuid(req.params.id)) return jsonError(res, 400, 'Invalid playlist id.');
@@ -658,6 +678,23 @@ app.post('/api/playlists/:id/videos', requireAuth, requireActive, requireValidId
     await pool.query('UPDATE playlists SET updated_at=NOW() WHERE id=$1', [playlist.id]);
     res.json({ ok: true });
   } catch (error) { next(error); }
+});
+app.put('/api/playlists/:id/order', requireAuth, requireActive, async (req,res,next)=>{
+  try {
+    if(!validUuid(req.params.id))return jsonError(res,400,'Invalid playlist id.');
+    const ids=req.body?.videoIds;
+    if(!Array.isArray(ids)||ids.length>100||ids.some(id=>!validVideoId(id))||new Set(ids).size!==ids.length)return jsonError(res,400,'Playlist order সঠিক নয়।');
+    await withTransaction(async client=>{
+      const owner=await client.query('SELECT id FROM playlists WHERE id=$1 AND owner_sub=$2 AND is_watch_later=FALSE FOR UPDATE',[req.params.id,req.auth.session.sub]);
+      if(!owner.rowCount)throw Object.assign(new Error('Playlist পাওয়া যায়নি।'),{status:404});
+      const existing=await client.query('SELECT video_id FROM playlist_items WHERE playlist_id=$1',[req.params.id]);
+      const existingIds=new Set(existing.rows.map(row=>row.video_id));
+      if(ids.length!==existingIds.size||ids.some(id=>!existingIds.has(id)))throw Object.assign(new Error('Playlist items-এর তালিকা বদলে গেছে; refresh করে আবার চেষ্টা করুন।'),{status:409});
+      for(let i=0;i<ids.length;i++)await client.query('UPDATE playlist_items SET position=$3 WHERE playlist_id=$1 AND video_id=$2',[req.params.id,ids[i],i]);
+      await client.query('UPDATE playlists SET updated_at=NOW() WHERE id=$1',[req.params.id]);
+    });
+    res.json({ok:true});
+  }catch(error){if(error.status)return jsonError(res,error.status,error.message);next(error);}
 });
 app.delete('/api/playlists/:id/videos/:videoId', requireAuth, requireActive, async (req, res, next) => {
   try {
@@ -757,6 +794,7 @@ app.delete('/api/videos/:id', requireAuth, requireActive, requireValidId, async 
 
 require('./learning')({ app, pool, withTransaction, s3, bucket: R2_BUCKET, requireAuth, requireActive, requireValidId, getVideo, canView, loadSession, safeText, sha, objectHead });
 require('./admin')({ app, requireAuth, requireActive, loadSession });
+require('./creator-studio')({ app, pool, requireAuth, requireActive, requireValidId, validUuid, safeText, normalizeCategory, normalizeVisibility });
 
 io.use(async (socket, next) => {
   try {

@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS profiles_handle_lower_idx ON profiles (LOWER(handle));
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS cover_url TEXT;
 
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,
@@ -41,6 +42,8 @@ CREATE TABLE IF NOT EXISTS videos (
   views_count BIGINT NOT NULL DEFAULT 0 CHECK (views_count >= 0),
   comments_count BIGINT NOT NULL DEFAULT 0 CHECK (comments_count >= 0)
 );
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ;
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS comments_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 CREATE INDEX IF NOT EXISTS videos_public_feed_idx ON videos (created_at DESC) WHERE visibility = 'Public';
 CREATE INDEX IF NOT EXISTS videos_owner_created_idx ON videos (owner_sub, created_at DESC);
 CREATE INDEX IF NOT EXISTS videos_category_created_idx ON videos (category, created_at DESC) WHERE visibility = 'Public';
@@ -71,6 +74,8 @@ CREATE TABLE IF NOT EXISTS comments (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS creator_pinned BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS creator_hidden BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS comments_video_created_idx ON comments (video_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS comments_author_idx ON comments (author_sub, created_at DESC);
 

@@ -258,5 +258,5 @@
     root.append(panel('Platform monetization settings','Ads default-off থাকে। Share percentage নিজের commercial policy অনুযায়ী নির্ধারণ করুন—এখানে কোনো default ভাগ ধরে নেওয়া হয়নি.',form));
   }
 
-  window.AtharoConsole={renderStudio,renderAdmin};
+  window.AtharoConsole={renderStudio,renderAdmin,renderCreatorAssets};
 })();

@@ -145,11 +145,12 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const sub = req.auth.session.sub;
       const daysRaw = Number.parseInt(req.query.days || '30', 10) || 30;
       const days = [7,30,90].includes(daysRaw) ? daysRaw : 30;
-      const [totals, subscriberTotal, daily, videos, adStats, profile, strikes] = await Promise.all([
+      const [totals, subscriberTotal, subscriberGrowth, daily, videos, adStats, profile, strikes] = await Promise.all([
         pool.query(`SELECT COUNT(*)::bigint AS videos_count,COALESCE(SUM(views_count),0)::bigint AS views_count,
             COALESCE(SUM(likes_count),0)::bigint AS likes_count,COALESCE(SUM(comments_count),0)::bigint AS comments_count
           FROM videos WHERE owner_sub=$1`, [sub]),
         pool.query('SELECT COUNT(*)::bigint AS n FROM subscriptions WHERE channel_sub=$1', [sub]),
+        pool.query('SELECT COUNT(*)::bigint AS n FROM subscriptions WHERE channel_sub=$1 AND created_at>=NOW()-($2::int*INTERVAL \'1 day\')', [sub, days]),
         pool.query(`SELECT TO_CHAR(DATE_TRUNC('day',vv.created_at),'YYYY-MM-DD') AS day,COUNT(*)::bigint AS views
           FROM video_views vv JOIN videos v ON v.id=vv.video_id
           WHERE v.owner_sub=$1 AND vv.created_at>=NOW()-($2::int*INTERVAL '1 day')
@@ -171,7 +172,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const total = totals.rows[0] || {};
       const monet = profile.rows[0] || {};
       const ads = adStats.rows[0] || {};
-      res.json({ days, totals: { videos: Number(total.videos_count)||0, views: Number(total.views_count)||0, likes: Number(total.likes_count)||0, comments: Number(total.comments_count)||0, subscribers: Number(subscriberTotal.rows[0]?.n)||0 },
+      res.json({ days, totals: { videos: Number(total.videos_count)||0, views: Number(total.views_count)||0, likes: Number(total.likes_count)||0, comments: Number(total.comments_count)||0, subscribers: Number(subscriberTotal.rows[0]?.n)||0, subscribersGained: Number(subscriberGrowth.rows[0]?.n)||0 },
         viewsByDay: daily.rows.map(row => ({ day: row.day, views: Number(row.views)||0 })),
         videos: videos.rows.map(row => ({ id: row.id, title: row.title, visibility: row.visibility, moderationStatus: row.moderation_status, createdAt: row.created_at, views: Number(row.views_count)||0, likes: Number(row.likes_count)||0, comments: Number(row.comments_count)||0, adImpressions: Number(row.ad_impressions)||0, adClicks: Number(row.ad_clicks)||0, estimatedEarningsBdt: Number(row.estimated_earnings_bdt)||0 })),
         ads: { impressions: Number(ads.impressions)||0, clicks: Number(ads.clicks)||0, estimatedEarningsBdt: Number(ads.estimated_earnings_bdt)||0 },
@@ -181,9 +182,9 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
 
   app.get('/api/creator/strikes', requireAuth, async (req, res, next) => {
     try {
-      const result = await pool.query(`SELECT s.id,s.video_id,v.title AS video_title,s.reason,s.status,s.appeal_text,s.created_at,s.appealed_at
+      const result = await pool.query(`SELECT s.id,s.video_id,v.title AS video_title,s.reason,s.evidence_url,s.status,s.appeal_text,s.created_at,s.appealed_at,s.resolved_at,s.resolved_by_email
         FROM copyright_strikes s LEFT JOIN videos v ON v.id=s.video_id WHERE s.channel_sub=$1 ORDER BY s.created_at DESC LIMIT 100`, [req.auth.session.sub]);
-      res.json({ strikes: result.rows.map(row => ({ id: row.id, videoId: row.video_id, videoTitle: row.video_title || 'ভিডিও আর উপলভ্য নয়', reason: row.reason, status: row.status, appealText: row.appeal_text, createdAt: row.created_at, appealedAt: row.appealed_at })) });
+      res.json({ strikes: result.rows.map(row => ({ id: row.id, videoId: row.video_id, videoTitle: row.video_title || 'ভিডিও আর উপলভ্য নয়', reason: row.reason, evidenceUrl: row.evidence_url, status: row.status, appealText: row.appeal_text, createdAt: row.created_at, appealedAt: row.appealed_at, resolvedAt: row.resolved_at, resolvedByEmail: row.resolved_by_email })) });
     } catch (error) { next(error); }
   });
 
