@@ -11,7 +11,7 @@
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/atharo-favicon.png?v=atharo-icon-2">
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/atharo-apple-touch-icon.png?v=atharo-icon-2">
   <link rel="manifest" href="/manifest.webmanifest?v=atharo-icon-2">
-  <link rel="stylesheet" href="/clipnest.css?v=atharo-3">
+  <link rel="stylesheet" href="/clipnest.css?v=admin-ux-1">
 </head>
 <body>
   <div class="app-frame">
@@ -66,7 +66,7 @@
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/console.js"></script>
+  <script src="/console.js?v=admin-ux-1"></script>
   <script src="/studio.js?v=studio-2"></script>
   <script>
   'use strict';
@@ -193,7 +193,7 @@
     const menu = $('div', { class: 'account-menu' });
     menu.append($('div', { class: 'menu-note', text: name }));
     [['আমার চ্যানেল', '/channel/me'], ['Creator Studio', '/studio'], ['সাবস্ক্রিপশন', '/subscriptions'], ['প্লেলিস্ট', '/playlists'], ['ভিডিও আপলোড', '/upload']].forEach(([label, href]) => menu.append($('a', href === '/studio' ? { href, target: '_blank', rel: 'noopener noreferrer', text: label } : { href, 'data-route': '', text: label })));
-    if (state.admin?.role) menu.append($('a', { href: '/admin', 'data-route': '', text: 'Admin control panel' }));
+    if (state.admin?.role) menu.append($('a', { href: '/admin', target: '_blank', rel: 'noopener noreferrer', text: 'Admin control panel' }));
     menu.append($('button', { type: 'button', class: 'logout-item', text: 'লগআউট', onClick: async () => {
       try { await jsonFetch('/auth/logout', { method: 'POST', body: {} }); state.session = { user: null, profile: null }; renderAccount(); notify('লগআউট হয়েছে।'); renderRoute(); }
       catch (error) { notify(error.message, 'error'); }
@@ -788,7 +788,9 @@
   function renderNotFound() { setPage([emptyState('এই পেজটি পাওয়া যায়নি', 'লিংকটি পরীক্ষা করে আবার চেষ্টা করো।', 'Atharo | আঠারো হোম', '/')]); }
   async function renderRoute() {
     leaveRealtimeRooms(); const token = ++state.routeToken; const path = location.pathname;
+    if (path !== '/admin') app.classList.remove('admin-shell', 'console-page');
     document.body.classList.toggle('studio-fullscreen', path === '/studio');
+    document.body.classList.toggle('admin-fullscreen', path === '/admin');
     if (path === '/') { document.title = 'Atharo | আঠারো · বাংলা ভিডিও'; return renderHome(token); }
     if (path === '/search') { document.title = 'খুঁজে দেখো · Atharo | আঠারো'; return renderSearch(token); }
     if (path === '/login') { document.title = 'লগইন · Atharo | আঠারো'; return renderLogin(); }

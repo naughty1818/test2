@@ -250,6 +250,7 @@ CREATE TABLE IF NOT EXISTS copyright_strikes (
   resolved_by_email TEXT,
   resolved_at TIMESTAMPTZ
 );
+ALTER TABLE copyright_strikes ADD COLUMN IF NOT EXISTS resolution_note TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS copyright_strikes_channel_created_idx ON copyright_strikes (channel_sub, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS admin_audit_logs (

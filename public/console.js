@@ -30,6 +30,14 @@
   const cell = (...children) => el('td',{},children);
   const tr = (...cells) => el('tr',{},cells);
   const empty = message => el('div',{class:'console-empty',text:message});
+
+  const pager = (page,pages,onChange) => {
+    const wrap=el('div',{class:'console-pager','aria-label':'Pagination'});
+    wrap.append(el('span',{text:`Page ${page} of ${Math.max(1,pages)}`}),button('Previous',()=>onChange(Math.max(1,page-1),'console-small-button'), 'console-small-button'),button('Next',()=>onChange(Math.min(Math.max(1,pages),page+1),'console-small-button'),'console-small-button'));
+    wrap.querySelectorAll('button')[0].disabled=page<=1;wrap.querySelectorAll('button')[1].disabled=page>=pages;
+    return wrap;
+  };
+  const asLocalDateTime = value => { if(!value)return ''; const d=new Date(value);d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,16); };
   const statusBadge = value => { const labels={active:'Active',paused:'Paused',draft:'Draft',removed:'Removed',suspended:'Suspended',banned:'Banned',enabled:'Monetized',pending:'Pending',appealed:'Appealed',dismissed:'Dismissed',resolved:'Resolved',rejected:'Rejected'}; const kind=['active','enabled','resolved'].includes(value)?'good':['removed','banned','rejected'].includes(value)?'bad':['paused','suspended','pending','appealed'].includes(value)?'warn':''; return badge(labels[value]||value||'—',kind); };
   const safeAppealText = t => String(t||'').slice(0,2000);
 
@@ -69,7 +77,7 @@
         const strikeData=await ctx.jsonFetch('/api/creator/strikes').catch(()=>({strikes:[]}));
         const strikeRows=(strikeData.strikes||[]).map(item=>{
           const reason=el('div',{class:'console-muted',text:item.reason});
-          const content=el('div',{},[el('strong',{text:item.videoTitle}),el('div',{class:'console-muted',text:dateText(item.createdAt)}),reason,item.appealText?el('div',{class:'console-muted',text:'আপিল: '+item.appealText}):null]);
+          const content=el('div',{},[el('strong',{text:item.videoTitle}),el('div',{class:'console-muted',text:dateText(item.createdAt)}),reason,item.appealText?el('div',{class:'console-muted',text:'আপিল: '+item.appealText}):null,item.resolutionNote?el('div',{class:'console-notice',text:'সিদ্ধান্ত: '+item.resolutionNote}):null]);
           if(item.status==='active'){
             const appeal=el('textarea',{maxlength:'2000',rows:'2',placeholder:'আপিলের কারণ (কমপক্ষে ১০ অক্ষর)'});
             content.append(appeal,button('আপিল পাঠাও',async()=>{try{await ctx.jsonFetch('/api/creator/strikes/'+encodeURIComponent(item.id)+'/appeal',{method:'POST',body:{appeal:safeAppealText(appeal.value)}});ctx.notify('আপিল জমা হয়েছে।');await load();}catch(error){ctx.notify(error.message,'error');}},'console-small-button'));
@@ -100,100 +108,133 @@
     root.append(editor);await loadAssets();
   }
 
-  async function renderReports(root,ctx){
-    const status=select([['open','Open'],['reviewing','Reviewing'],['action_taken','Action taken'],['dismissed','Dismissed'],['all','All']],'open');
-    const list=el('div');
-    async function load(){
-      list.replaceChildren(empty('রিপোর্ট লোড হচ্ছে…'));
-      try{const data=await ctx.jsonFetch('/api/admin/reports?status='+encodeURIComponent(status.value));const reports=data.reports||[];list.replaceChildren();
-        if(!reports.length){list.append(empty('এই অবস্থায় কোনো report নেই।'));return;}
-        const rows=reports.map(report=>{
-          const targetLink=report.targetType==='video'?'/watch/'+encodeURIComponent(report.targetId):report.targetType==='channel'?'/channel/'+encodeURIComponent(report.targetId):null;
-          const target=targetLink?el('a',{href:targetLink,'data-route':'',text:report.targetLabel||report.targetId}):el('strong',{text:report.targetLabel||report.targetId});
-          const summary=el('div',{},[el('div',{class:'console-list-row'},[el('strong',{text:report.targetType+' · '+report.reasonCode}),statusBadge(report.status)]),target,el('p',{class:'console-muted',text:report.details}),el('span',{class:'console-muted',text:'Reporter @'+text(report.reporterHandle,'anonymous')+' · '+dateText(report.createdAt)}),report.resolution?el('p',{class:'console-notice',text:'Review note: '+report.resolution}):null]);
-          const resolution=el('textarea',{rows:'2',maxlength:'2000',placeholder:'Final action/dismissal-এর কারণ (কমপক্ষে ৫ অক্ষর)'});
-          const actions=el('div',{class:'console-form-actions'});
-          const update=async(next)=>{const note=resolution.value.trim();if(next!=='reviewing'&&note.length<5){ctx.notify('Decision-এর কারণ অন্তত ৫ অক্ষর লিখুন।','error');resolution.focus();return;}try{await ctx.jsonFetch('/api/admin/reports/'+encodeURIComponent(report.id)+'/status',{method:'POST',body:{status:next,resolution:note}});ctx.notify('Report status update হয়েছে।');await load();}catch(error){ctx.notify(error.message,'error');}};
-          if(report.status!=='reviewing')actions.append(button('Review শুরু',()=>update('reviewing')));
-          if(!['action_taken','dismissed'].includes(report.status))actions.append(button('Action taken',()=>update('action_taken')),button('Dismiss',()=>update('dismissed')));
-          return tr(cell(summary),cell(resolution,actions));
-        });
-        list.append(table(['Report','Review action'],rows));
-      }catch(error){list.replaceChildren(el('div',{class:'console-notice',text:error.message}));}
-    }
-    status.addEventListener('change',load);root.append(panel('Content reports','Admin/Moderator রিপোর্ট triage করবেন। Final decision-এর কারণ audit log-এ থাকবে।',el('div',{},[field('Status',status),list])));await load();
+  async function renderReviewQueue(root,ctx,initialType='all'){
+    const role=ctx.adminRole,q=el('input',{type:'search',placeholder:'Title, creator, report reason…',value:''});
+    const typeOptions=[['all','All pending'],['report','User reports']];
+    if(['owner','admin'].includes(role))typeOptions.push(['video_appeal','Video appeals'],['strike_appeal','Copyright-strike appeals']);
+    const type=select(typeOptions,initialType),reviewStatus=select([['all','All pending statuses'],['open','Open'],['reviewing','In review'],['pending','Appeal pending'],['appealed','Strike appealed']]),search=button('Apply filters',()=>{page=1;load();},'primary-cta'),list=el('div'),controls=el('div',{class:'console-form console-filter-bar'},[field('Review type',type),field('Status',reviewStatus),field('Search',q),el('div',{class:'console-form-actions'},[search])]);
+    let page=1,pages=1;
+    async function load(){list.replaceChildren(empty('Loading review queue…'));try{
+      const data=await ctx.jsonFetch('/api/admin/review-queue?type='+encodeURIComponent(type.value)+'&status='+encodeURIComponent(reviewStatus.value)+'&q='+encodeURIComponent(q.value.trim())+'&page='+page+'&limit=20');pages=Math.max(1,data.pages||1);page=data.page||page;
+      list.replaceChildren();
+      if(!data.items?.length){list.append(empty('No pending reviews match these filters.'));return;}
+      for(const item of data.items){
+        const kindLabel={report:'User report',video_appeal:'Video removal appeal',strike_appeal:'Copyright-strike appeal'}[item.type]||item.type;
+        const target=item.href?el('a',{href:item.href,'data-route':'',text:item.targetLabel||item.targetId}):el('strong',{text:item.targetLabel||item.targetId});
+        const meta=el('div',{class:'review-card-meta'},[badge(kindLabel,'warn'),statusBadge(item.status),el('span',{text:dateText(item.createdAt)}),item.actorHandle?el('span',{text:'@'+item.actorHandle}):null]);
+        const reasonText=item.type==='video_appeal'?'Video removal appeal':item.type==='strike_appeal'?'Copyright-strike appeal':item.reason;
+        const detail=el('p',{class:'console-review-detail',text:item.details||reasonText||'No additional details'});
+        const card=el('article',{class:'review-card'},[el('div',{class:'review-card-copy'},[meta,target,el('div',{class:'console-muted',text:item.reason||kindLabel}),detail])]);
+        const actions=el('div',{class:'review-card-actions'});
+        if(item.type==='report'){
+          const note=el('textarea',{rows:'2',maxlength:'2000',placeholder:'Decision reason (at least 5 characters)'});
+          const actOptions=[['none','Choose moderation action']];
+          if(item.targetType==='video')actOptions.push(['remove_video','Remove video'],['restore_video','Restore video'],['copyright_strike','Copyright strike + remove']);
+          if(item.targetType==='channel')actOptions.push(['suspend_channel','Suspend channel'],['ban_channel','Ban channel'],['unban_channel','Restore channel access']);
+          const action=select(actOptions,'none'),evidence=el('input',{type:'url',placeholder:'Evidence URL (HTTPS, optional)'});
+          evidence.hidden=true;action.addEventListener('change',()=>{evidence.hidden=action.value!=='copyright_strike';});
+          const decide=async(status)=>{if(note.value.trim().length<5){ctx.notify('Write a decision reason (at least 5 characters).','error');note.focus();return;}if(status==='action_taken'&&action.value==='none'){ctx.notify('Choose a moderation action before closing this report.','error');action.focus();return;}try{await ctx.jsonFetch('/api/admin/reports/'+encodeURIComponent(item.id)+'/status',{method:'POST',body:{status,resolution:note.value.trim(),action:status==='action_taken'?action.value:'none',evidenceUrl:evidence.value||undefined}});ctx.notify(status==='action_taken'?'Action applied and report resolved.':'Report decision saved.');await load();}catch(error){ctx.notify(error.message,'error');}};
+          actions.append(field('Moderation action',action),field('Reason',note));if(item.targetType==='video')actions.append(field('Evidence link',evidence));
+          const reportButtons=[button('Start review',()=>decide('reviewing'))];
+          if(item.targetType==='video'||item.targetType==='channel')reportButtons.push(button('Apply action & close',()=>decide('action_taken'),'primary-cta'));
+          reportButtons.push(button('Dismiss',()=>decide('dismissed'),'console-small-button'));
+          actions.append(el('div',{class:'console-form-actions'},reportButtons));
+        }else if(item.type==='video_appeal'){
+          const note=el('textarea',{rows:'2',maxlength:'1000',placeholder:'Decision reason (at least 5 characters)'});actions.append(field('Decision reason',note));
+          const decide=async(decision)=>{if(note.value.trim().length<5){ctx.notify('Write a decision reason (at least 5 characters).','error');note.focus();return;}try{await ctx.jsonFetch('/api/admin/appeals/'+encodeURIComponent(item.id)+'/decision',{method:'POST',body:{decision,note:note.value.trim()}});ctx.notify(decision==='approved'?'Appeal approved; video restored.':'Appeal rejected.');await load();}catch(error){ctx.notify(error.message,'error');}};
+          actions.append(el('div',{class:'console-form-actions'},[button('Approve & restore',()=>decide('approved'),'primary-cta'),button('Reject',()=>decide('rejected'),'console-small-button')]));
+        }else if(item.type==='strike_appeal'){
+          const note=el('textarea',{rows:'2',maxlength:'1000',placeholder:'Decision reason (at least 5 characters)'}),restore=el('input',{type:'checkbox',checked:true});
+          actions.append(field('Decision reason',note),field('Restore video if appeal is accepted',el('span',{class:'console-toggle'},[restore,el('span',{text:'Restore the removed video'})])));
+          const decide=async(decision)=>{if(note.value.trim().length<5){ctx.notify('Write a decision reason (at least 5 characters).','error');note.focus();return;}try{await ctx.jsonFetch('/api/admin/strikes/'+encodeURIComponent(item.id)+'/decision',{method:'POST',body:{decision,note:note.value.trim(),restoreVideo:decision==='dismissed'&&restore.checked}});ctx.notify(decision==='dismissed'?'Strike appeal accepted.':'Strike upheld.');await load();}catch(error){ctx.notify(error.message,'error');}};
+          actions.append(el('div',{class:'console-form-actions'},[button('Accept appeal',()=>decide('dismissed'),'primary-cta'),button('Uphold strike',()=>decide('upheld'),'console-small-button')]));
+        }
+        card.append(actions);list.append(card);
+      }
+      list.append(pager(page,pages,next=>{page=next;load();}));
+    }catch(error){list.replaceChildren(el('div',{class:'console-notice',text:error.message}));}}
+    type.addEventListener('change',()=>{page=1;reviewStatus.value='all';load();});reviewStatus.addEventListener('change',()=>{page=1;load();});q.addEventListener('keydown',event=>{if(event.key==='Enter'){page=1;load();}});
+    root.replaceChildren(panel('Review queue','One workspace for user reports and (for Admin/Owner) video and copyright-strike appeals.',el('div',{},[controls,list])));await load();
   }
 
-  async function renderAppeals(root,ctx){
-    const status=select([['pending','Pending'],['approved','Approved'],['rejected','Rejected'],['all','All']],'pending'),list=el('div');
-    async function load(){list.replaceChildren(empty('Appeals লোড হচ্ছে…'));try{const data=await ctx.jsonFetch('/api/admin/appeals?status='+encodeURIComponent(status.value));const appeals=data.appeals||[];list.replaceChildren();if(!appeals.length){list.append(empty('এই অবস্থায় appeal নেই।'));return;}
-      const rows=appeals.map(item=>{const note=el('textarea',{rows:'2',maxlength:'1000',placeholder:'Decision-এর কারণ (কমপক্ষে ৫ অক্ষর)'});const content=el('div',{},[el('strong',{text:item.title}),el('div',{class:'console-muted',text:'@'+text(item.handle,item.displayName)+' · '+dateText(item.createdAt)}),el('p',{text:item.appeal}),item.decisionNote?el('div',{class:'console-notice',text:'Decision note: '+item.decisionNote}):null]);const actions=el('div',{class:'console-form-actions'});if(item.status==='pending')for(const decision of ['approved','rejected'])actions.append(button(decision==='approved'?'Approve & restore':'Reject',async()=>{if(note.value.trim().length<5){ctx.notify('Decision-এর কারণ অন্তত ৫ অক্ষর লিখুন।','error');note.focus();return;}try{await ctx.jsonFetch('/api/admin/appeals/'+encodeURIComponent(item.id)+'/decision',{method:'POST',body:{decision,note:note.value.trim()}});ctx.notify(decision==='approved'?'Appeal মঞ্জুর; video পুনরায় active হয়েছে।':'Appeal rejected.');await load();}catch(error){ctx.notify(error.message,'error');}}));return tr(cell(content),cell(statusBadge(item.status),note,actions));});list.append(table(['Appeal','Decision'],rows));
-    }catch(error){list.replaceChildren(el('div',{class:'console-notice',text:error.message}));}}
-    status.addEventListener('change',load);root.append(panel('Removed-video appeals','Admin সিদ্ধান্তের কারণ audit trail-এ থাকবে। Approve করলে removed video পুনরায় active হবে।',el('div',{},[field('Status',status),list])));await load();
-  }
+  async function renderReports(root,ctx){return renderReviewQueue(root,ctx,'report');}
+  async function renderAppeals(root,ctx){return renderReviewQueue(root,ctx,'video_appeal');}
 
   async function renderAdmin(app,ctx,chosenTab) {
-    const queryTab=new URLSearchParams(location.search).get('tab');
-    const tabs=[['overview','Overview'],['ads','Ads'],['moderation','Moderation'],['reports','Reports'],['appeals','Appeals'],['staff','Admin roles'],['settings','Platform settings'],['audit','Audit log']];
-    const role=ctx.adminRole;
+    const queryTab=new URLSearchParams(location.search).get('tab'),role=ctx.adminRole;
     if(!role){app.replaceChildren(heading('ATHARO ADMIN','অনুমতি নেই','এই panel শুধু অনুমোদিত Admin/Moderator-এর জন্য।'));return;}
-    let activeTab=chosenTab||queryTab||'overview';
-    if((['ads','audit','appeals'].includes(activeTab)&&!['owner','admin'].includes(role))||(['staff','settings'].includes(activeTab)&&role!=='owner')||(activeTab==='reports'&&!['owner','admin','moderator'].includes(role))) activeTab='overview';
-    app.replaceChildren(heading('ATHARO ADMIN','Admin control panel','নিরাপদ staff roles, ads, monetization controls এবং creator/content moderation.'));
-    const nav=el('nav',{class:'console-tabs','aria-label':'Admin sections'});
-    tabs.forEach(([id,label])=>{if(id==='staff'&&role!=='owner')return;if(id==='settings'&&role!=='owner')return;if(['ads','audit','appeals'].includes(id)&&!['owner','admin'].includes(role))return;if(id==='reports'&&!['owner','admin','moderator'].includes(role))return;nav.append(el('button',{type:'button',class:'console-tab'+(activeTab===id?' active':''),text:label,onClick:()=>ctx.navigate('/admin?tab='+id)}));});
-    app.append(nav,el('div',{class:'console-notice',text:'Owner email server-side-এ যাচাই হয়। Moderation action-গুলো reversible record হিসেবে রাখা হয়; video remove করলে R2 file স্থায়ীভাবে মুছে যায় না।'}));
-    const content=el('div');app.append(content);
-    try {
-      if(activeTab==='overview') {
-        const [overview,audit]=await Promise.all([ctx.jsonFetch('/api/admin/overview'),ctx.jsonFetch('/api/admin/audit?limit=8').catch(()=>({events:[]}))]);
+    const tabs=[['queue','Review queue'],['overview','Overview'],['moderation','Content & users'],['ads','Campaigns'],['audit','Audit log'],['staff','Staff & roles'],['settings','Platform settings']];
+    let activeTab=chosenTab||queryTab||'queue';
+    if((['ads','audit'].includes(activeTab)&&!['owner','admin'].includes(role))||(['staff','settings'].includes(activeTab)&&role!=='owner'))activeTab='queue';
+    app.replaceChildren();app.classList.add('console-page','admin-shell');
+    const toolbar=el('div',{class:'admin-toolbar'},[el('div',{class:'admin-brand'},[el('span',{class:'admin-mark',text:'A'}),el('div',{},[el('strong',{text:'Atharo Admin'}),el('span',{text:'Trust & Safety workspace'})])]),el('div',{class:'admin-toolbar-actions'},[badge(role==='owner'?'Owner':role==='admin'?'Admin':'Moderator','good'),el('a',{href:'/', 'data-route':'',class:'admin-return-link',text:'← Return to Atharo'}),button('Sign out',async()=>{try{await ctx.jsonFetch('/auth/logout',{method:'POST',body:{}});location.assign('/');}catch(error){ctx.notify(error.message,'error');}},'console-small-button')])]);
+    const roleText=role==='moderator'?'You can triage reports and take moderation actions. Staff, platform settings, campaigns, audit logs and appeals are reserved for Admin/Owner.':role==='admin'?'You can manage campaigns, review reports and appeals, moderate content, and inspect the audit log. Owner controls staff access and platform-wide settings.':'Owner access: all admin, moderation, campaign and platform controls.';
+    app.append(toolbar,heading('TRUST & SAFETY',role==='moderator'?'Moderator workspace':'Admin workspace',roleText));
+    const nav=el('nav',{class:'console-tabs admin-tabs','aria-label':'Admin sections'});
+    tabs.forEach(([id,label])=>{if(['ads','audit'].includes(id)&&!['owner','admin'].includes(role))return;if(['staff','settings'].includes(id)&&role!=='owner')return;nav.append(el('button',{type:'button',class:'console-tab'+(activeTab===id?' active':''),text:label,onClick:()=>ctx.navigate('/admin?tab='+id)}));});
+    app.append(nav);
+    const content=el('div',{class:'admin-tab-content'});app.append(content);
+    try{
+      if(activeTab==='queue')await renderReviewQueue(content,ctx,'all');
+      else if(activeTab==='moderation')await renderModeration(content,ctx,role);
+      else if(activeTab==='ads')await renderAds(content,ctx,role);
+      else if(activeTab==='staff'&&role==='owner')await renderStaff(content,ctx);
+      else if(activeTab==='settings'&&role==='owner')await renderSettings(content,ctx);
+      else if(activeTab==='overview'){
+        const [overview,audit]=await Promise.all([ctx.jsonFetch('/api/admin/overview'),ctx.jsonFetch('/api/admin/audit?limit=8&page=1').catch(()=>({events:[]}))]);
         const c=overview.counts||{},a=overview.ads||{},s=overview.settings||{};
-        content.append(el('div',{class:'console-grid'},[stat('Accounts',num(c.users)),stat('Visible videos',num(c.videos)),stat('Open strikes',num(c.openStrikes)),stat('Active ad campaigns',num(c.activeCampaigns))]));
-        content.append(panel('Ads & monetization status','Public ads default-off; Owner Platform settings-এ চালু করতে হবে।',el('div',{class:'console-grid'},[stat('Ads',s.adsEnabled?'চালু':'বন্ধ'),stat('Monetization',s.monetizationEnabled?'চালু':'বন্ধ'),stat('Creator share',s.creatorSharePercent==null?'Set করা নেই':num(s.creatorSharePercent)+'%'),stat('Ad impressions',num(a.impressions))])));
+        const quick=el('div',{class:'admin-quick-actions'},[button('Open review queue',()=>ctx.navigate('/admin?tab=queue'),'primary-cta'),button('Find content or users',()=>ctx.navigate('/admin?tab=moderation'),'console-small-button')]);
+        const metrics=[stat('Pending reports',num(c.pendingReports),'Open + in review'),stat('Active accounts',num(c.activeAccounts),'Of '+num(c.users)+' total'),stat('Visible videos',num(c.videos)),stat('Open strikes',num(c.openStrikes)),stat('Suspended / banned',num(c.suspendedAccounts))];
+        if(['owner','admin'].includes(role))metrics.push(stat('Video appeals',num(c.pendingVideoAppeals),'Awaiting Admin review'),stat('Strike appeals',num(c.pendingStrikeAppeals),'Awaiting Admin review'),stat('Active campaigns',num(c.activeCampaigns)));
+        content.append(el('div',{class:'console-grid admin-metric-grid'},metrics),panel('Needs attention','Oldest pending reports and appeals are reviewed first in the queue.',quick));
+        if(['owner','admin'].includes(role)){
+          const range=select([['7','7 days'],['30','30 days'],['90','90 days']],'30'),chart=el('div',{class:'console-chart'}),summary=el('div',{class:'console-grid'},[stat('Ad impressions','…'),stat('Ad clicks','…'),stat('CTR','…'),stat('Estimated creator revenue','…','Estimate only; no payment system')]);
+          const analyticsPanel=panel('Campaign performance','Recorded impressions/clicks by day. This is analytics only, not advertiser billing or creator payout.',el('div',{},[field('Date range',range),summary,chart]));content.append(analyticsPanel);
+          const loadAnalytics=async()=>{try{const stats=await ctx.jsonFetch('/api/admin/ad-analytics?days='+range.value),t=stats.totals||{},n=Number(t.impressions)||0;summary.replaceChildren(stat('Ad impressions',num(t.impressions)),stat('Ad clicks',num(t.clicks)),stat('CTR',(n?(Number(t.clicks)||0)/n*100:0).toFixed(2)+'%'),stat('Estimated creator revenue',money(t.estimatedCreatorEarningsBdt),'Estimate only'));chart.replaceChildren();const points=(stats.daily||[]).slice(-14),max=Math.max(1,...points.map(x=>Number(x.impressions)||0));points.forEach(point=>{const bar=el('div',{class:'console-chart-bar'});bar.style.height=Math.max(3,Math.round((Number(point.impressions)||0)/max*88))+'px';bar.title=num(point.impressions)+' impressions · '+point.day;bar.append(el('span',{text:String(point.day).slice(5)}));chart.append(bar);});if(!points.length)chart.append(empty('No ad events in this date range.'));}catch(error){chart.replaceChildren(el('div',{class:'console-notice',text:error.message}));}};
+          range.addEventListener('change',loadAnalytics);await loadAnalytics();
+          content.append(panel('Platform controls','Advertising is off by default. Monetization metrics remain estimates; this repository has no payment or payout system.',el('div',{class:'console-grid'},[stat('Ad delivery',s.adsEnabled?'Enabled':'Off'),stat('Creator monetization',s.monetizationEnabled?'Enabled':'Off'),stat('Creator share',s.creatorSharePercent==null?'Not set':num(s.creatorSharePercent)+'%')])));
+        }
         const rows=(audit.events||[]).map(x=>tr(cell(el('strong',{text:x.action}),el('div',{class:'console-muted',text:x.reason||'—'})),cell(x.actorEmail),cell(dateText(x.createdAt)),cell(x.targetType+': '+text(x.targetId))));
-        content.append(panel('Recent admin actions','Audit trail-এ action, actor ও reason নথিভুক্ত হয়.',rows.length?table(['Action','Admin','Date','Target'],rows):empty('এখনো কোনো admin action নেই।')));
-      } else if(activeTab==='ads') await renderAds(content,ctx,role);
-      else if(activeTab==='moderation') await renderModeration(content,ctx,role);
-      else if(activeTab==='reports') await renderReports(content,ctx);
-      else if(activeTab==='appeals') await renderAppeals(content,ctx);
-      else if(activeTab==='staff'&&role==='owner') await renderStaff(content,ctx);
-      else if(activeTab==='settings'&&role==='owner') await renderSettings(content,ctx);
-      else if(activeTab==='audit') {
-        const data=await ctx.jsonFetch('/api/admin/audit?limit=100');
-        const rows=(data.events||[]).map(x=>tr(cell(el('strong',{text:x.action}),el('div',{class:'console-muted',text:x.reason||'—'})),cell(x.actorEmail+' · '+x.actorRole),cell(dateText(x.createdAt)),cell(x.targetType+': '+text(x.targetId)),cell(JSON.stringify(x.metadata||{}).slice(0,180))));
-        content.append(panel('Audit log','Sensitive admin changes traceable রাখা হয়.',rows.length?table(['Action','Actor','Date','Target','Details'],rows):empty('Audit event নেই।')));
+        content.append(panel('Recent admin actions','Every sensitive moderation and platform change is attributed and reasoned.',rows.length?table(['Action','Admin','Date','Target'],rows):empty('No admin actions recorded yet.')));
+      }else if(activeTab==='audit'){
+        let page=1,pages=1;const q=el('input',{type:'search',placeholder:'Search actor, action, target or reason'}),action=el('input',{type:'text',placeholder:'Exact action (optional)'}),from=el('input',{type:'date'}),to=el('input',{type:'date'}),list=el('div');
+        const load=async()=>{list.replaceChildren(empty('Loading audit records…'));try{const params=new URLSearchParams({page:String(page),limit:'50',q:q.value.trim(),action:action.value.trim(),from:from.value,to:to.value});const data=await ctx.jsonFetch('/api/admin/audit?'+params);pages=Math.max(1,data.pages||1);page=data.page||page;const rows=(data.events||[]).map(x=>tr(cell(el('strong',{text:x.action}),el('div',{class:'console-muted',text:x.reason||'—'})),cell(x.actorEmail+' · '+x.actorRole),cell(dateText(x.createdAt)),cell(x.targetType+': '+text(x.targetId)),cell(JSON.stringify(x.metadata||{}).slice(0,180))));list.replaceChildren(rows.length?table(['Action','Actor','Date','Target','Details'],rows):empty('No audit entries match these filters.'),pager(page,pages,n=>{page=n;load();}));}catch(error){list.replaceChildren(el('div',{class:'console-notice',text:error.message}));}};
+        const filters=el('div',{class:'console-form console-filter-bar'},[field('Search',q),field('Action',action),field('From',from),field('To',to),el('div',{class:'console-form-actions'},[button('Apply filters',()=>{page=1;load();},'primary-cta')])]);
+        [q,action].forEach(x=>x.addEventListener('keydown',e=>{if(e.key==='Enter'){page=1;load();}}));[from,to].forEach(x=>x.addEventListener('change',()=>{page=1;load();}));content.append(panel('Audit log','Filter by actor, action, date range or target. Sensitive changes remain traceable.',el('div',{},[filters,list])));await load();
       }
-    } catch(error) { content.append(el('div',{class:'console-notice',text:error.message})); }
+    }catch(error){content.append(el('div',{class:'console-notice',text:error.message}));}
   }
 
-  async function renderAds(root,ctx,role) {
-    root.replaceChildren();
-    const [campaignData,settings]=await Promise.all([ctx.jsonFetch('/api/admin/campaigns'),ctx.jsonFetch('/api/admin/settings').catch(()=>({}))]);
-    root.append(panel('Campaign controls','নতুন campaign default-ভাবে Paused থাকবে। কোনো বাইরের ad network বা payout provider এখানে সংযুক্ত নয়.',el('div',{class:'console-grid'},[stat('Ads delivery',settings.adsEnabled?'চালু':'বন্ধ'),stat('Creator monetization',settings.monetizationEnabled?'চালু':'বন্ধ'),stat('Creator share',settings.creatorSharePercent==null?'Set করা নেই':num(settings.creatorSharePercent)+'%'),stat('Campaigns',num((campaignData.campaigns||[]).length))])));
-    const title=el('input',{type:'text',maxlength:'120',required:'',placeholder:'যেমন: Brand campaign'});
-    const sponsor=el('input',{type:'text',maxlength:'120',required:'',placeholder:'Sponsor name'});
-    const placement=select([['feed','Home feed native card · 16:9'],['watch_sidebar','Watch page sidebar · 4:3'],['channel','Creator channel sponsor · 16:9'],['sticky_banner','Sticky banner · 3:1'],['postroll','Post-roll sponsor · 16:9'],['l_banner','L-shape squeeze-back · 4:3 creative']]);
-    const creative=el('input',{type:'url',required:'',placeholder:'HTTPS image URL'});
-    const destination=el('input',{type:'url',required:'',placeholder:'https://sponsor.example'});
-    const cpm=el('input',{type:'number',min:'0',max:'1000000',step:'0.01',value:'0',required:''});
-    const starts=el('input',{type:'datetime-local'}),ends=el('input',{type:'datetime-local'});
-    const form=el('form',{class:'console-form'},[field('Campaign title',title),field('Sponsor',sponsor),field('Placement',placement),field('CPM (BDT / 1,000 impressions)',cpm),field('Creative image URL (HTTPS)',creative,'span-2'),el('div',{class:'console-notice span-2',text:'Creative ratio: Feed / Channel / Post-roll = 16:9 (যেমন 1280×720), Watch sidebar = 4:3 (যেমন 800×600), Sticky banner = 3:1 (যেমন 1200×400), L-shape = সাধারণ 4:3 image (যেমন 800×600)—system নিজে L layout করবে। URL-এ সেই ratio-এর image দিন।'}),field('Landing page URL (HTTPS)',destination,'span-2'),field('Start (optional)',starts),field('End (optional)',ends),el('div',{class:'console-form-actions'},[el('button',{type:'submit',class:'primary-cta',text:'Paused campaign তৈরি করো'})])]);
-    form.addEventListener('submit',async event=>{event.preventDefault();const submit=form.querySelector('[type="submit"]');submit.disabled=true;try{await ctx.jsonFetch('/api/admin/campaigns',{method:'POST',body:{title:title.value,sponsorName:sponsor.value,placement:placement.value,creativeUrl:creative.value,destinationUrl:destination.value,cpmBdt:Number(cpm.value),startsAt:starts.value?new Date(starts.value).toISOString():null,endsAt:ends.value?new Date(ends.value).toISOString():null}});ctx.notify('Campaign তৈরি হয়েছে—এখন Paused.');await renderAds(root,ctx,role);}catch(error){ctx.notify(error.message,'error');}finally{submit.disabled=false;}});
-    root.append(panel('নতুন campaign','শুধু HTTPS URL গ্রহণ করা হয়. Campaign activate এবং global ads enable না করা পর্যন্ত visitors-কে ads দেখানো হবে না.',form));
-    const rows=(campaignData.campaigns||[]).map(c=>tr(cell(el('strong',{text:c.title}),el('div',{class:'console-muted',text:c.sponsorName+' · '+({feed:'Feed · 16:9',watch_sidebar:'Watch sidebar · 4:3',channel:'Channel · 16:9',sticky_banner:'Sticky banner · 3:1',postroll:'Post-roll · 16:9',l_banner:'L-shape · 4:3'}[c.placement]||c.placement)})),cell(statusBadge(c.status)),cell(num(c.impressions)),cell(num(c.clicks)),cell(money(c.cpmBdt)+' CPM'),cell(el('div',{class:'console-actions'},[button(c.status==='active'?'Pause':'Activate',async()=>{try{await ctx.jsonFetch('/api/admin/campaigns/'+encodeURIComponent(c.id)+'/status',{method:'PATCH',body:{status:c.status==='active'?'paused':'active'}});ctx.notify('Campaign status update হয়েছে।');await renderAds(root,ctx,role);}catch(error){ctx.notify(error.message,'error');}})]))));
-    root.append(panel('Campaign list','CPM এবং creator revenue estimate-এর হিসাব কোনো confirmed advertiser payment নয়.',rows.length?table(['Campaign','Status','Impressions','Clicks','Rate','Action'],rows):empty('এখনো campaign নেই।')));
+  async function renderAds(root,ctx,role){
+    root.replaceChildren();let campaignPage=1,campaignPages=1,editingId=null;
+    const range=select([['7','7 days'],['30','30 days'],['90','90 days']],'30'),analytics=el('div',{class:'console-grid'},[stat('Impressions','…'),stat('Clicks','…'),stat('CTR','…'),stat('Estimated creator revenue','…','Estimate only')]),chart=el('div',{class:'console-chart'}),placementRows=el('div');
+    const analyticsPanel=panel('Campaign performance','Performance is estimated from recorded events; this is not advertiser billing or creator payout.',el('div',{},[field('Date range',range),analytics,chart,placementRows]));root.append(analyticsPanel);
+    async function loadAnalytics(){try{const data=await ctx.jsonFetch('/api/admin/ad-analytics?days='+range.value),t=data.totals||{},n=Number(t.impressions)||0;analytics.replaceChildren(stat('Impressions',num(t.impressions)),stat('Clicks',num(t.clicks)),stat('CTR',(n?(Number(t.clicks)||0)/n*100:0).toFixed(2)+'%'),stat('Estimated creator revenue',money(t.estimatedCreatorEarningsBdt),'Estimate only'));chart.replaceChildren();const points=(data.daily||[]).slice(-14),max=Math.max(1,...points.map(x=>Number(x.impressions)||0));points.forEach(point=>{const bar=el('div',{class:'console-chart-bar'});bar.style.height=Math.max(3,Math.round((Number(point.impressions)||0)/max*88))+'px';bar.title=num(point.impressions)+' impressions · '+num(point.clicks)+' clicks · '+point.day;bar.append(el('span',{text:String(point.day).slice(5)}));chart.append(bar);});if(!points.length)chart.append(empty('No event data in this range.'));const rows=(data.placements||[]).map(x=>tr(cell(x.placement),cell(num(x.impressions)),cell(num(x.clicks)),cell(x.ctr.toFixed(2)+'%')));placementRows.replaceChildren(rows.length?table(['Placement','Impressions','Clicks','CTR'],rows):empty('No placement data.'));}catch(error){chart.replaceChildren(el('div',{class:'console-notice',text:error.message}));}}
+    range.addEventListener('change',loadAnalytics);await loadAnalytics();
+    const campaignSearch=el('input',{type:'search',placeholder:'Campaign title or sponsor'}),campaignStatus=select([['all','All statuses'],['draft','Draft'],['active','Active'],['paused','Paused']]);
+    const title=el('input',{type:'text',maxlength:'120',required:'',placeholder:'For example: Brand campaign'}),sponsor=el('input',{type:'text',maxlength:'120',required:'',placeholder:'Sponsor name'}),placement=select([['feed','Home feed native card · 16:9'],['watch_sidebar','Watch page sidebar · 4:3'],['channel','Creator channel sponsor · 16:9'],['sticky_banner','Sticky banner · 3:1'],['postroll','Post-roll sponsor · 16:9'],['l_banner','L-shape squeeze-back · 4:3']]),creative=el('input',{type:'url',required:'',placeholder:'HTTPS creative image URL'}),destination=el('input',{type:'url',required:'',placeholder:'HTTPS landing page URL'}),cpm=el('input',{type:'number',min:'0',max:'1000000',step:'0.01',value:'0',required:''}),starts=el('input',{type:'datetime-local'}),ends=el('input',{type:'datetime-local'}),previewImage=el('img',{alt:'Campaign creative preview',class:'campaign-preview-image'}),previewLink=el('a',{target:'_blank',rel:'noopener noreferrer',class:'campaign-preview-link',text:'Open landing page preview'}),preview=el('div',{class:'campaign-preview'},[previewImage,previewLink]);
+    const syncPreview=()=>{previewImage.src=creative.value.trim();previewImage.hidden=!creative.value.trim();previewLink.href=destination.value.trim()||'#';previewLink.hidden=!destination.value.trim();preview.classList.toggle('campaign-preview-empty',!creative.value.trim());preview.dataset.placement=placement.value;};creative.addEventListener('input',syncPreview);destination.addEventListener('input',syncPreview);placement.addEventListener('change',syncPreview);
+    const submit=el('button',{type:'submit',class:'primary-cta',text:'Create paused campaign'}),cancel=button('Cancel edit',()=>{editingId=null;form.reset();starts.value='';ends.value='';cpm.value='0';submit.textContent='Create paused campaign';cancel.hidden=true;syncPreview();},'console-small-button');cancel.hidden=true;
+    const form=el('form',{class:'console-form'},[field('Campaign title',title),field('Sponsor',sponsor),field('Placement',placement),field('CPM (BDT / 1,000 impressions)',cpm),field('Creative image URL (HTTPS)',creative,'span-2'),field('Landing page URL (HTTPS)',destination,'span-2'),field('Start (optional)',starts),field('End (optional)',ends),field('Creative preview',preview,'span-2'),el('div',{class:'console-notice span-2',text:'Ads stay off unless an Owner enables delivery. Campaign creation starts paused. No advertiser billing or creator payout is implemented.'}),el('div',{class:'console-form-actions'},[submit,cancel])]);
+    syncPreview();
+    form.addEventListener('submit',async event=>{event.preventDefault();submit.disabled=true;const payload={title:title.value,sponsorName:sponsor.value,placement:placement.value,creativeUrl:creative.value,destinationUrl:destination.value,cpmBdt:Number(cpm.value),startsAt:starts.value?new Date(starts.value).toISOString():null,endsAt:ends.value?new Date(ends.value).toISOString():null};try{await ctx.jsonFetch(editingId?'/api/admin/campaigns/'+encodeURIComponent(editingId):'/api/admin/campaigns',{method:editingId?'PUT':'POST',body:payload});ctx.notify(editingId?'Campaign details saved.':'Campaign created in paused state.');editingId=null;form.reset();starts.value='';ends.value='';cpm.value='0';submit.textContent='Create paused campaign';cancel.hidden=true;syncPreview();await loadCampaigns();}catch(error){ctx.notify(error.message,'error');}finally{submit.disabled=false;}});
+    root.append(panel('Campaign editor','Create paused campaigns, preview creative and landing URL, or edit campaign details.',form));
+    const results=el('div');const loadCampaigns=async()=>{results.replaceChildren(empty('Loading campaigns…'));try{const params=new URLSearchParams({page:String(campaignPage),limit:'20',status:campaignStatus.value,q:campaignSearch.value.trim()});const data=await ctx.jsonFetch('/api/admin/campaigns?'+params);campaignPages=Math.max(1,data.pages||1);campaignPage=data.page||campaignPage;const rows=(data.campaigns||[]).map(c=>tr(cell(el('strong',{text:c.title}),el('div',{class:'console-muted',text:c.sponsorName+' · '+c.placement}),el('a',{href:c.destinationUrl,target:'_blank',rel:'noopener noreferrer',text:'Preview landing page'})),cell(statusBadge(c.status)),cell(num(c.impressions)),cell(num(c.clicks)),cell((c.impressions?(c.clicks/c.impressions*100):0).toFixed(2)+'%'),cell(money(c.cpmBdt)+' CPM'),cell(el('div',{class:'console-actions'},[button('Edit',()=>{editingId=c.id;title.value=c.title;sponsor.value=c.sponsorName;placement.value=c.placement;creative.value=c.creativeUrl;destination.value=c.destinationUrl;cpm.value=c.cpmBdt;starts.value=asLocalDateTime(c.startsAt);ends.value=asLocalDateTime(c.endsAt);submit.textContent='Save campaign changes';cancel.hidden=false;syncPreview();form.scrollIntoView({behavior:'smooth',block:'start'});},'console-small-button'),button(c.status==='active'?'Pause':'Activate',async()=>{try{await ctx.jsonFetch('/api/admin/campaigns/'+encodeURIComponent(c.id)+'/status',{method:'PATCH',body:{status:c.status==='active'?'paused':'active'}});ctx.notify('Campaign status updated.');await loadCampaigns();}catch(error){ctx.notify(error.message,'error');}})]))));results.replaceChildren(rows.length?table(['Campaign','Status','Impressions','Clicks','CTR','Rate','Actions'],rows):empty('No campaigns match these filters.'),pager(campaignPage,campaignPages,next=>{campaignPage=next;loadCampaigns();}));}catch(error){results.replaceChildren(el('div',{class:'console-notice',text:error.message}));}};
+    const filters=el('div',{class:'console-form console-filter-bar'},[field('Search',campaignSearch),field('Status',campaignStatus),el('div',{class:'console-form-actions'},[button('Apply filters',()=>{campaignPage=1;loadCampaigns();},'primary-cta')])]);campaignSearch.addEventListener('keydown',e=>{if(e.key==='Enter'){campaignPage=1;loadCampaigns();}});campaignStatus.addEventListener('change',()=>{campaignPage=1;loadCampaigns();});root.append(panel('Campaign library','Filter and page through campaigns. CTR is clicks ÷ impressions; rates are not confirmed revenue.',el('div',{},[filters,results])));await loadCampaigns();
   }
 
   async function renderModeration(root,ctx,role) {
-    const q=el('input',{type:'search',placeholder:'ভিডিও title, channel বা email খুঁজুন'});
-    const searchButton=el('button',{type:'button',class:'primary-cta',text:'খুঁজুন'});
-    const searchBar=el('div',{class:'console-form'},[field('Search',q,'span-2'),el('div',{class:'console-form-actions'},[searchButton])]);
-    root.append(panel('Content & channel search','Video takedown/restore reversible; copyright strike creator dashboard-এ দেখা যাবে; ban/suspend user actions বন্ধ করবে.',searchBar));
+    const q=el('input',{type:'search',placeholder:'ভিডিও title, channel বা email খুঁজুন'}),status=select([['all','All statuses'],['active','Active'],['removed','Removed videos'],['suspended','Suspended accounts'],['banned','Banned accounts']]);
+    const searchButton=el('button',{type:'button',class:'primary-cta',text:'Apply filters'});let page=1,pages=1;
+    const searchBar=el('div',{class:'console-form console-filter-bar'},[field('Search',q),field('Status',status),el('div',{class:'console-form-actions'},[searchButton])]);
+    root.append(panel('Content & channel search','Reversible takedowns, account restrictions and copyright actions. Search and status filters are paged.',searchBar));
     const targetPanel=el('div');root.append(targetPanel);
     async function loadContent() {
       try {
-        const data=await ctx.jsonFetch('/api/admin/content?q='+encodeURIComponent(q.value.trim()));
-        targetPanel.replaceChildren();
+        const params=new URLSearchParams({q:q.value.trim(),status:status.value,page:String(page),limit:'50'});
+        const data=await ctx.jsonFetch('/api/admin/content?'+params);
+        const videoPages=Math.ceil((data.totals?.videos||0)/data.limit),channelPages=Math.ceil((data.totals?.channels||0)/data.limit),strikePages=Math.ceil((data.totals?.strikes||0)/data.limit);pages=Math.max(1,videoPages,channelPages,strikePages);
+        page=data.page||page;targetPanel.replaceChildren(el('div',{class:'console-results-summary',text:`Page ${page} · ${num(data.totals?.videos||0)} matching videos · ${num(data.totals?.channels||0)} matching channels · ${num(data.totals?.strikes||0)} strikes`}));
         const videoOptions=[['','— Video বেছে নিন —'],...(data.videos||[]).map(v=>[v.id,(v.title||v.id)+' · '+(v.handle?'@'+v.handle:'no channel')+' · '+(v.moderationStatus||'active')])];
         const channelOptions=[['','— Channel বেছে নিন —'],...(data.channels||[]).map(c=>[c.userSub,(c.displayName||c.handle||c.email)+' · '+(c.handle?'@'+c.handle:'no handle')+' · '+c.status])];
         const strikeOptions=[['','— Strike বেছে নিন —'],...(data.strikes||[]).filter(s=>['active','appealed'].includes(s.status)).map(s=>[s.id,(s.videoTitle||s.id)+' · '+(s.handle?'@'+s.handle:'channel')+' · '+s.status])];
@@ -213,10 +254,11 @@
           targetPanel.append(panel('Creator monetization approval','Owner-only. Approval চালু করলেই payout তৈরি হয় না; platform monetization settings-ও enable থাকতে হবে.',rows.length?table(['Creator','Channel status','Monetization','Update'],rows):empty('Creator নেই।')));
         }
         const strikeRows=(data.strikes||[]).map(s=>tr(cell(el('strong',{text:s.videoTitle||'Video removed'}),el('div',{class:'console-muted',text:(s.displayName||s.handle||s.channelSub||'Channel')+' · '+dateText(s.createdAt)}),el('div',{class:'console-muted',text:s.reason})),cell(statusBadge(s.status))));
-        targetPanel.append(panel('Copyright strike records','Appealed notices এখানে status-সহ review করা যায়।',strikeRows.length?table(['Notice','Status'],strikeRows):empty('Strike record নেই।')));
+        targetPanel.append(panel('Copyright strike records','Appealed copyright strikes can be decided in the Review queue.',strikeRows.length?table(['Notice','Status'],strikeRows):empty('No strike records on this page.')));
+        targetPanel.append(pager(page,pages,next=>{page=next;loadContent();}));
       } catch(error) {targetPanel.replaceChildren(el('div',{class:'console-notice',text:error.message}));}
     }
-    searchButton.addEventListener('click',loadContent);q.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();loadContent();}});
+    searchButton.addEventListener('click',()=>{page=1;loadContent();});status.addEventListener('change',()=>{page=1;loadContent();});q.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();page=1;loadContent();}});
     await loadContent();
   }
 

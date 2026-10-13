@@ -182,9 +182,9 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
 
   app.get('/api/creator/strikes', requireAuth, async (req, res, next) => {
     try {
-      const result = await pool.query(`SELECT s.id,s.video_id,v.title AS video_title,s.reason,s.evidence_url,s.status,s.appeal_text,s.created_at,s.appealed_at,s.resolved_at,s.resolved_by_email
+      const result = await pool.query(`SELECT s.id,s.video_id,v.title AS video_title,s.reason,s.evidence_url,s.status,s.appeal_text,s.resolution_note,s.created_at,s.appealed_at,s.resolved_at,s.resolved_by_email
         FROM copyright_strikes s LEFT JOIN videos v ON v.id=s.video_id WHERE s.channel_sub=$1 ORDER BY s.created_at DESC LIMIT 100`, [req.auth.session.sub]);
-      res.json({ strikes: result.rows.map(row => ({ id: row.id, videoId: row.video_id, videoTitle: row.video_title || 'ভিডিও আর উপলভ্য নয়', reason: row.reason, evidenceUrl: row.evidence_url, status: row.status, appealText: row.appeal_text, createdAt: row.created_at, appealedAt: row.appealed_at, resolvedAt: row.resolved_at, resolvedByEmail: row.resolved_by_email })) });
+      res.json({ strikes: result.rows.map(row => ({ id: row.id, videoId: row.video_id, videoTitle: row.video_title || 'ভিডিও আর উপলভ্য নয়', reason: row.reason, evidenceUrl: row.evidence_url, status: row.status, appealText: row.appeal_text, resolutionNote: row.resolution_note, createdAt: row.created_at, appealedAt: row.appealed_at, resolvedAt: row.resolved_at, resolvedByEmail: row.resolved_by_email })) });
     } catch (error) { next(error); }
   });
 
@@ -202,40 +202,84 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
 
   app.get('/api/admin/overview', adminAuth('admin','moderator'), async (req, res, next) => {
     try {
-      const [users,videos,channels,strikes,campaigns,adStats,settings] = await Promise.all([
+      const [users,videos,channels,strikes,campaigns,adStats,settings,reports,appeals,strikeAppeals,suspended] = await Promise.all([
         pool.query('SELECT COUNT(*)::bigint AS n FROM app_users'),
         pool.query("SELECT COUNT(*)::bigint AS n FROM videos WHERE moderation_status='active'"),
         pool.query("SELECT COUNT(*)::bigint AS n FROM app_users WHERE account_status='active'"),
         pool.query("SELECT COUNT(*)::bigint AS n FROM copyright_strikes WHERE status IN ('active','appealed')"),
         pool.query("SELECT COUNT(*)::bigint AS n FROM ad_campaigns WHERE status='active' AND (starts_at IS NULL OR starts_at<=NOW()) AND (ends_at IS NULL OR ends_at>NOW())"),
         pool.query(`SELECT COUNT(*) FILTER (WHERE event_type='impression')::bigint AS impressions,COUNT(*) FILTER (WHERE event_type='click')::bigint AS clicks,
-          COALESCE(SUM(estimated_creator_earnings_bdt),0)::numeric(14,4) AS creator_estimate FROM ad_events`),
-        pool.query('SELECT ads_enabled,monetization_enabled,creator_share_percent FROM platform_settings WHERE id=1')
+          COALESCE(SUM(estimated_creator_earnings_bdt),0)::numeric(14,4) AS creator_estimate FROM ad_events WHERE created_at>=NOW()-INTERVAL '30 days'`),
+        pool.query('SELECT ads_enabled,monetization_enabled,creator_share_percent FROM platform_settings WHERE id=1'),
+        pool.query("SELECT COUNT(*)::bigint AS n FROM content_reports WHERE status IN ('open','reviewing')"),
+        pool.query("SELECT COUNT(*)::bigint AS n FROM moderation_appeals WHERE status='pending'"),
+        pool.query("SELECT COUNT(*)::bigint AS n FROM copyright_strikes WHERE status='appealed'"),
+        pool.query("SELECT COUNT(*)::bigint AS n FROM app_users WHERE account_status IN ('suspended','banned')")
       ]);
       const s = settings.rows[0] || {}; const ads = adStats.rows[0] || {};
-      res.json({ counts: { users: Number(users.rows[0].n), videos: Number(videos.rows[0].n), activeAccounts: Number(channels.rows[0].n), openStrikes: Number(strikes.rows[0].n), activeCampaigns: Number(campaigns.rows[0].n) }, ads: { impressions: Number(ads.impressions), clicks: Number(ads.clicks), estimatedCreatorEarningsBdt: Number(ads.creator_estimate) }, settings: { adsEnabled: s.ads_enabled, monetizationEnabled: s.monetization_enabled, creatorSharePercent: s.creator_share_percent === null ? null : Number(s.creator_share_percent) } });
+      res.json({ counts: { users: Number(users.rows[0].n), videos: Number(videos.rows[0].n), activeAccounts: Number(channels.rows[0].n), openStrikes: Number(strikes.rows[0].n), activeCampaigns: Number(campaigns.rows[0].n), pendingReports:Number(reports.rows[0].n), pendingVideoAppeals:Number(appeals.rows[0].n), pendingStrikeAppeals:Number(strikeAppeals.rows[0].n), suspendedAccounts:Number(suspended.rows[0].n) }, ads: { impressions: Number(ads.impressions), clicks: Number(ads.clicks), estimatedCreatorEarningsBdt: Number(ads.creator_estimate) }, settings: { adsEnabled: s.ads_enabled, monetizationEnabled: s.monetization_enabled, creatorSharePercent: s.creator_share_percent === null ? null : Number(s.creator_share_percent) } });
     } catch (error) { next(error); }
+  });
+
+  app.get('/api/admin/review-queue', adminAuth('admin','moderator'), async (req,res,next)=>{
+    try{
+      const type=['all','report','video_appeal','strike_appeal'].includes(String(req.query.type||''))?String(req.query.type):'all';
+      const reviewStatus=['all','open','reviewing','pending','appealed'].includes(String(req.query.status||''))?String(req.query.status):'all';
+      const q=clean(req.query.q,120), pattern='%'+q.replace(/[\\%_]/g,'\\$&')+'%';
+      const page=Math.max(1,Number.parseInt(req.query.page||'1',10)||1), limit=Math.min(50,Math.max(5,Number.parseInt(req.query.limit||'20',10)||20)), offset=(page-1)*limit;
+      const sql=`SELECT * FROM (
+        SELECT 'report'::text AS item_type,r.id::text AS id,r.target_type AS target_type,r.target_id AS target_id,
+          COALESCE(v.title,p.display_name,LEFT(c.body,160),r.target_id) AS target_label,r.reason_code AS reason,
+          r.details AS details,r.status AS status,r.created_at AS created_at,rp.handle AS actor_handle,
+          CASE WHEN r.target_type='video' THEN '/watch/'||r.target_id WHEN r.target_type='channel' THEN '/channel/'||COALESCE(p.handle,r.target_id) ELSE NULL END AS href
+        FROM content_reports r LEFT JOIN videos v ON v.id=r.video_id LEFT JOIN app_users u ON u.google_sub=r.channel_sub
+        LEFT JOIN profiles p ON p.sub=u.google_sub LEFT JOIN comments c ON c.id=r.comment_id LEFT JOIN profiles rp ON rp.sub=r.reporter_sub
+        WHERE r.status IN ('open','reviewing') AND ($1 IN ('all','report')) AND ($4='all' OR r.status=$4) AND (COALESCE(v.title,p.display_name,LEFT(c.body,160),r.target_id) ILIKE $2 OR r.reason_code ILIKE $2 OR r.details ILIKE $2 OR COALESCE(rp.handle,'') ILIKE $2)
+        UNION ALL
+        SELECT 'video_appeal',a.id::text,'video',a.video_id,COALESCE(v.title,'Removed video'),'video_appeal',a.appeal_text,a.status,a.created_at,p.handle,'/watch/'||a.video_id
+        FROM moderation_appeals a LEFT JOIN videos v ON v.id=a.video_id LEFT JOIN profiles p ON p.sub=a.appellant_sub
+        WHERE $3 AND a.status='pending' AND ($1 IN ('all','video_appeal')) AND ($4='all' OR a.status=$4) AND (COALESCE(v.title,'') ILIKE $2 OR a.appeal_text ILIKE $2 OR COALESCE(p.handle,'') ILIKE $2)
+        UNION ALL
+        SELECT 'strike_appeal',s.id::text,'video',s.video_id,COALESCE(v.title,'Removed video'),'copyright_strike_appeal',
+          'Appeal: '||COALESCE(s.appeal_text,'')||E'\nOriginal reason: '||s.reason,s.status,s.appealed_at,p.handle,'/watch/'||s.video_id
+        FROM copyright_strikes s LEFT JOIN videos v ON v.id=s.video_id LEFT JOIN profiles p ON p.sub=s.channel_sub
+        WHERE $3 AND s.status='appealed' AND ($1 IN ('all','strike_appeal')) AND ($4='all' OR s.status=$4) AND (COALESCE(v.title,'') ILIKE $2 OR COALESCE(s.appeal_text,'') ILIKE $2 OR s.reason ILIKE $2 OR COALESCE(p.handle,'') ILIKE $2)
+      ) q ORDER BY created_at ASC LIMIT $5 OFFSET $6`;
+      const countSql=`SELECT COUNT(*)::bigint AS total FROM (
+        SELECT r.id FROM content_reports r LEFT JOIN videos v ON v.id=r.video_id LEFT JOIN app_users u ON u.google_sub=r.channel_sub LEFT JOIN profiles p ON p.sub=u.google_sub LEFT JOIN comments c ON c.id=r.comment_id LEFT JOIN profiles rp ON rp.sub=r.reporter_sub WHERE r.status IN ('open','reviewing') AND ($1 IN ('all','report')) AND ($4='all' OR r.status=$4) AND (COALESCE(v.title,p.display_name,LEFT(c.body,160),r.target_id) ILIKE $2 OR r.reason_code ILIKE $2 OR r.details ILIKE $2 OR COALESCE(rp.handle,'') ILIKE $2)
+        UNION ALL SELECT a.id FROM moderation_appeals a LEFT JOIN videos v ON v.id=a.video_id LEFT JOIN profiles p ON p.sub=a.appellant_sub WHERE $3 AND a.status='pending' AND ($1 IN ('all','video_appeal')) AND ($4='all' OR a.status=$4) AND (COALESCE(v.title,'') ILIKE $2 OR a.appeal_text ILIKE $2 OR COALESCE(p.handle,'') ILIKE $2)
+        UNION ALL SELECT s.id FROM copyright_strikes s LEFT JOIN videos v ON v.id=s.video_id LEFT JOIN profiles p ON p.sub=s.channel_sub WHERE $3 AND s.status='appealed' AND ($1 IN ('all','strike_appeal')) AND ($4='all' OR s.status=$4) AND (COALESCE(v.title,'') ILIKE $2 OR COALESCE(s.appeal_text,'') ILIKE $2 OR s.reason ILIKE $2 OR COALESCE(p.handle,'') ILIKE $2)
+      ) q`;
+      const canReviewAppeals=['owner','admin'].includes(req.admin.role);
+      const [items,total]=await Promise.all([pool.query(sql,[type,pattern,canReviewAppeals,reviewStatus,limit,offset]),pool.query(countSql,[type,pattern,canReviewAppeals,reviewStatus])]);
+      res.json({items:items.rows.map(r=>({type:r.item_type,id:r.id,targetType:r.target_type,targetId:r.target_id,targetLabel:r.target_label,reason:r.reason,details:r.details,status:r.status,createdAt:r.created_at,actorHandle:r.actor_handle||null,href:r.href})),page,limit,total:Number(total.rows[0]?.total||0),pages:Math.ceil(Number(total.rows[0]?.total||0)/limit)});
+    }catch(error){next(error);}
   });
 
   app.get('/api/admin/content', adminAuth('admin','moderator'), async (req, res, next) => {
     try {
       const q = clean(req.query.q, 100);
       const pattern = `%${q.replace(/[\\%_]/g, '\\$&')}%`;
-      const [videos,channels,strikes] = await Promise.all([
+      const page=Math.max(1,Number.parseInt(req.query.page||'1',10)||1),limit=Math.min(100,Math.max(10,Number.parseInt(req.query.limit||'50',10)||50)),offset=(page-1)*limit;
+      const status=['all','active','removed','suspended','banned'].includes(String(req.query.status||''))?String(req.query.status):'all';
+      const [videos,channels,strikes,videoCount,channelCount,strikeCount] = await Promise.all([
         pool.query(`SELECT v.id,v.title,v.visibility,v.moderation_status,v.owner_sub,v.created_at,p.handle,p.display_name
           FROM videos v LEFT JOIN profiles p ON p.sub=v.owner_sub
-          WHERE $1='' OR v.title ILIKE $2 OR p.handle ILIKE $2 OR p.display_name ILIKE $2
-          ORDER BY v.created_at DESC LIMIT 100`, [q,pattern]),
+          WHERE ($1='' OR v.title ILIKE $2 OR p.handle ILIKE $2 OR p.display_name ILIKE $2) AND ($3='all' OR v.moderation_status=$3)
+          ORDER BY v.created_at DESC LIMIT $4 OFFSET $5`, [q,pattern,status,limit,offset]),
         pool.query(`SELECT u.google_sub,u.email,u.account_status,u.created_at,p.handle,p.display_name,p.monetization_status,
             (SELECT COUNT(*) FROM videos v WHERE v.owner_sub=u.google_sub) AS videos_count
           FROM app_users u LEFT JOIN profiles p ON p.sub=u.google_sub
-          WHERE $1='' OR ($3::boolean AND u.email ILIKE $2) OR p.handle ILIKE $2 OR p.display_name ILIKE $2
-          ORDER BY u.created_at DESC LIMIT 100`, [q,pattern,req.admin.role!=='moderator']),
+          WHERE ($1='' OR ($3::boolean AND u.email ILIKE $2) OR p.handle ILIKE $2 OR p.display_name ILIKE $2)
+            AND ($4='all' OR u.account_status=$4) ORDER BY u.created_at DESC LIMIT $5 OFFSET $6`, [q,pattern,req.admin.role!=='moderator',status,limit,offset]),
         pool.query(`SELECT s.id,s.video_id,s.channel_sub,s.reason,s.status,s.created_at,p.handle,p.display_name,v.title
           FROM copyright_strikes s LEFT JOIN profiles p ON p.sub=s.channel_sub LEFT JOIN videos v ON v.id=s.video_id
-          ORDER BY s.created_at DESC LIMIT 100`)
+          WHERE ($1='' OR v.title ILIKE $2 OR p.handle ILIKE $2 OR s.reason ILIKE $2) ORDER BY s.created_at DESC LIMIT $3 OFFSET $4`, [q,pattern,limit,offset]),
+        pool.query(`SELECT COUNT(*)::bigint AS n FROM videos v LEFT JOIN profiles p ON p.sub=v.owner_sub WHERE ($1='' OR v.title ILIKE $2 OR p.handle ILIKE $2 OR p.display_name ILIKE $2) AND ($3='all' OR v.moderation_status=$3)`,[q,pattern,status]),
+        pool.query(`SELECT COUNT(*)::bigint AS n FROM app_users u LEFT JOIN profiles p ON p.sub=u.google_sub WHERE ($1='' OR ($3::boolean AND u.email ILIKE $2) OR p.handle ILIKE $2 OR p.display_name ILIKE $2) AND ($4='all' OR u.account_status=$4)`,[q,pattern,req.admin.role!=='moderator',status]),
+        pool.query(`SELECT COUNT(*)::bigint AS n FROM copyright_strikes s LEFT JOIN profiles p ON p.sub=s.channel_sub LEFT JOIN videos v ON v.id=s.video_id WHERE ($1='' OR v.title ILIKE $2 OR p.handle ILIKE $2 OR s.reason ILIKE $2)`,[q,pattern])
       ]);
-      res.json({ videos: videos.rows.map(r=>({id:r.id,title:r.title,visibility:r.visibility,moderationStatus:r.moderation_status,ownerSub:r.owner_sub,createdAt:r.created_at,handle:r.handle,ownerName:r.display_name})),
+      res.json({ page,limit,totals:{videos:Number(videoCount.rows[0].n),channels:Number(channelCount.rows[0].n),strikes:Number(strikeCount.rows[0].n)}, videos: videos.rows.map(r=>({id:r.id,title:r.title,visibility:r.visibility,moderationStatus:r.moderation_status,ownerSub:r.owner_sub,createdAt:r.created_at,handle:r.handle,ownerName:r.display_name})),
         channels: channels.rows.map(r=>({userSub:r.google_sub,email:req.admin.role==='moderator'?null:r.email,status:r.account_status,createdAt:r.created_at,handle:r.handle,displayName:r.display_name,monetizationStatus:r.monetization_status,videosCount:Number(r.videos_count)})),
         strikes: strikes.rows.map(r=>({id:r.id,videoId:r.video_id,channelSub:r.channel_sub,reason:r.reason,status:r.status,createdAt:r.created_at,handle:r.handle,displayName:r.display_name,videoTitle:r.title})) });
     } catch (error) { next(error); }
@@ -313,11 +357,14 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
 
   app.get('/api/admin/campaigns', adminAuth('admin'), async (req, res, next) => {
     try {
+      const q=clean(req.query.q,120),pattern='%'+q.replace(/[\\%_]/g,'\\$&'), status=['all','draft','active','paused'].includes(String(req.query.status||''))?String(req.query.status):'all';
+      const page=Math.max(1,Number.parseInt(req.query.page||'1',10)||1),limit=Math.min(50,Math.max(10,Number.parseInt(req.query.limit||'20',10)||20)),offset=(page-1)*limit;
       const result = await pool.query(`SELECT c.id,c.title,c.sponsor_name,c.placement,c.creative_url,c.destination_url,c.cpm_bdt,c.status,c.starts_at,c.ends_at,c.created_at,
           COUNT(e.id) FILTER (WHERE e.event_type='impression')::bigint AS impressions,
           COUNT(e.id) FILTER (WHERE e.event_type='click')::bigint AS clicks
-        FROM ad_campaigns c LEFT JOIN ad_events e ON e.campaign_id=c.id GROUP BY c.id ORDER BY c.created_at DESC LIMIT 200`);
-      res.json({ campaigns: result.rows.map(r=>({id:r.id,title:r.title,sponsorName:r.sponsor_name,placement:r.placement,creativeUrl:r.creative_url,destinationUrl:r.destination_url,cpmBdt:Number(r.cpm_bdt),status:r.status,startsAt:r.starts_at,endsAt:r.ends_at,createdAt:r.created_at,impressions:Number(r.impressions),clicks:Number(r.clicks)})) });
+        FROM ad_campaigns c LEFT JOIN ad_events e ON e.campaign_id=c.id WHERE ($1='all' OR c.status=$1) AND (c.title ILIKE $2 OR c.sponsor_name ILIKE $2) GROUP BY c.id ORDER BY c.created_at DESC LIMIT $3 OFFSET $4`,[status,pattern,limit,offset]);
+      const total=await pool.query(`SELECT COUNT(*)::bigint AS n FROM ad_campaigns c WHERE ($1='all' OR c.status=$1) AND (c.title ILIKE $2 OR c.sponsor_name ILIKE $2)`,[status,pattern]);
+      res.json({page,limit,total:Number(total.rows[0].n),pages:Math.ceil(Number(total.rows[0].n)/limit),campaigns: result.rows.map(r=>({id:r.id,title:r.title,sponsorName:r.sponsor_name,placement:r.placement,creativeUrl:r.creative_url,destinationUrl:r.destination_url,cpmBdt:Number(r.cpm_bdt),status:r.status,startsAt:r.starts_at,endsAt:r.ends_at,createdAt:r.created_at,impressions:Number(r.impressions),clicks:Number(r.clicks)})) });
     } catch (error) { next(error); }
   });
 
@@ -338,6 +385,36 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       });
       res.status(201).json({ok:true,id,status:'paused'});
     } catch (error) { next(error); }
+  });
+
+  app.put('/api/admin/campaigns/:id', adminAuth('admin'), async (req,res,next)=>{
+    try{
+      if(!validUuid(req.params.id))return fail(res,'Invalid campaign id.');
+      const title=clean(req.body?.title,120),sponsor=clean(req.body?.sponsorName,120),placement=String(req.body?.placement||''),creativeUrl=safeUrl(req.body?.creativeUrl),destinationUrl=safeUrl(req.body?.destinationUrl),cpm=Number(req.body?.cpmBdt),startsAt=req.body?.startsAt?new Date(req.body.startsAt):null,endsAt=req.body?.endsAt?new Date(req.body.endsAt):null;
+      if(!title||!sponsor||!['feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'].includes(placement)||!creativeUrl||!destinationUrl||!Number.isFinite(cpm)||cpm<0||cpm>1000000)return fail(res,'Campaign fields এবং HTTPS URLs সঠিকভাবে দিন।');
+      if((startsAt&&Number.isNaN(startsAt.getTime()))||(endsAt&&Number.isNaN(endsAt.getTime()))||(startsAt&&endsAt&&endsAt<=startsAt))return fail(res,'Campaign date range ঠিক নয়।');
+      const result=await withTransaction(async client=>{
+        const changed=await client.query(`UPDATE ad_campaigns SET title=$2,sponsor_name=$3,placement=$4,creative_url=$5,destination_url=$6,cpm_bdt=$7,starts_at=$8,ends_at=$9,updated_at=NOW() WHERE id=$1 RETURNING id`,[req.params.id,title,sponsor,placement,creativeUrl,destinationUrl,cpm,startsAt,endsAt]);
+        if(!changed.rowCount)return false;
+        await writeAudit(client,req.admin,'edit_campaign','ad_campaign',req.params.id,'Campaign details updated.',{title,sponsor,placement,cpmBdt:cpm});
+        return true;
+      });
+      if(!result)return jsonError(res,404,'Campaign পাওয়া যায়নি।');
+      res.json({ok:true});
+    }catch(error){next(error);}
+  });
+
+  app.get('/api/admin/ad-analytics', adminAuth('admin'), async (req,res,next)=>{
+    try{
+      const days=[7,30,90].includes(Number(req.query.days))?Number(req.query.days):30;
+      const [daily,placements,totals]=await Promise.all([
+        pool.query(`SELECT TO_CHAR(DATE_TRUNC('day',created_at),'YYYY-MM-DD') AS day,COUNT(*) FILTER(WHERE event_type='impression')::bigint AS impressions,COUNT(*) FILTER(WHERE event_type='click')::bigint AS clicks,COALESCE(SUM(estimated_creator_earnings_bdt),0)::numeric(14,4) AS estimate FROM ad_events WHERE created_at>=NOW()-($1::int*INTERVAL '1 day') GROUP BY DATE_TRUNC('day',created_at) ORDER BY DATE_TRUNC('day',created_at)`,[days]),
+        pool.query(`SELECT c.placement,COUNT(e.id) FILTER(WHERE e.event_type='impression')::bigint AS impressions,COUNT(e.id) FILTER(WHERE e.event_type='click')::bigint AS clicks FROM ad_campaigns c LEFT JOIN ad_events e ON e.campaign_id=c.id AND e.created_at>=NOW()-($1::int*INTERVAL '1 day') GROUP BY c.placement ORDER BY c.placement`,[days]),
+        pool.query(`SELECT COUNT(*) FILTER(WHERE event_type='impression')::bigint AS impressions,COUNT(*) FILTER(WHERE event_type='click')::bigint AS clicks,COALESCE(SUM(estimated_creator_earnings_bdt),0)::numeric(14,4) AS estimate FROM ad_events WHERE created_at>=NOW()-($1::int*INTERVAL '1 day')`,[days])
+      ]);
+      const t=totals.rows[0]||{};
+      res.json({days,totals:{impressions:Number(t.impressions||0),clicks:Number(t.clicks||0),estimatedCreatorEarningsBdt:Number(t.estimate||0)},daily:daily.rows.map(r=>({day:r.day,impressions:Number(r.impressions),clicks:Number(r.clicks),estimatedCreatorEarningsBdt:Number(r.estimate)})),placements:placements.rows.map(r=>({placement:r.placement,impressions:Number(r.impressions),clicks:Number(r.clicks),ctr:Number(r.impressions)?Number(r.clicks)/Number(r.impressions)*100:0}))});
+    }catch(error){next(error);}
   });
 
   app.patch('/api/admin/campaigns/:id/status', adminAuth('admin'), async (req, res, next) => {
@@ -424,9 +501,13 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
 
   app.get('/api/admin/audit', adminAuth('admin'), async (req, res, next) => {
     try {
-      const limit = Math.min(200,Math.max(1,Number.parseInt(req.query.limit||'50',10)||50));
-      const result = await pool.query('SELECT actor_email,actor_role,action,target_type,target_id,reason,metadata,created_at FROM admin_audit_logs ORDER BY created_at DESC LIMIT $1',[limit]);
-      res.json({events:result.rows.map(r=>({actorEmail:r.actor_email,actorRole:r.actor_role,action:r.action,targetType:r.target_type,targetId:r.target_id,reason:r.reason,metadata:r.metadata,createdAt:r.created_at}))});
+      const limit=Math.min(100,Math.max(10,Number.parseInt(req.query.limit||'50',10)||50)),page=Math.max(1,Number.parseInt(req.query.page||'1',10)||1),offset=(page-1)*limit,q=clean(req.query.q,120),pattern='%'+q.replace(/[\\%_]/g,'\\$&'),action=clean(req.query.action,80),from=String(req.query.from||''),to=String(req.query.to||'');
+      const dateOk=x=>!x||/^\d{4}-\d{2}-\d{2}$/.test(x);
+      if(!dateOk(from)||!dateOk(to))return fail(res,'Date filter format must be YYYY-MM-DD.');
+      const where=`($1='' OR action ILIKE $2 OR actor_email ILIKE $2 OR target_id ILIKE $2 OR reason ILIKE $2) AND ($3='' OR action=$3) AND ($4='' OR created_at >= $4::date) AND ($5='' OR created_at < ($5::date+INTERVAL '1 day'))`;
+      const [result,count]=await Promise.all([pool.query(`SELECT actor_email,actor_role,action,target_type,target_id,reason,metadata,created_at FROM admin_audit_logs WHERE ${where} ORDER BY created_at DESC LIMIT $6 OFFSET $7`,[q,pattern,action,from,to,limit,offset]),pool.query(`SELECT COUNT(*)::bigint AS n FROM admin_audit_logs WHERE ${where}`,[q,pattern,action,from,to])]);
+      const total=Number(count.rows[0].n);
+      res.json({page,limit,total,pages:Math.ceil(total/limit),events:result.rows.map(r=>({actorEmail:r.actor_email,actorRole:r.actor_role,action:r.action,targetType:r.target_type,targetId:r.target_id,reason:r.reason,metadata:r.metadata,createdAt:r.created_at}))});
     } catch (error) { next(error); }
   });
 
@@ -447,19 +528,43 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
   app.post('/api/admin/reports/:id/status', adminAuth('admin','moderator'), async (req,res,next)=>{
     try{
       if(!validUuid(req.params.id))return fail(res,'Report id সঠিক নয়।');
-      const status=String(req.body?.status||'');const resolution=clean(req.body?.resolution,2000);
-      if(!['reviewing','action_taken','dismissed'].includes(status))return fail(res,'Report status সঠিক নয়।');
+      const status=String(req.body?.status||''),resolution=clean(req.body?.resolution,2000),action=String(req.body?.action||'none'),evidenceUrl=req.body?.evidenceUrl?safeUrl(req.body.evidenceUrl):null;
+      if(!['reviewing','action_taken','dismissed'].includes(status))return fail(res,'Report status সঠিক নয়.');
       if(status!=='reviewing'&&resolution.length<5)return fail(res,'Final decision-এর কারণ অন্তত ৫ অক্ষরের হতে হবে।');
+      if(status==='action_taken'&&!['remove_video','restore_video','copyright_strike','suspend_channel','ban_channel','unban_channel'].includes(action))return fail(res,'Action taken চূড়ান্ত করতে একটি moderation action বেছে নিন।');
+      if(req.body?.evidenceUrl&&!evidenceUrl)return fail(res,'Evidence link অবশ্যই HTTPS URL হতে হবে।');
       const updated=await withTransaction(async client=>{
-        const row=await client.query(`UPDATE content_reports SET status=$2,resolution=CASE WHEN $3='' THEN resolution ELSE $3 END,
-          reviewed_by_email=$4,reviewed_at=NOW() WHERE id=$1 RETURNING target_type,target_id`,[req.params.id,status,resolution,req.admin.email]);
-        if(!row.rowCount)return null;
-        await writeAudit(client,req.admin,'content_report_'+status,row.rows[0].target_type,row.rows[0].target_id,resolution,{reportId:req.params.id});
-        return row.rows[0];
+        const locked=await client.query('SELECT id,target_type,target_id,video_id,channel_sub,status FROM content_reports WHERE id=$1 FOR UPDATE',[req.params.id]);
+        if(!locked.rowCount)return null;
+        const report=locked.rows[0];
+        if(['action_taken','dismissed'].includes(report.status))throw Object.assign(new Error('এই report ইতিমধ্যে final করা হয়েছে।'),{status:409});
+        if(status==='action_taken'){
+          if(['remove_video','restore_video','copyright_strike'].includes(action)){
+            if(report.target_type!=='video'||!report.video_id)throw Object.assign(new Error('এই report target-এর জন্য video action প্রযোজ্য নয়।'),{status:400});
+            const video=await client.query('SELECT id,owner_sub,title FROM videos WHERE id=$1 FOR UPDATE',[report.video_id]);
+            if(!video.rowCount)throw Object.assign(new Error('ভিডিওটি আর উপলভ্য নেই।'),{status:404});
+            if(action==='remove_video')await client.query("UPDATE videos SET moderation_status='removed' WHERE id=$1",[report.video_id]);
+            if(action==='restore_video')await client.query("UPDATE videos SET moderation_status='active' WHERE id=$1",[report.video_id]);
+            if(action==='copyright_strike'){
+              if(!video.rows[0].owner_sub)throw Object.assign(new Error('ভিডিওর channel owner পাওয়া যায়নি।'),{status:409});
+              await client.query("UPDATE videos SET moderation_status='removed' WHERE id=$1",[report.video_id]);
+              await client.query(`INSERT INTO copyright_strikes (id,video_id,channel_sub,reason,evidence_url,issued_by_email) VALUES ($1,$2,$3,$4,$5,$6)`,[crypto.randomUUID(),report.video_id,video.rows[0].owner_sub,resolution,evidenceUrl,req.admin.email]);
+            }
+            await writeAudit(client,req.admin,'report_moderation_'+action,'video',report.video_id,resolution,{reportId:req.params.id,title:video.rows[0].title,evidenceUrl});
+          }else{
+            if(report.target_type!=='channel'||!report.channel_sub)throw Object.assign(new Error('এই report target-এর জন্য channel action প্রযোজ্য নয়।'),{status:400});
+            const accountStatus=action==='unban_channel'?'active':action==='ban_channel'?'banned':'suspended';
+            await client.query('UPDATE app_users SET account_status=$2,updated_at=NOW() WHERE google_sub=$1',[report.channel_sub,accountStatus]);
+            await writeAudit(client,req.admin,'report_moderation_'+action,'channel',report.channel_sub,resolution,{reportId:req.params.id,status:accountStatus});
+          }
+        }
+        await client.query(`UPDATE content_reports SET status=$2,resolution=$3,reviewed_by_email=$4,reviewed_at=NOW() WHERE id=$1`,[req.params.id,status,resolution,req.admin.email]);
+        await writeAudit(client,req.admin,'content_report_'+status,report.target_type,report.target_id,resolution,{reportId:req.params.id,moderationAction:status==='action_taken'?action:null});
+        return report;
       });
       if(!updated)return jsonError(res,404,'Report পাওয়া যায়নি।');
-      res.json({ok:true,status});
-    }catch(error){next(error);}
+      res.json({ok:true,status,action:status==='action_taken'?action:null});
+    }catch(error){if(error.status)return jsonError(res,error.status,error.message);next(error);}
   });
   app.get('/api/admin/appeals', adminAuth('admin'), async (req,res,next)=>{
     try{
@@ -471,6 +576,30 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       res.json({appeals:result.rows.map(r=>({id:r.id,videoId:r.video_id,appellantSub:r.appellant_sub,title:r.title||'Removed video',handle:r.handle||null,displayName:r.display_name||'Creator',appeal:r.appeal_text,status:r.status,decisionNote:r.decision_note,createdAt:r.created_at,reviewedAt:r.reviewed_at}))});
     }catch(error){next(error);}
   });
+  app.post('/api/admin/strikes/:id/decision', adminAuth('admin'), async (req,res,next)=>{
+    try{
+      if(!validUuid(req.params.id))return fail(res,'Strike id সঠিক নয়।');
+      const decision=String(req.body?.decision||''),note=clean(req.body?.note,1000),restoreVideo=req.body?.restoreVideo===true;
+      if(!['upheld','dismissed'].includes(decision)||note.length<5)return fail(res,'Decision ও অন্তত ৫ অক্ষরের কারণ দিন।');
+      const result=await withTransaction(async client=>{
+        const row=await client.query("SELECT id,video_id FROM copyright_strikes WHERE id=$1 AND status='appealed' FOR UPDATE",[req.params.id]);
+        if(!row.rowCount)return false;
+        const strike=row.rows[0];
+        const newStatus=decision==='dismissed'?'dismissed':'resolved';
+        await client.query('UPDATE copyright_strikes SET status=$2,resolved_by_email=$3,resolved_at=NOW(),resolution_note=$4 WHERE id=$1',[strike.id,newStatus,req.admin.email,note]);
+        if(decision==='dismissed'&&restoreVideo&&strike.video_id){
+          const other=await client.query("SELECT COUNT(*)::int AS n FROM copyright_strikes WHERE video_id=$1 AND id<>$2 AND status IN ('active','appealed')",[strike.video_id,strike.id]);
+          if(Number(other.rows[0]?.n||0)>0)throw Object.assign(new Error('এই ভিডিওতে অন্য open strike আছে; আগে সেটিও review করুন।'),{status:409});
+          await client.query("UPDATE videos SET moderation_status='active' WHERE id=$1",[strike.video_id]);
+        }
+        await writeAudit(client,req.admin,'copyright_strike_appeal_'+decision,'strike',strike.id,note,{videoId:strike.video_id,videoRestored:decision==='dismissed'&&restoreVideo});
+        return true;
+      });
+      if(!result)return jsonError(res,404,'Review করার মতো appealed strike পাওয়া যায়নি।');
+      res.json({ok:true,status:decision==='dismissed'?'dismissed':'resolved',videoRestored:decision==='dismissed'&&restoreVideo});
+    }catch(error){if(error.status)return jsonError(res,error.status,error.message);next(error);}
+  });
+
   app.post('/api/admin/appeals/:id/decision', adminAuth('admin'), async (req,res,next)=>{
     try{
       if(!validUuid(req.params.id))return fail(res,'Appeal id সঠিক নয়।');
