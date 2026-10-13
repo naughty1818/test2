@@ -1088,13 +1088,12 @@ body.admin-fullscreen { background:#08120d; }
 body.admin-fullscreen .topbar,body.admin-fullscreen .sidebar,body.admin-fullscreen .mobile-bottom-nav,body.admin-fullscreen .mobile-menu-trigger { display:none !important; }
 body.admin-fullscreen .page-layout { display:block; width:100%; max-width:none; min-height:100vh; padding:0; margin:0; }
 body.admin-fullscreen .main-content { width:100%; max-width:none; min-height:100vh; padding:0; margin:0; }
-.admin-shell { width:min(100%,1680px); max-width:none; margin:0 auto; padding:0 clamp(18px,3vw,48px) 60px; }
-.admin-toolbar { position:sticky; top:0; z-index:25; min-height:72px; display:flex; align-items:center; justify-content:space-between; gap:18px; margin:0 calc(clamp(18px,3vw,48px)*-1) 28px; padding:12px clamp(18px,3vw,48px); border-bottom:1px solid #263c32; background:rgba(8,18,13,.96); backdrop-filter:blur(16px); }
+.admin-shell { width:min(100%,1680px); max-width:none; margin:0 auto; padding:0 clamp(32px,5vw,80px) 60px; }
+.admin-toolbar { position:sticky; top:0; z-index:25; min-height:72px; display:flex; align-items:center; justify-content:space-between; gap:18px; margin:0 calc(clamp(32px,5vw,80px)*-1) 28px; padding:12px clamp(32px,5vw,80px); border-bottom:1px solid #263c32; background:rgba(8,18,13,.96); backdrop-filter:blur(16px); }
 .admin-brand,.admin-toolbar-actions { display:flex; align-items:center; gap:12px; }
-.admin-logo { display:block; width:132px; height:auto; max-height:48px; object-fit:contain; }
 .admin-brand>div { display:grid; gap:3px; }
-.admin-brand strong { color:#e5f2ec; font-size:16px; }
-.admin-brand span:not(.admin-mark) { color:#9aafa4; font-size:12px; }
+.admin-workspace-label strong { color:#e5f2ec; font-size:16px; }
+.admin-workspace-label span { color:#9aafa4; font-size:12px; }
 .admin-return-link { min-height:42px; display:inline-flex; align-items:center; padding:0 14px; border:1px solid #345044; border-radius:10px; color:#d4e5dc; background:#102019; font-size:14px; font-weight:650; }
 .admin-return-link:hover { color:#8ce9d1; border-color:#278b70; }
 .admin-shell .console-heading { align-items:flex-start; margin:0 0 22px; }
@@ -1155,13 +1154,13 @@ body.admin-fullscreen .main-content { width:100%; max-width:none; min-height:100
 .campaign-preview-link { min-height:40px; display:inline-flex; align-items:center; padding:0 12px; border:1px solid #355044; border-radius:9px; color:#a8edd9; font-size:13px; }
 @media(max-width:1050px){.admin-metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.review-card{grid-template-columns:1fr}.admin-shell .console-tabs{position:sticky}.review-card-actions{grid-template-columns:1fr 1fr}}
 @media(max-width:760px){
-  .admin-shell{padding:0 14px 34px}
-  .admin-toolbar{min-height:64px;margin:0 -14px 20px;padding:10px 14px}
-  .admin-logo{width:98px;max-height:38px}
-  .admin-brand strong{font-size:14px}
-  .admin-brand span:not(.admin-mark){font-size:11px}
+  .admin-shell{padding:0 20px 34px}
+  .admin-toolbar{min-height:unset;display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin:0 -20px 20px;padding:10px 20px}
+  .admin-workspace-label strong{font-size:14px}
+  .admin-workspace-label span{font-size:11px}
   .admin-return-link{min-height:40px;padding:0 10px;font-size:12px}
-  .admin-shell .console-tabs{top:64px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}
+  .admin-toolbar-actions{justify-content:flex-end;gap:7px}
+  .admin-shell .console-tabs{top:116px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}
   .admin-shell .console-tab{min-height:44px;padding:9px 13px;white-space:nowrap;font-size:13px}
   .admin-shell .console-panel{padding:17px}
   .admin-shell .console-stat{min-height:98px;padding:14px}
@@ -1175,7 +1174,6 @@ body.admin-fullscreen .main-content { width:100%; max-width:none; min-height:100
   .review-card-actions .form-field:nth-child(2),.review-card-actions .console-form-actions{grid-column:1}
   .campaign-preview{align-items:stretch;flex-direction:column}
   .campaign-preview-image{width:100%}
-  .admin-toolbar-actions{gap:7px}
 }
 
 .campaign-preview[data-placement="watch_sidebar"] .campaign-preview-image,.campaign-preview[data-placement="l_banner"] .campaign-preview-image { aspect-ratio:4/3; }
