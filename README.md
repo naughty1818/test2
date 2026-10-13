@@ -10,7 +10,7 @@ Node.js/Express-ভিত্তিক বাংলা-first video sharing site�
 - Socket.IO দিয়ে video page-এ live like/view/comment counts এবং channel-এ live subscriber count
 - Home/discovery feed, category/search, subscription feed, recommendations, channel pages, history ও playlists
 - **Creator Studio** (`/studio`, account menu থেকে নতুন tab-এ খোলে): content library ও metadata/thumbnail/visibility/scheduled publish/comments controls; upload intents; comments reply/pin/hide; views, subscriber growth, CTR, watch time ও sampled retention analytics; audience activity; playlist/series ordering; channel avatar/cover/profile customization; creator notifications/resources; estimated creator earnings ও copyright appeals
-- **Role-based Admin Panel** (`/admin`): campaign/ads controls, platform monetization settings, creator approval, channel suspend/ban, video remove/restore, copyright strikes/appeals, multiple staff accounts ও audit log
+- **Role-based fullscreen Admin Panel** (`/admin`, account menu থেকে নতুন tab): unified reports/video appeals/copyright-strike appeal queue, searchable and paginated content/user/campaign/audit views, atomic report-to-moderation actions, creator approval, reversible channel/video moderation, campaign preview/editing and time-range CTR analytics, staff roles, platform settings ও audit log
 - Admin-controlled sponsored cards in feed/watch page. Ads global default-এ বন্ধ এবং নতুন campaigns Paused থাকে
 - Responsive Bengali UI, mobile navigation, share link ও owner-only video deletion
 - Education-first P0 tools: class/subject/syllabus metadata, indexed advanced search filters, Bengali/English WebVTT captions with searchable transcript, creator thumbnails, duration badges, timestamp chapters, playback-speed control, signed direct-to-R2 playback, continue-watching, sampled watch-time/retention, content reports and moderation appeals
@@ -50,8 +50,8 @@ R2-তে পুরনো JSON metadata থাকলে migration command সে
 ## Admin roles ও moderation
 
 1. Render Environment-এ `OWNER_EMAIL`-কে Owner হিসেবে site-এ Google sign-in করতে ব্যবহৃত account-এর email দিন। Email code-এ নেই—role resolution server-side-এ হয়।
-2. সেই verified Google account দিয়ে sign-in করলে account menu-তে **Admin control panel** ও `/admin` route দেখাবে। প্রথম Owner-কে panel থেকে সরানো বা demote করা যায় না।
-3. Owner panel থেকে email অনুযায়ী অন্য **Admin** বা **Moderator** যোগ/বাদ দিতে পারবেন। তাঁরা নিজ নিজ Google account দিয়ে sign-in করলে role কার্যকর হবে। Admin campaign/moderation পরিচালনা করতে পারে; Moderator moderation-এ সীমিত; Owner সব settings, roles ও monetization approval নিয়ন্ত্রণ করে।
+2. সেই verified Google account দিয়ে sign-in করলে account menu-তে **Admin control panel** link দেখা যায়; এটি `/admin`-কে fullscreen, sidebar-মুক্ত নতুন tab-এ খোলে। প্রথম Owner-কে panel থেকে সরানো বা demote করা যায় না।
+3. Owner panel থেকে email অনুযায়ী অন্য **Admin** বা **Moderator** যোগ/বাদ দিতে পারবেন। তাঁরা নিজ নিজ Google account দিয়ে sign-in করলে role কার্যকর হবে। **Moderator** report triage ও video/channel moderation action করতে পারে, কিন্তু campaign, audit log, appeals review, staff roles, platform settings বা creator monetization approval করতে পারে না। **Admin** moderation, reports/video appeals/copyright-strike appeals, campaigns ও audit log পরিচালনা করতে পারে; তবে staff roles, platform-wide settings এবং creator monetization approval Owner-only। **Owner** সব controls পান।
 4. Video remove হলো Neon-এ reversible moderation state—R2 binary এই action-এ স্থায়ীভাবে delete হয় না। Copyright strike creator dashboard-এ দেখা যায় এবং creator appeal পাঠাতে পারে। Ban/suspend public channel/videos লুকিয়ে ওই account-এর content-changing actions বন্ধ করে। প্রতিটি admin action reason-সহ audit log-এ যায়।
 5. Copyright strike হলো এই app-এর **internal moderation record**, নিজে থেকে আদালত/সরকারি বা বাইরের platform-এর আইনগত সিদ্ধান্ত নয়। Owner/admin-এর মানবিক review ও ন্যায্য appeal process রাখা উচিত।
 
