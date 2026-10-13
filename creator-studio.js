@@ -24,6 +24,7 @@ module.exports = function attachCreatorStudio({ app, pool, requireAuth, requireA
       const category=normalizeCategory(req.body?.category), visibility=normalizeVisibility(req.body?.visibility);
       const classLevel=safeText(req.body?.classLevel,40), subject=safeText(req.body?.subject,80);
       const syllabusTags=Array.isArray(req.body?.syllabusTags)?[...new Set(req.body.syllabusTags.map(x=>safeText(x,60)).filter(Boolean))].slice(0,12):String(req.body?.syllabusTags||'').split(',').map(x=>safeText(x,60)).filter(Boolean).slice(0,12);
+      if(category==='শেখা'&&(!classLevel||!subject||!syllabusTags.length))return res.status(400).json({error:'শিক্ষা বিভাগের ভিডিওর জন্য Class / level, Subject এবং অন্তত একটি Syllabus tag আবশ্যক।'});
       const commentsEnabled=req.body?.commentsEnabled===undefined?null:Boolean(req.body.commentsEnabled);
       const scheduledAt=req.body?.scheduledAt===undefined?undefined:(req.body.scheduledAt===null||req.body.scheduledAt===''?null:new Date(req.body.scheduledAt));
       if(scheduledAt!==undefined&&scheduledAt!==null&&!Number.isFinite(scheduledAt.getTime()))return res.status(400).json({error:'প্রকাশের তারিখ সঠিক নয়।'});

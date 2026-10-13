@@ -5,7 +5,7 @@ Node.js/Express-ভিত্তিক বাংলা-first video sharing site�
 ## Feature set
 
 - Google OAuth sign-in, Neon-এ user/profile/session data এবং public creator channel
-- Direct-to-Cloudflare R2 video upload with progress, signed URLs, Private/Unlisted/Public visibility
+- Direct-to-Cloudflare R2 video upload with progress and signed URLs; uploaders must explicitly select Private/Unlisted/Public visibility (no default), and Education videos require class/level, subject and at least one syllabus tag
 - Neon-এ video metadata, likes, unique visitor views, comments/replies, creator subscriptions, playlists, Watch Later, watch history ও upload intents
 - Socket.IO দিয়ে video page-এ live like/view/comment counts এবং channel-এ live subscriber count
 - Home/discovery feed, category/search, subscription feed, recommendations, channel pages, history ও playlists
@@ -17,7 +17,7 @@ Node.js/Express-ভিত্তিক বাংলা-first video sharing site�
 
 ## শিক্ষা ও playback P0: কী আছে, কী নেই
 
-1. Class/level, subject ও syllabus tags upload metadata-তে Neon-এ রাখা হয়; search-এ education/duration/caption/sort filter আছে।
+1. Education বিভাগ বেছে নিলে Class/level, subject ও syllabus tags upload metadata-তে Neon-এ রাখা বাধ্যতামূলক; home/search-এ education-specific filters কেবল Education category নির্বাচনের পর দেখা যায়। Duration, caption ও sort filters সাধারণ search-এ থাকে।
 2. Creator `.vtt` captions upload/edit করতে পারেন। Transcript search index হয়; player-এ browser-native captions toggle এবং transcript panel থাকে।
 3. Upload থেকে duration best-effort পড়া হয়, custom thumbnail R2-তে আলাদাভাবে রাখা হয় এবং creator timestamp chapters সম্পাদনা করতে পারেন।
 4. Player-এ 0.75×–2× playback speed, buffering/error/retry state, signed R2 direct URL এবং account-based resume/continue-watching আছে। Video bytes Node server দিয়ে proxy হয় না; watch page playback-এর আগে R2 `HEAD` request করে না।

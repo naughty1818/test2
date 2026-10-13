@@ -11,7 +11,7 @@
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/atharo-favicon.png?v=atharo-icon-2">
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/atharo-apple-touch-icon.png?v=atharo-icon-2">
   <link rel="manifest" href="/manifest.webmanifest?v=atharo-icon-2">
-  <link rel="stylesheet" href="/clipnest.css?v=atharo-2">
+  <link rel="stylesheet" href="/clipnest.css?v=atharo-3">
 </head>
 <body>
   <div class="app-frame">
@@ -67,7 +67,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/console.js"></script>
-  <script src="/studio.js?v=studio-1"></script>
+  <script src="/studio.js?v=studio-2"></script>
   <script>
   'use strict';
   const app = document.getElementById('app');
@@ -87,7 +87,7 @@
   const categories = [
     { value: '', label: 'সব ভিডিও' }, { value: 'ভ্রমণ', label: 'ভ্রমণ' },
     { value: 'রান্না', label: 'রান্না' }, { value: 'ক্রিয়েটর', label: 'ক্রিয়েটর' },
-    { value: 'গল্প', label: 'গল্প' }, { value: 'শেখা', label: 'শেখা' },
+    { value: 'গল্প', label: 'গল্প' }, { value: 'শেখা', label: 'শিক্ষা' },
     { value: 'অন্যান্য', label: 'অন্যান্য' }
   ];
   const thumbnailByCategory = {
@@ -95,6 +95,7 @@
     'ক্রিয়েটর': '/assets/clipnest-creator-studio.webp', 'গল্প': '/assets/clipnest-river-boat.webp',
     'শেখা': '/assets/clipnest-creator-studio.webp', 'অন্যান্য': '/assets/clipnest-river-boat.webp'
   };
+  const categoryLabel = value => categories.find(item => item.value === value)?.label || text(value, 'অন্যান্য');
   const avatarColors = ['#e97855', '#ce825c', '#536f8e', '#5f8c70'];
   function $(tag, props = {}, children = []) {
     const el = document.createElement(tag);
@@ -229,7 +230,7 @@
     const thumb = $('div', { class: 'video-thumb', style: { '--thumb-accent': avatarColors[Math.abs(text(video.category).length) % avatarColors.length] } });
     const img = $('img', { src: video.thumbnailUrl || thumbFor(video.category), alt: '', loading: 'lazy' });
     img.addEventListener('error', () => img.remove());
-    thumb.append(img, $('span', { class: 'thumb-overlay' }), $('span', { class: 'thumb-play' }, [$('span', { class: 'play-glyph' })]), $('span', { class: 'video-duration', text: formatDuration(video.durationSeconds) || text(video.category, 'Atharo') }));
+    thumb.append(img, $('span', { class: 'thumb-overlay' }), $('span', { class: 'thumb-play' }, [$('span', { class: 'play-glyph' })]), $('span', { class: 'video-duration', text: formatDuration(video.durationSeconds) || categoryLabel(video.category) }));
     if(Number(video.currentSeconds)>0&&Number(video.durationSeconds)>0){const progress=$('span',{class:'resume-progress'});progress.style.width=Math.min(100,Math.max(0,Number(video.currentSeconds)/Number(video.durationSeconds)*100))+'%';thumb.append(progress);}
     thumbLink.append(thumb);
     const body = $('div', { class: 'video-card-body' });
@@ -297,7 +298,7 @@
   function videoGrid(videos, message = 'এখনো কোনো প্রকাশিত ভিডিও নেই।', options = {}) {
     const grid = $('div', { class: 'video-grid' + (options.resume ? ' resume-grid' : '') });
     if (!Array.isArray(videos) || !videos.length) { grid.append(emptyState(message, 'নতুন ভিডিও যোগ হলে এখানে দেখা যাবে।', state.session.user ? 'ভিডিও আপলোড করো' : 'লগইন করে আপলোড করো', state.session.user ? '/upload' : '/login')); return grid; }
-    videos.forEach((video, index) => grid.append(videoCard(video, { featured: !options.resume && index === 0 && !state.category, playlistId: options.playlistId })));
+    videos.forEach((video, index) => grid.append(videoCard(video, { featured: !options.resume && index === 0 && (!state.category || options.featuredFirst), playlistId: options.playlistId })));
     return grid;
   }
   function queryUrl(query = state.query, category = state.category, offset = 0, limit = 24, filters = {}) {
@@ -305,6 +306,17 @@
     if (query) params.set('query', query); if (category) params.set('category', category);
     for (const key of ['classLevel','subject','syllabusTag','durationMin','durationMax','captions','sort']) if (filters[key]) params.set(key, String(filters[key]));
     return '/api/videos?' + params.toString();
+  }
+  function educationFilterControls(values = {}) {
+    const classLevel = $('input', { type: 'text', value: values.classLevel || '', placeholder: 'যেমন: SSC, HSC, Class 8' });
+    const subject = $('input', { type: 'search', value: values.subject || '', placeholder: 'যেমন: গণিত, Biology' });
+    const syllabusTag = $('input', { type: 'search', value: values.syllabusTag || '', placeholder: 'যেমন: NCTB, অধ্যায় ৩' });
+    const fields = [
+      $('label', { class: 'form-field' }, [$('span', { text: 'Class / level' }), classLevel]),
+      $('label', { class: 'form-field' }, [$('span', { text: 'Subject' }), subject]),
+      $('label', { class: 'form-field' }, [$('span', { text: 'Syllabus tag' }), syllabusTag])
+    ];
+    return { fields, read: () => ({ classLevel: classLevel.value.trim(), subject: subject.value.trim(), syllabusTag: syllabusTag.value.trim() }) };
   }
   function heroPanel(featured) {
     const section = $('section', { class: 'hero-panel' });
@@ -336,17 +348,27 @@
   }
   async function renderHome(token) {
     updateNav('/');
+    const homeParams = new URLSearchParams(location.search);
+    state.category = homeParams.get('category') || '';
+    const homeFilters = state.category === 'শেখা' ? { classLevel: homeParams.get('classLevel') || '', subject: homeParams.get('subject') || '', syllabusTag: homeParams.get('syllabusTag') || '' } : {};
     const feed = $('section', { class: 'feed-section' });
     const heading = $('div', { class: 'feed-heading' }, [$('div', {}, [$('span', { class: 'section-kicker', text: 'তোমার জন্য' }), $('h2', { text: 'আজকের ভিডিও' })]), linkButton('সব দেখো  ↗', '/search', 'see-all')]);
-    const chips = categoryChips(state.category, value => { state.category = value; renderRoute(); });
+    const selectHomeCategory = value => { const params = new URLSearchParams(); if (value) params.set('category', value); if (value === 'শেখা') for (const key of ['classLevel','subject','syllabusTag']) if (homeFilters[key]) params.set(key, homeFilters[key]); navigate('/' + (params.toString() ? '?' + params.toString() : '')); };
+    const chips = categoryChips(state.category, selectHomeCategory);
+    let educationForm = null;
+    if (state.category === 'শেখা') {
+      const controls = educationFilterControls(homeFilters);
+      educationForm = $('form', { class: 'education-filter-form' }, [...controls.fields, $('button', { type: 'submit', class: 'outline-cta', text: 'শিক্ষার ভিডিও খুঁজুন' })]);
+      educationForm.addEventListener('submit', event => { event.preventDefault(); const params = new URLSearchParams({ category: 'শেখা' }); for (const [key, value] of Object.entries(controls.read())) if (value) params.set(key, value); navigate('/?' + params.toString()); });
+    }
     const grid = $('div', { class: 'video-grid' }, [emptyState('ভিডিও খুঁজছি…', 'একটু অপেক্ষা করো।')]);
-    feed.append(heading, chips, grid); const homeStickyAdSlot = $('div', { class: 'home-sticky-ad-slot' }); setPage([heroPanel(null), homeStickyAdSlot, feed, creatorCallout()]);
+    feed.append(heading, chips); if (educationForm) feed.append(educationForm); feed.append(grid); const homeStickyAdSlot = $('div', { class: 'home-sticky-ad-slot' }); setPage([heroPanel(null), homeStickyAdSlot, feed, creatorCallout()]);
     try {
-      const data = await jsonFetch(queryUrl('', state.category, 0, 24)); if (token !== state.routeToken) return;
+      const data = await jsonFetch(queryUrl('', state.category, 0, 24, homeFilters)); if (token !== state.routeToken) return;
       const videos = data.videos || []; app.replaceChildren(heroPanel(videos[0] || null), homeStickyAdSlot, feed, creatorCallout());
-      chips.replaceWith(categoryChips(state.category, value => { state.category = value; renderRoute(); }));
-      const nextGrid = videoGrid(videos, 'এখনো কোনো public video নেই। প্রথম ভিডিওটি তোমার হতে পারে.'); grid.replaceWith(nextGrid);
-      if (data.hasMore) appendLoadMore(feed, nextGrid, '', state.category, 24, token);
+      chips.replaceWith(categoryChips(state.category, selectHomeCategory));
+      const nextGrid = videoGrid(videos, 'এখনো কোনো public video নেই। প্রথম ভিডিওটি তোমার হতে পারে.', { featuredFirst: true }); grid.replaceWith(nextGrid);
+      if (data.hasMore) appendLoadMore(feed, nextGrid, '', state.category, 24, token, homeFilters);
       jsonFetch('/api/sponsor/serve?placement=feed').then(result => { if (token === state.routeToken && result.ad) nextGrid.append(sponsoredCard(result.ad)); }).catch(() => {});
       jsonFetch('/api/sponsor/serve?placement=sticky_banner').then(result => { if (token === state.routeToken && result.ad) homeStickyAdSlot.append(sponsoredCard(result.ad)); }).catch(() => {});
       if(state.session.user)jsonFetch('/api/me/watch-progress?limit=6').then(result=>{if(token!==state.routeToken||!(result.videos||[]).length)return;const resume=$('section',{class:'resume-section'});resume.append($('div',{class:'feed-heading'},[$('div',{},[$('span',{class:'section-kicker',text:'যেখান থেকে থেমেছিলে'}),$('h2',{text:'আবার দেখা চালিয়ে যাও'})]),linkButton('ইতিহাস দেখো ↗','/history','see-all')]));resume.append(videoGrid((result.videos || []).slice(0, 3),'এখনো কোনো অসমাপ্ত ভিডিও নেই।',{resume:true}));app.insertBefore(resume,feed);}).catch(()=>{});
@@ -358,22 +380,20 @@
     const input = $('input', { type: 'search', value: state.query, placeholder: 'যেমন: ভ্রমণ, রান্না, গল্প', 'aria-label': 'ভিডিও খুঁজুন' });
     const form = $('form', { class: 'search-large', role: 'search' }, [$('span', { text: '⌕', 'aria-hidden': 'true' }), input, $('button', { type: 'submit', class: 'search-clear', 'aria-label': 'সার্চ করো', text: '⌕' })]);
     form.addEventListener('submit', event => { event.preventDefault(); const params=new URLSearchParams(location.search);state.query=input.value.trim();if(state.query)params.set('q',state.query);else params.delete('q');navigate('/search'+(params.toString()?'?'+params.toString():'')); });
-    const filters = categoryChips(state.category, value => { const params=new URLSearchParams(location.search);if(value)params.set('category',value);else params.delete('category');navigate('/search'+(params.toString()?'?'+params.toString():'')); }, 'search-filters');
-    const classLevel=$('input',{type:'text',value:current.get('classLevel')||'',placeholder:'Class / level'});
-    const subject=$('input',{type:'search',value:current.get('subject')||'',placeholder:'Subject'});
-    const syllabusTag=$('input',{type:'search',value:current.get('syllabusTag')||'',placeholder:'Syllabus tag'});
+    const filters = categoryChips(state.category, value => { const params=new URLSearchParams(location.search);if(value)params.set('category',value);else params.delete('category');if(value!=='শেখা')for(const key of ['classLevel','subject','syllabusTag'])params.delete(key);navigate('/search'+(params.toString()?'?'+params.toString():'')); }, 'search-filters');
+    const educationControls = state.category === 'শেখা' ? educationFilterControls({ classLevel: current.get('classLevel'), subject: current.get('subject'), syllabusTag: current.get('syllabusTag') }) : null;
     const durationMin=$('input',{type:'number',min:'0',max:'604800',value:current.get('durationMin')||'',placeholder:'Min seconds'});
     const durationMax=$('input',{type:'number',min:'0',max:'604800',value:current.get('durationMax')||'',placeholder:'Max seconds'});
     const captionsOnly=$('input',{type:'checkbox',checked:current.get('captions')==='true'});
     const sort=$('select');[['newest','Newest'],['views','Most viewed'],['popular','Popular'],['duration','Longest']].forEach(([value,label])=>sort.append($('option',{value,text:label})));sort.value=current.get('sort')||'newest';
     const advanced=$('form',{class:'search-advanced'},[
-      $('label',{class:'form-field'},[$('span',{text:'Class / level'}),classLevel]),$('label',{class:'form-field'},[$('span',{text:'Subject'}),subject]),
-      $('label',{class:'form-field'},[$('span',{text:'Syllabus tag'}),syllabusTag]),$('label',{class:'form-field'},[$('span',{text:'Minimum duration (sec)'}),durationMin]),
+      ...(educationControls ? educationControls.fields : []),$('label',{class:'form-field'},[$('span',{text:'Minimum duration (sec)'}),durationMin]),
       $('label',{class:'form-field'},[$('span',{text:'Maximum duration (sec)'}),durationMax]),$('label',{class:'form-field'},[$('span',{text:'Sort'}),sort]),
       $('label',{class:'search-captions-filter'},[captionsOnly,$('span',{text:'শুধু caption-সহ ভিডিও'})]),$('button',{type:'submit',class:'outline-cta',text:'Filters apply'})
     ]);
-    const activeFilters={classLevel:current.get('classLevel')||'',subject:current.get('subject')||'',syllabusTag:current.get('syllabusTag')||'',durationMin:current.get('durationMin')||'',durationMax:current.get('durationMax')||'',captions:current.get('captions')||'',sort:current.get('sort')||''};
-    advanced.addEventListener('submit',event=>{event.preventDefault();const params=new URLSearchParams(location.search);for(const [key,value] of Object.entries({classLevel:classLevel.value.trim(),subject:subject.value.trim(),syllabusTag:syllabusTag.value.trim(),durationMin:durationMin.value,durationMax:durationMax.value,captions:captionsOnly.checked?'true':'',sort:sort.value==='newest'?'':sort.value})){if(value)params.set(key,value);else params.delete(key);}navigate('/search'+(params.toString()?'?'+params.toString():''));});
+    const educationValues=educationControls?educationControls.read():{};
+    const activeFilters={...educationValues,durationMin:current.get('durationMin')||'',durationMax:current.get('durationMax')||'',captions:current.get('captions')||'',sort:current.get('sort')||''};
+    advanced.addEventListener('submit',event=>{event.preventDefault();const params=new URLSearchParams(location.search);const values={...(educationControls?educationControls.read():{classLevel:'',subject:'',syllabusTag:''}),durationMin:durationMin.value,durationMax:durationMax.value,captions:captionsOnly.checked?'true':'',sort:sort.value==='newest'?'':sort.value};for(const [key,value] of Object.entries(values)){if(value)params.set(key,value);else params.delete(key);}navigate('/search'+(params.toString()?'?'+params.toString():''));});
     const resultHead = $('div', { class: 'results-heading' }, [$('h2', { text: state.query ? '“' + state.query + '”–এর ফলাফল' : 'সব ভিডিও' }), $('span', { text: 'লোড হচ্ছে…' })]);
     const grid = $('div', { class: 'video-grid' }, [emptyState('ফলাফল খুঁজছি…', 'একটু অপেক্ষা করো।')]); setPage([pageHeading, form, filters, advanced, resultHead, grid]);
     try { const data = await jsonFetch(queryUrl(state.query, state.category, 0, 24, activeFilters)); if (token !== state.routeToken) return; resultHead.lastElementChild.textContent = number((data.videos || []).length) + 'টি ভিডিও'; const nextGrid = videoGrid(data.videos || [], 'এই খোঁজে কোনো ভিডিও পাওয়া যায়নি।'); grid.replaceWith(nextGrid); if (data.hasMore) appendLoadMore(app, nextGrid, state.query, state.category, 24, token, activeFilters); }
@@ -483,7 +503,7 @@
       let postrollLoaded = false;
       player.addEventListener('ended', () => { if (postrollLoaded) return; postrollLoaded = true; jsonFetch('/api/sponsor/serve?placement=postroll').then(result => { if (token === state.routeToken && result.ad) postrollSlot.append(sponsoredCard(result.ad)); }).catch(() => {}); });
       const title = $('h1', { class: 'watch-title', text: text(video.title, 'শিরোনামহীন ভিডিও') });
-      const subtitle = $('div', { class: 'watch-subtitle' }, [$('span', { text: number(data.viewsCount) + ' ভিউ' }), $('span', { class: 'meta-dot' }), $('span', { text: fmtDate(video.created) }), $('span', { class: 'watch-category', text: text(video.category, 'অন্যান্য') })]);
+      const subtitle = $('div', { class: 'watch-subtitle' }, [$('span', { text: number(data.viewsCount) + ' ভিউ' }), $('span', { class: 'meta-dot' }), $('span', { text: fmtDate(video.created) }), $('span', { class: 'watch-category', text: categoryLabel(video.category) })]);
       const ownerName = text(video.ownerName, 'Atharo নির্মাতা'); const ownerHandle = text(video.ownerHandle, '');
       const creator = $('div', { class: 'watch-creator-row' });
       creator.append($('a', { href: ownerHandle ? '/channel/' + escapePath(ownerHandle) : '/channels', 'data-route': '', class: 'creator-avatar-link' }, [avatar(ownerName, video.ownerAvatar, 'creator-avatar creator-avatar-large')]));
@@ -716,8 +736,8 @@
     const title = $('input', { type: 'text', maxlength: '100', required: '', placeholder: 'ভিডিওর নাম লিখো' }); const titleCount = $('small', { text: '০/১০০ অক্ষর' });
     title.addEventListener('input', () => { titleCount.textContent = number(title.value.length) + '/১০০ অক্ষর'; });
     const description = $('textarea', { maxlength: '5000', placeholder: 'ভিডিওটি নিয়ে কয়েকটি কথা লিখো', rows: '4' });
-    const category = $('select'); categories.slice(1).forEach((item, index) => category.append($('option', { value: item.value, text: item.label, ...(index === 0 ? { selected: '' } : {}) })));
-    const visibility = $('select'); [['Private','শুধু তুমি — Private'],['Unlisted','লিংক থাকলে — Unlisted'],['Public','সবার জন্য — Public']].forEach(([value,label], index) => visibility.append($('option', { value, text: label, ...(index === 0 ? { selected: '' } : {}) })));
+    const category = $('select', { required: '', 'aria-label': 'ভিডিওর বিভাগ বেছে নাও' }); category.append($('option', { value: '', text: 'বিভাগ বেছে নাও', selected: '' })); categories.slice(1).forEach(item => category.append($('option', { value: item.value, text: item.label })));
+    const visibility = $('select', { required: '', 'aria-label': 'কে ভিডিওটি দেখতে পাবে' }); visibility.append($('option', { value: '', text: 'নির্বাচন করুন', selected: '' })); [['Private','শুধু তুমি — Private'],['Unlisted','লিংক থাকলে — Unlisted'],['Public','সবার জন্য — Public']].forEach(([value,label]) => visibility.append($('option', { value, text: label })));
     const classLevel = $('input', { type: 'text', maxlength: '40', placeholder: 'যেমন: SSC, HSC, Class 8, University' });
     const subject = $('input', { type: 'text', maxlength: '80', placeholder: 'যেমন: গণিত, Biology, Physics' });
     const syllabusTags = $('input', { type: 'text', maxlength: '500', placeholder: 'যেমন: NCTB, অধ্যায় ৩, Algebra' });
@@ -725,11 +745,15 @@
     const captionInput = $('input', { type: 'file', accept: '.vtt,text/vtt' });
     const captionLanguage = $('input', { type: 'text', maxlength: '35', value: 'bn', placeholder: 'bn, en, bn-bd' });
     const field = (label, input, small = null) => { const wrap = $('label', { class: 'form-field' }, [$('span', { text: label }), input]); if (small) wrap.append($('small', { text: small })); return wrap; };
+    const educationFields = $('div', { class: 'education-upload-fields', hidden: true });
+    educationFields.append(field('Class / level *', classLevel), field('Subject *', subject), field('Syllabus tag *', syllabusTags, 'এক বা একাধিক tag কমা দিয়ে আলাদা করো।'));
+    const syncEducationFields = () => { const enabled = category.value === 'শেখা'; educationFields.hidden = !enabled; [classLevel, subject, syllabusTags].forEach(input => { input.required = enabled; }); };
+    category.addEventListener('change', syncEducationFields);
     const titleField = field('ভিডিওর শিরোনাম *', title); titleField.append(titleCount);
     const progressWrap = $('div', { class: 'upload-progress', hidden: true }); const progressHead = $('div', {}, [$('span', { text: 'ভিডিও Cloudflare R2-তে যাচ্ছে' }), $('strong', { text: '০%' })]);
     const progressTrack = $('div', { class: 'progress-track' }, [$('span', { style: { width: '0%' } })]); progressWrap.append(progressHead, progressTrack);
-    const notice = $('div', { class: 'notice', hidden: true }); const footer = $('div', { class: 'upload-footer' }, [$('span', { text: 'Default visibility Private। Public video-ই home/search-এ দেখাবে।' }), $('button', { type: 'submit', class: 'primary-cta', text: '↑  ভিডিও আপলোড করো' })]);
-    const submit = footer.querySelector('button'); form.append(drop, titleField, field('বিবরণ · ঐচ্ছিক', description, 'সর্বোচ্চ ৫,০০০ অক্ষর'), field('Class / level · ঐচ্ছিক', classLevel), field('Subject · ঐচ্ছিক', subject), field('Syllabus tags · ঐচ্ছিক', syllabusTags, 'কমা দিয়ে আলাদা করো; NCTB বাধ্যতামূলক নয়।'), field('বিভাগ', category), field('কে ভিডিওটি দেখতে পাবে?', visibility), field('Custom thumbnail · ঐচ্ছিক', thumbnailInput, 'JPG, PNG বা WebP · সর্বোচ্চ ৫ MB'), field('Captions · ঐচ্ছিক', captionInput, 'WEBVTT subtitle ফাইল'), field('Caption language', captionLanguage), progressWrap, notice, footer);
+    const notice = $('div', { class: 'notice', hidden: true }); const footer = $('div', { class: 'upload-footer' }, [$('span', { text: 'Upload করতে visibility বেছে নাও—কোনো default নেই।' }), $('button', { type: 'submit', class: 'primary-cta', text: '↑  ভিডিও আপলোড করো' })]);
+    const submit = footer.querySelector('button'); form.append(drop, titleField, field('বিবরণ · ঐচ্ছিক', description, 'সর্বোচ্চ ৫,০০০ অক্ষর'), field('বিভাগ *', category), educationFields, field('কে ভিডিওটি দেখতে পাবে? *', visibility), field('Custom thumbnail · ঐচ্ছিক', thumbnailInput, 'JPG, PNG বা WebP · সর্বোচ্চ ৫ MB'), field('Captions · ঐচ্ছিক', captionInput, 'WEBVTT subtitle ফাইল'), field('Caption language', captionLanguage), progressWrap, notice, footer);
     const supported = file => file && (file.type.startsWith('video/') || ['mp4','mov','m4v','webm','mkv','avi','wmv','mpeg','mpg','3gp','flv'].includes(file.name.toLowerCase().split('.').pop()));
     const chooseFile = file => { if (!file) return; if (!supported(file)) { notify('সমর্থিত video format-এর একটি file বেছে নাও।', 'error'); return; } if (file.size > state.config.maxFileMb * 1024 * 1024) { notify('ফাইলটি ' + number(state.config.maxFileMb) + ' MB-এর চেয়ে বড়।', 'error'); return; } fileState.file = file; dropTitle.textContent = file.name; dropHelp.textContent = fmtSize(file.size) + ' · Cloudflare R2-তে upload হবে'; const objectUrl=URL.createObjectURL(file),probe=document.createElement('video'); probe.preload='metadata'; probe.src=objectUrl; probe.addEventListener('loadedmetadata',()=>{if(Number.isFinite(probe.duration))fileState.durationSeconds=Math.min(604800,Math.round(probe.duration));URL.revokeObjectURL(objectUrl);},{once:true}); probe.addEventListener('error',()=>URL.revokeObjectURL(objectUrl),{once:true}); if (!title.value) { title.value = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ').slice(0, 100); title.dispatchEvent(new Event('input')); } notice.hidden = true; };
     fileInput.addEventListener('change', () => chooseFile(fileInput.files?.[0]));
@@ -764,6 +788,7 @@
   function renderNotFound() { setPage([emptyState('এই পেজটি পাওয়া যায়নি', 'লিংকটি পরীক্ষা করে আবার চেষ্টা করো।', 'Atharo | আঠারো হোম', '/')]); }
   async function renderRoute() {
     leaveRealtimeRooms(); const token = ++state.routeToken; const path = location.pathname;
+    document.body.classList.toggle('studio-fullscreen', path === '/studio');
     if (path === '/') { document.title = 'Atharo | আঠারো · বাংলা ভিডিও'; return renderHome(token); }
     if (path === '/search') { document.title = 'খুঁজে দেখো · Atharo | আঠারো'; return renderSearch(token); }
     if (path === '/login') { document.title = 'লগইন · Atharo | আঠারো'; return renderLogin(); }
