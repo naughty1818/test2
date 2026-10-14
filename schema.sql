@@ -377,3 +377,73 @@ CREATE TABLE IF NOT EXISTS moderation_appeals (
 CREATE UNIQUE INDEX IF NOT EXISTS moderation_appeals_one_pending_idx
   ON moderation_appeals (video_id, appellant_sub) WHERE status='pending';
 CREATE INDEX IF NOT EXISTS moderation_appeals_status_created_idx ON moderation_appeals (status, created_at DESC);
+
+
+-- Approved creator channels, creator playlists, verification, viewer feedback, and realtime notifications.
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS channel_type TEXT NOT NULL DEFAULT 'general',
+  ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT FALSE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'profiles_channel_type_check') THEN
+    ALTER TABLE profiles ADD CONSTRAINT profiles_channel_type_check CHECK (channel_type IN ('general','personal','education','business','organization','other'));
+  END IF;
+END $$;
+
+ALTER TABLE playlists ADD COLUMN IF NOT EXISTS is_creator_playlist BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE upload_intents ADD COLUMN IF NOT EXISTS creator_playlist_id UUID REFERENCES playlists(id) ON DELETE SET NULL;
+
+CREATE TABLE IF NOT EXISTS channel_applications (
+  id UUID PRIMARY KEY,
+  user_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  channel_name TEXT NOT NULL CHECK (char_length(channel_name) BETWEEN 2 AND 120),
+  channel_type TEXT NOT NULL CHECK (channel_type IN ('personal','education','business','organization','other')),
+  other_platform_name TEXT NOT NULL DEFAULT '',
+  other_platform_url TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  decision_note TEXT NOT NULL DEFAULT '',
+  reviewed_by_email TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  reviewed_at TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS channel_applications_one_pending_per_user_idx
+  ON channel_applications (user_sub) WHERE status='pending';
+CREATE INDEX IF NOT EXISTS channel_applications_review_idx ON channel_applications (status,created_at ASC);
+
+CREATE TABLE IF NOT EXISTS channel_verification_requests (
+  id UUID PRIMARY KEY,
+  user_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  reason TEXT NOT NULL CHECK (char_length(reason) BETWEEN 20 AND 2000),
+  proof_url TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  decision_note TEXT NOT NULL DEFAULT '',
+  reviewed_by_email TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  reviewed_at TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS channel_verification_one_pending_per_user_idx
+  ON channel_verification_requests (user_sub) WHERE status='pending';
+CREATE INDEX IF NOT EXISTS channel_verification_review_idx ON channel_verification_requests (status,created_at ASC);
+
+CREATE TABLE IF NOT EXISTS video_feedback (
+  video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  user_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  feedback TEXT NOT NULL CHECK (feedback IN ('interested','not_interested')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (video_id,user_sub)
+);
+CREATE INDEX IF NOT EXISTS video_feedback_user_idx ON video_feedback (user_sub,feedback,updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS user_notifications (
+  id UUID PRIMARY KEY,
+  recipient_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  actor_sub TEXT REFERENCES app_users(google_sub) ON DELETE SET NULL,
+  kind TEXT NOT NULL,
+  title TEXT NOT NULL,
+  detail TEXT NOT NULL DEFAULT '',
+  href TEXT NOT NULL DEFAULT '/',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  read_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS user_notifications_recipient_created_idx ON user_notifications (recipient_sub,created_at DESC);
+CREATE INDEX IF NOT EXISTS user_notifications_unread_idx ON user_notifications (recipient_sub,created_at DESC) WHERE read_at IS NULL;
