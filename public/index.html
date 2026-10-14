@@ -11,7 +11,7 @@
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/atharo-favicon.png?v=atharo-icon-2">
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/atharo-apple-touch-icon.png?v=atharo-icon-2">
   <link rel="manifest" href="/manifest.webmanifest?v=atharo-icon-2">
-  <link rel="stylesheet" href="/clipnest.css?v=creator-ui-fix-3">
+  <link rel="stylesheet" href="/clipnest.css?v=login-startup-fix-1">
 </head>
 <body>
   <div class="app-frame">
@@ -67,7 +67,7 @@
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/i18n.js?v=creator-ui-fix-3"></script>
+  <script src="/i18n.js?v=login-startup-fix-1"></script>
   <script src="/console.js?v=creator-ui-fix-3"></script>
   <script src="/studio.js?v=creator-ui-fix-3"></script>
   <script>
@@ -156,6 +156,16 @@
     return data;
   }
   function button(label, cls = '', handler = null) { return $('button', { type: 'button', class: cls, text: label, ...(handler ? { onClick: handler } : {}) }); }
+  async function beginGoogleSignIn(buttonNode) {
+    const originalLabel=buttonNode?.textContent||'';
+    if(buttonNode){buttonNode.disabled=true;buttonNode.textContent=window.AtharoI18n?.t('Google login হচ্ছে…')||'Connecting to Google…';}
+    try {
+      const config=await jsonFetch('/api/config');state.config={...state.config,...config};
+      if(!config.googleLoginEnabled){notify('Google OAuth সেটআপ করা হয়নি। Hosting environment-এ GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI—তিনটিই সেট করতে হবে।','error');return;}
+      location.assign('/auth/google');
+    } catch(error) { notify(error.message||'Google sign-in could not start. Please try again.','error'); }
+    finally { if(buttonNode?.isConnected){buttonNode.disabled=false;buttonNode.textContent=originalLabel;} }
+  }
   function linkButton(label, path, cls = 'primary-cta') { return $('a', { href: path, 'data-route': '', class: cls, text: label }); }
   function setPage(children) { app.replaceChildren(...children); app.focus({ preventScroll: true }); }
   function loadingPage(message = 'লোড হচ্ছে…') { setPage([$ ('div', { class: 'empty-state' }, [$('span', { class: 'empty-state-icon', text: '…' }), $('h3', { text: message })])]); }
@@ -169,7 +179,7 @@
   }
   function navigate(path) {
     if (location.pathname + location.search !== path) history.pushState({}, '', path);
-    closeMobile(); renderRoute();
+    closeMobile(); safeRenderRoute();
   }
   function updateNav(path) {
     document.querySelectorAll('[data-nav]').forEach(link => {
@@ -186,9 +196,8 @@
   function renderAccount() {
     accountArea.replaceChildren();
     if (!state.session.user) {
-      const login = button('লগইন', 'login-button', () => state.config.googleLoginEnabled ? location.assign('/auth/google') : notify('Google OAuth hosting-এ সেটআপ করা হয়নি।', 'error'));
+      const login = button('লগইন', 'login-button', () => beginGoogleSignIn());
       login.setAttribute('aria-label', 'Google দিয়ে লগইন');
-      if (!state.config.googleLoginEnabled) login.title = 'Google OAuth credentials configure করা নেই';
       accountArea.append(login); return;
     }
     const name = getName(state.session.profile, state.session.user);
@@ -201,7 +210,7 @@
     (state.session.profile ? [['আমার চ্যানেল', '/channel/me'], ['Creator Studio', '/studio'], ['সাবস্ক্রিপশন', '/subscriptions'], ['প্লেলিস্ট', '/playlists'], ['ভিডিও আপলোড', '/upload']] : [['চ্যানেল তৈরি করুন', '/studio'], ['ভিডিও দেখুন', '/'], ['প্লেলিস্ট', '/playlists']]).forEach(([label, href]) => menu.append($('a', href === '/studio' ? { href, target: '_blank', rel: 'noopener noreferrer', text: label } : { href, 'data-route': '', text: label })));
     if (state.admin?.role) menu.append($('a', { href: '/admin', target: '_blank', rel: 'noopener noreferrer', text: 'Admin control panel' }));
     menu.append($('button', { type: 'button', class: 'logout-item', text: 'লগআউট', onClick: async () => {
-      try { await jsonFetch('/auth/logout', { method: 'POST', body: {} }); state.session = { user: null, profile: null }; renderAccount(); notify('লগআউট হয়েছে।'); renderRoute(); }
+      try { await jsonFetch('/auth/logout', { method: 'POST', body: {} }); state.session = { user: null, profile: null }; renderAccount(); notify('লগআউট হয়েছে।'); safeRenderRoute(); }
       catch (error) { notify(error.message, 'error'); }
     } }));
     toggle.addEventListener('click', () => { const open = menu.classList.toggle('open'); toggle.setAttribute('aria-expanded', String(open)); });
@@ -220,7 +229,7 @@
     if(!state.notifications.length)list.append($('div',{class:'notification-empty',text:'No notifications yet.'}));pop.append(head,list);wrap.append(toggle,pop);notificationArea.replaceChildren(wrap);
   }
   function receiveNotification(item){state.notifications.unshift(item);state.notifications=state.notifications.slice(0,25);if(!item.readAt)state.unreadNotifications++;drawNotifications();const title=window.AtharoI18n?.t(item.title||'')??(item.title||''),detail=window.AtharoI18n?.t(item.detail||'You have a new notification.')??(item.detail||'You have a new notification.');notify((title?title+': ':'')+detail);if(item.kind?.startsWith('channel_application_')&&item.kind.endsWith('_approved'))refreshSessionAndRoute();}
-  async function refreshSessionAndRoute(){try{const auth=await jsonFetch('/auth/me');state.session=auth;window.__atharoProfile=auth.profile||{};renderAccount();renderRoute();}catch(_){} }
+  async function refreshSessionAndRoute(){try{const auth=await jsonFetch('/auth/me');state.session=auth;window.__atharoProfile=auth.profile||{};renderAccount();safeRenderRoute();}catch(_){} }
   function emptyState(title, description, ctaText = '', href = '/') {
     const box = $('div', { class: 'empty-state' });
     box.append($('span', { class: 'empty-state-icon', text: '✳' }), $('h3', { text: title }), $('p', { text: description }));
@@ -428,10 +437,9 @@
   }
   function renderLogin(message = '') {
     updateNav('/login'); const panel = $('div', { class: 'login-panel' });
-    panel.append($('span', { class: 'login-symbol', text: '▷' }), $('span', { class: 'section-kicker', text: 'Atharo-তে যোগ দাও' }), $('h1', {}, [$('span', { text: 'তোমার গল্প' }), document.createElement('br'), $('span', { text: 'দেখা হোক।' })]), $('p', { text: 'চ্যানেল তৈরি করো, নির্মাতাদের সাবস্ক্রাইব করো, ভিডিওতে আলোচনা করো আর নিজের দেখার তালিকা গুছিয়ে রাখো।' }));
+    panel.append($('img', { class: 'login-brand-logo', src: '/assets/atharo-logo.png?v=atharo-icon-2', alt: 'Atharo | আঠারো', width: '128', height: '72' }), $('span', { class: 'section-kicker', text: 'Atharo-তে যোগ দাও' }), $('h1', {}, [$('span', { text: 'তোমার গল্প' }), document.createElement('br'), $('span', { text: 'দেখা হোক।' })]), $('p', { text: 'চ্যানেল তৈরি করো, নির্মাতাদের সাবস্ক্রাইব করো, ভিডিওতে আলোচনা করো আর নিজের দেখার তালিকা গুছিয়ে রাখো।' }));
     if (message) panel.append($('div', { class: 'notice notice-warn', text: message }));
-    const login = button(state.config.googleLoginEnabled ? 'Google account দিয়ে লগইন' : 'Google login সেটআপ দরকার', 'primary-cta login-wide', () => state.config.googleLoginEnabled ? location.assign('/auth/google') : notify('Hosting-এ GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET ও GOOGLE_REDIRECT_URI সেট করতে হবে।', 'error'));
-    if (!state.config.googleLoginEnabled) login.title = 'Google OAuth credentials configure করা নেই';
+    const login = button('Google account দিয়ে লগইন', 'primary-cta login-wide', () => beginGoogleSignIn(login));
     panel.append(login, $('span', { class: 'login-footnote', text: 'ইমেইল ও account profile Neon database-এ সুরক্ষিতভাবে রাখা হয়।' })); setPage([panel]);
   }
   function subscribeButton(handle, subscribed, count, onUpdate) {
@@ -726,7 +734,7 @@
   async function renderHistory(token) {
     updateNav('/history'); if (!state.session.user) { renderLogin('তোমার দেখা ভিডিওর ইতিহাস রাখতে লগইন করো।'); return; }
     const page = $('section', { class: 'library-page' });
-    const heading = $('div', { class: 'page-heading library-heading' }, [$('div', {}, [$('span', { class: 'section-kicker', text: 'তোমার লাইব্রেরি' }), $('h1', { text: 'দেখার ইতিহাস' }), $('p', { text: 'তুমি যে ভিডিও দেখেছ, সেগুলো এখানে থাকে।' })]), button('ইতিহাস মুছো', 'outline-cta', async () => { if (!confirm('তোমার সম্পূর্ণ দেখার ইতিহাস মুছে ফেলবে?')) return; try { await jsonFetch('/api/me/history', { method: 'DELETE' }); notify('দেখার ইতিহাস মুছে ফেলা হয়েছে।'); renderRoute(); } catch (error) { notify(error.message, 'error'); } })]);
+    const heading = $('div', { class: 'page-heading library-heading' }, [$('div', {}, [$('span', { class: 'section-kicker', text: 'তোমার লাইব্রেরি' }), $('h1', { text: 'দেখার ইতিহাস' }), $('p', { text: 'তুমি যে ভিডিও দেখেছ, সেগুলো এখানে থাকে।' })]), button('ইতিহাস মুছো', 'outline-cta', async () => { if (!confirm('তোমার সম্পূর্ণ দেখার ইতিহাস মুছে ফেলবে?')) return; try { await jsonFetch('/api/me/history', { method: 'DELETE' }); notify('দেখার ইতিহাস মুছে ফেলা হয়েছে।'); safeRenderRoute(); } catch (error) { notify(error.message, 'error'); } })]);
     const grid = $('div', { class: 'video-grid' }, [emptyState('ইতিহাস লোড হচ্ছে…', 'একটু অপেক্ষা করো।')]); page.append(heading, grid); setPage([page]);
     try { const data = await jsonFetch('/api/me/history'); if (token !== state.routeToken) return; grid.replaceWith(videoGrid(data.videos || [], 'এখনো কোনো ভিডিও দেখা হয়নি।')); }
     catch (error) { if (token === state.routeToken) grid.replaceWith(emptyState('ইতিহাস লোড হয়নি', error.message)); }
@@ -841,13 +849,21 @@
     if (path.startsWith('/playlist/')) { const id = decodeURIComponent(path.slice('/playlist/'.length)); document.title=window.AtharoI18n?.t('প্লেলিস্ট · Atharo | আঠারো')??'প্লেলিস্ট · Atharo | আঠারো'; return renderPlaylist(id, token); }
     renderNotFound();
   }
+  function safeRenderRoute() {
+    return Promise.resolve().then(() => renderRoute()).catch(error => {
+      console.error('Atharo page render failed:', error);
+      const detail=error?.message||'অজানা ত্রুটি';
+      try { setPage([emptyState('পেজটি লোড করা যায়নি', detail, 'আবার চেষ্টা করো', location.pathname+location.search)]); }
+      catch (_) { app.textContent='পেজটি লোড করা যায়নি। আবার চেষ্টা করো।'; }
+    });
+  }
   document.addEventListener('click', event => {
     const link = event.target.closest('a[data-route]'); if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.target === '_blank') return;
     const url = new URL(link.href, location.href); if (url.origin !== location.origin) return;
     event.preventDefault(); navigate(url.pathname + url.search);
   });
-  window.addEventListener('popstate', renderRoute);
-  window.addEventListener('atharo:language-change',()=>{if(languageSelect&&window.AtharoI18n)languageSelect.value=window.AtharoI18n.locale;renderRoute();});
+  window.addEventListener('popstate',()=>safeRenderRoute());
+  window.addEventListener('atharo:language-change',()=>{if(languageSelect&&window.AtharoI18n)languageSelect.value=window.AtharoI18n.locale;safeRenderRoute();});
   mobileToggle.addEventListener('click', event => { event.stopPropagation(); closeAccountMenu(); const open = sidebar.classList.toggle('sidebar-open'); mobileToggle.setAttribute('aria-expanded', String(open)); });
   document.addEventListener('pointerdown', event => {
     if (!sidebar.contains(event.target) && event.target !== mobileToggle && !mobileToggle.contains(event.target)) closeMobile();
@@ -864,16 +880,23 @@
   }
   function initializeLanguage(){
     let stored='bn';try{stored=localStorage.getItem('atharo:language')==='en'?'en':'bn';}catch(_){}
-    window.AtharoI18n?.setLocale(stored,{rerender:false});
-    if(languageSelect){languageSelect.value=stored;languageSelect.addEventListener('change',()=>{window.AtharoI18n?.setLocale(languageSelect.value);});}
+    try { window.AtharoI18n?.setLocale(stored,{rerender:false}); } catch(error) { console.warn('Could not initialize selected language:',error); }
+    if(languageSelect){languageSelect.value=stored;languageSelect.addEventListener('change',()=>{try{if(window.AtharoI18n)window.AtharoI18n.setLocale(languageSelect.value);else safeRenderRoute();}catch(error){console.error('Could not change language:',error);safeRenderRoute();}});}
   }
   initializeLanguage();
-  renderAccount();renderNotifications();renderRoute();
+  try { renderAccount(); } catch(error) { console.error('Account UI failed to initialize:',error); }
+  try { renderNotifications(); } catch(error) { console.error('Notification UI failed to initialize:',error); }
+  safeRenderRoute();
   (async function init() {
-    try { const [config, auth] = await Promise.all([jsonFetch('/api/config'), jsonFetch('/auth/me')]); state.config = config; state.session = auth; state.admin = auth.user ? await jsonFetch('/api/admin/me').catch(() => null) : null; }
-    catch (_) { state.session = { user: null, profile: null }; state.admin = null; }
-    renderAccount();renderNotifications();renderRoute();refreshNotifications();
-  })();
+    const [configResult,authResult]=await Promise.allSettled([jsonFetch('/api/config'),jsonFetch('/auth/me')]);
+    if(configResult.status==='fulfilled')state.config={...state.config,...configResult.value};
+    if(authResult.status==='fulfilled')state.session=authResult.value;
+    else state.session={user:null,profile:null};
+    state.admin=state.session.user?await jsonFetch('/api/admin/me').catch(()=>null):null;
+    try { renderAccount(); } catch(error) { console.error('Account UI failed to update:',error); }
+    try { renderNotifications(); } catch(error) { console.error('Notification UI failed to update:',error); }
+    await safeRenderRoute();refreshNotifications();
+  })().catch(error=>{console.error('Atharo startup failed:',error);safeRenderRoute();});
   </script>
 </body>
 </html>
