@@ -609,11 +609,11 @@ app.get('/api/videos/:id/comments', requireValidId, accessVideo, async (req, res
     if (req.video.comments_enabled === false) return res.json({ comments: [], commentsEnabled: false });
     const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit || '50', 10) || 50));
     const result = await pool.query(`SELECT c.id,c.video_id,c.parent_id,c.body,c.created_at,c.author_sub,
-      p.handle,p.display_name,p.avatar_url,u.google_name
+      p.handle,p.display_name,p.avatar_url,p.is_verified,u.google_name
       FROM comments c JOIN app_users u ON u.google_sub=c.author_sub
       LEFT JOIN profiles p ON p.sub=c.author_sub
       WHERE c.video_id=$1 AND c.creator_hidden=FALSE AND (c.parent_id IS NULL OR EXISTS(SELECT 1 FROM comments parent WHERE parent.id=c.parent_id AND parent.creator_hidden=FALSE)) ORDER BY c.creator_pinned DESC,c.created_at ASC LIMIT $2`, [req.video.id, limit]);
-    const comments = result.rows.map(row => ({ id: row.id, videoId: row.video_id, parentId: row.parent_id, body: row.body, createdAt: toISO(row.created_at), author: { handle: row.handle || null, displayName: row.display_name || row.google_name || 'Creator', avatarUrl: row.avatar_url || null } }));
+    const comments = result.rows.map(row => ({ id: row.id, videoId: row.video_id, parentId: row.parent_id, body: row.body, createdAt: toISO(row.created_at), author: { handle: row.handle || null, displayName: row.display_name || row.google_name || 'Creator', avatarUrl: row.avatar_url || null, isVerified:Boolean(row.is_verified) } }));
     res.json({ comments });
   } catch (error) { next(error); }
 });
@@ -633,9 +633,9 @@ app.post('/api/videos/:id/comments', requireAuth, requireActive, requireValidId,
       await client.query('INSERT INTO comments (id,video_id,author_sub,parent_id,body) VALUES ($1,$2,$3,$4,$5)', [id, req.video.id, req.auth.session.sub, parentId, body]);
       await client.query('UPDATE videos SET comments_count=comments_count+1 WHERE id=$1', [req.video.id]);
     });
-    const author = await pool.query('SELECT p.handle,p.display_name,p.avatar_url,u.google_name FROM app_users u LEFT JOIN profiles p ON p.sub=u.google_sub WHERE u.google_sub=$1', [req.auth.session.sub]);
+    const author = await pool.query('SELECT p.handle,p.display_name,p.avatar_url,p.is_verified,u.google_name FROM app_users u LEFT JOIN profiles p ON p.sub=u.google_sub WHERE u.google_sub=$1', [req.auth.session.sub]);
     const row = author.rows[0];
-    const comment = { id, videoId: req.video.id, parentId, body, createdAt: new Date().toISOString(), author: { handle: row.handle || null, displayName: row.display_name || row.google_name || 'Creator', avatarUrl: row.avatar_url || null } };
+    const comment = { id, videoId: req.video.id, parentId, body, createdAt: new Date().toISOString(), author: { handle: row.handle || null, displayName: row.display_name || row.google_name || 'Creator', avatarUrl: row.avatar_url || null, isVerified:Boolean(row.is_verified) } };
     io.to(`video:${req.video.id}`).emit('comment:new', comment);
     await sendNotification(req.video.owner_sub,req.auth.session.sub,'comment','New comment',`${row.display_name||row.google_name||'A viewer'} commented on ${req.video.title||'your video'}.`,`/watch/${encodeURIComponent(req.video.id)}`);
     const counts = await getCounts(req.video.id);
