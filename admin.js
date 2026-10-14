@@ -3,7 +3,7 @@
 const crypto = require('crypto');
 const { pool, withTransaction } = require('./db');
 
-module.exports = function registerConsole({ app, requireAuth, requireActive, loadSession }) {
+module.exports = function registerConsole({ app, requireAuth, requireActive, loadSession, notifyUser }) {
   const OWNER_EMAIL = String(process.env.OWNER_EMAIL || '').trim().toLowerCase();
   const validUuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
   const validVideoId = value => typeof value === 'string' && (validUuid(value) || /^\d+-[0-9a-f]{8}$/i.test(value));
@@ -49,6 +49,77 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
     await client.query(`INSERT INTO admin_audit_logs (actor_email,actor_role,action,target_type,target_id,reason,metadata)
       VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)`, [actor.email, actor.role, action, targetType, targetId || null, clean(reason, 2000), JSON.stringify(metadata || {})]);
   }
+
+
+  const makeHandle=(value)=>{let h=String(value||'').toLowerCase().replace(/@.*/,'').replace(/[^a-z0-9._-]/g,'').replace(/^[._-]+|[._-]+$/g,'').slice(0,22);if(h.length<3)h=(h+'creator').slice(0,22);return h;};
+  app.get('/api/admin/channel-applications',adminAuth('admin'),async(req,res,next)=>{
+    try{
+      const status=['pending','approved','rejected','all'].includes(String(req.query.status||''))?String(req.query.status):'pending';
+      const result=await pool.query(`SELECT a.id,a.user_sub,a.channel_name,a.channel_type,a.other_platform_name,a.other_platform_url,a.status,a.decision_note,a.created_at,a.reviewed_at,u.email,u.google_name,u.google_picture FROM channel_applications a JOIN app_users u ON u.google_sub=a.user_sub WHERE ($1='all' OR a.status=$1) ORDER BY CASE a.status WHEN 'pending' THEN 0 ELSE 1 END,a.created_at ASC LIMIT 100`,[status]);
+      res.json({applications:result.rows.map(a=>({id:a.id,userSub:a.user_sub,channelName:a.channel_name,channelType:a.channel_type,otherPlatformName:a.other_platform_name,otherPlatformUrl:a.other_platform_url,status:a.status,decisionNote:a.decision_note,createdAt:a.created_at,reviewedAt:a.reviewed_at,email:a.email,name:a.google_name,picture:a.google_picture}))});
+    }catch(error){next(error);}
+  });
+  app.post('/api/admin/channel-applications/:id/decision',adminAuth('admin'),async(req,res,next)=>{
+    try{
+      if(!validUuid(req.params.id))return fail(res,'Invalid application id.');
+      const decision=String(req.body?.decision||''),note=clean(req.body?.note,2000);
+      if(!['approved','rejected'].includes(decision))return fail(res,'Choose approve or reject.');
+      if(note.length<5)return fail(res,'Add a decision note of at least 5 characters.');
+      const result=await withTransaction(async client=>{
+        const locked=await client.query('SELECT * FROM channel_applications WHERE id=$1 FOR UPDATE',[req.params.id]);
+        if(!locked.rowCount)return null;
+        const a=locked.rows[0];if(a.status!=='pending')throw Object.assign(new Error('This application has already been decided.'),{status:409});
+        let handle=null;
+        if(decision==='approved'){
+          const user=await client.query('SELECT email,google_name,google_picture FROM app_users WHERE google_sub=$1 FOR UPDATE',[a.user_sub]);
+          if(!user.rowCount)throw Object.assign(new Error('Applicant account was not found.'),{status:404});
+          const base=makeHandle(user.rows[0].email||a.channel_name);
+          for(let i=0;i<12;i++){
+            const candidate=i===0?base:`${base.slice(0,18)}-${crypto.randomBytes(2).toString('hex')}`;
+            const inserted=await client.query(`INSERT INTO profiles(sub,handle,display_name,bio,avatar_url,channel_type) VALUES($1,$2,$3,'',$4,$5) ON CONFLICT(handle) DO NOTHING RETURNING handle`,[a.user_sub,candidate,a.channel_name,user.rows[0].google_picture||null,a.channel_type]);
+            if(inserted.rowCount){handle=inserted.rows[0].handle;break;}
+          }
+          if(!handle)throw new Error('Could not allocate a unique channel handle.');
+        }
+        await client.query('UPDATE channel_applications SET status=$2,decision_note=$3,reviewed_by_email=$4,reviewed_at=NOW() WHERE id=$1',[a.id,decision,note,req.admin.email]);
+        await writeAudit(client,req.admin,'channel_application_'+decision,'channel_application',a.id,note,{channelName:a.channel_name,userSub:a.user_sub,handle});
+        return {userSub:a.user_sub,channelName:a.channel_name,handle};
+      });
+      if(!result)return jsonError(res,404,'Application not found.');
+      if(notifyUser)await notifyUser(result.userSub,null,'channel_application_'+decision,decision==='approved'?'Channel approved':'Channel application update',decision==='approved'?`Your channel “${result.channelName}” is approved. You can now upload videos.`:`Your channel application was not approved. Note: ${note}`,'/');
+      res.json({ok:true,decision,handle:result.handle||null});
+    }catch(error){if(error.status)return jsonError(res,error.status,error.message);next(error);}
+  });
+  app.get('/api/admin/verification-requests',adminAuth('admin'),async(req,res,next)=>{
+    try{
+      const status=['pending','approved','rejected','all'].includes(String(req.query.status||''))?String(req.query.status):'pending';
+      const result=await pool.query(`SELECT r.id,r.user_sub,r.reason,r.proof_url,r.status,r.decision_note,r.created_at,r.reviewed_at,p.handle,p.display_name,p.avatar_url,u.email FROM channel_verification_requests r JOIN profiles p ON p.sub=r.user_sub JOIN app_users u ON u.google_sub=r.user_sub WHERE ($1='all' OR r.status=$1) ORDER BY CASE r.status WHEN 'pending' THEN 0 ELSE 1 END,r.created_at ASC LIMIT 100`,[status]);
+      res.json({requests:result.rows.map(r=>({id:r.id,userSub:r.user_sub,reason:r.reason,proofUrl:r.proof_url,status:r.status,decisionNote:r.decision_note,createdAt:r.created_at,reviewedAt:r.reviewed_at,handle:r.handle,displayName:r.display_name,avatarUrl:r.avatar_url,email:r.email}))});
+    }catch(error){next(error);}
+  });
+  app.post('/api/admin/verification-requests/:id/decision',adminAuth('admin'),async(req,res,next)=>{
+    try{
+      if(!validUuid(req.params.id))return fail(res,'Invalid verification request id.');
+      const decision=String(req.body?.decision||''),note=clean(req.body?.note,2000);
+      if(!['approved','rejected'].includes(decision))return fail(res,'Choose approve or reject.');
+      if(note.length<5)return fail(res,'Add a decision note of at least 5 characters.');
+      const result=await withTransaction(async client=>{
+        const locked=await client.query('SELECT * FROM channel_verification_requests WHERE id=$1 FOR UPDATE',[req.params.id]);
+        if(!locked.rowCount)return null;
+        const r=locked.rows[0];if(r.status!=='pending')throw Object.assign(new Error('This verification request has already been decided.'),{status:409});
+        if(decision==='approved'){
+          const changed=await client.query('UPDATE profiles SET is_verified=TRUE,updated_at=NOW() WHERE sub=$1 RETURNING handle',[r.user_sub]);
+          if(!changed.rowCount)throw Object.assign(new Error('The creator channel is no longer available.'),{status:409});
+        }
+        await client.query('UPDATE channel_verification_requests SET status=$2,decision_note=$3,reviewed_by_email=$4,reviewed_at=NOW() WHERE id=$1',[r.id,decision,note,req.admin.email]);
+        await writeAudit(client,req.admin,'verification_'+decision,'verification_request',r.id,note,{userSub:r.user_sub});
+        return {userSub:r.user_sub};
+      });
+      if(!result)return jsonError(res,404,'Verification request not found.');
+      if(notifyUser)await notifyUser(result.userSub,null,'verification_'+decision,decision==='approved'?'Channel verified':'Verification request update',decision==='approved'?`Your channel is now verified. Note: ${note}`:`Your verification request was not approved. Note: ${note}`,'/studio?tab=verification');
+      res.json({ok:true,decision});
+    }catch(error){if(error.status)return jsonError(res,error.status,error.message);next(error);}
+  });
 
   function readCookie(req, name) {
     for (const part of String(req.get('cookie') || '').split(';')) {

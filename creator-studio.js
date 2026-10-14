@@ -2,8 +2,8 @@
 
 const crypto = require('crypto');
 
-module.exports = function attachCreatorStudio({ app, pool, requireAuth, requireActive, requireValidId, validUuid, safeText, normalizeCategory, normalizeVisibility }) {
-  app.get('/api/creator/content', requireAuth, async (req, res, next) => {
+module.exports = function attachCreatorStudio({ app, pool, requireAuth, requireActive, requireChannel, requireValidId, validUuid, safeText, normalizeCategory, normalizeVisibility }) {
+  app.get('/api/creator/content', requireAuth, requireChannel, async (req, res, next) => {
     try {
       const sub = req.auth.session.sub;
       const [videos, uploads] = await Promise.all([
@@ -17,7 +17,7 @@ module.exports = function attachCreatorStudio({ app, pool, requireAuth, requireA
     } catch (error) { next(error); }
   });
 
-  app.patch('/api/creator/videos/:id', requireAuth, requireActive, requireValidId, async (req,res,next) => {
+  app.patch('/api/creator/videos/:id', requireAuth, requireActive, requireChannel, requireValidId, async (req,res,next) => {
     try {
       const id=req.params.id, sub=req.auth.session.sub;
       const title=safeText(req.body?.title,100), description=safeText(req.body?.description,5000);
@@ -35,7 +35,7 @@ module.exports = function attachCreatorStudio({ app, pool, requireAuth, requireA
     } catch(error){next(error);}
   });
 
-  app.get('/api/creator/comments', requireAuth, async (req,res,next) => {
+  app.get('/api/creator/comments', requireAuth, requireChannel, async (req,res,next) => {
     try {
       const term=safeText(req.query.q,100), sub=req.auth.session.sub;
       const result=await pool.query(`SELECT c.id,c.video_id,c.parent_id,c.body,c.created_at,c.creator_pinned,c.creator_hidden,v.title AS video_title,
@@ -71,7 +71,7 @@ module.exports = function attachCreatorStudio({ app, pool, requireAuth, requireA
     }catch(error){next(error);}
   });
 
-  app.get('/api/creator/audience', requireAuth, async(req,res,next)=>{
+  app.get('/api/creator/audience', requireAuth, requireChannel, async(req,res,next)=>{
     try{
       const days=[7,30,90].includes(Number(req.query.days))?Number(req.query.days):30, sub=req.auth.session.sub;
       const [daily,viewers,top]=await Promise.all([
@@ -83,7 +83,7 @@ module.exports = function attachCreatorStudio({ app, pool, requireAuth, requireA
     }catch(error){next(error);}
   });
 
-  app.get('/api/creator/notifications', requireAuth, async(req,res,next)=>{
+  app.get('/api/creator/notifications', requireAuth, requireChannel, async(req,res,next)=>{
     try{
       const sub=req.auth.session.sub;
       const [comments,strikes,subscribers]=await Promise.all([
@@ -95,4 +95,57 @@ module.exports = function attachCreatorStudio({ app, pool, requireAuth, requireA
       res.set('Cache-Control','private, no-store');res.json({notifications:items});
     }catch(error){next(error);}
   });
+
+  app.get('/api/creator/playlists', requireAuth, requireChannel, async(req,res,next)=>{
+    try{
+      const result=await pool.query(`SELECT p.id,p.name,p.description,p.is_public,p.updated_at,COUNT(i.video_id)::bigint AS videos_count FROM playlists p LEFT JOIN playlist_items i ON i.playlist_id=p.id WHERE p.owner_sub=$1 AND p.is_creator_playlist=TRUE GROUP BY p.id ORDER BY p.updated_at DESC`,[req.auth.session.sub]);
+      res.set('Cache-Control','private, no-store');res.json({playlists:result.rows.map(p=>({id:p.id,name:p.name,description:p.description,isPublic:Boolean(p.is_public),videosCount:Number(p.videos_count)}))});
+    }catch(error){next(error);}
+  });
+  app.post('/api/creator/playlists', requireAuth, requireActive, requireChannel, async(req,res,next)=>{
+    try{
+      const name=safeText(req.body?.name,80),description=safeText(req.body?.description,500);
+      if(!name)return res.status(400).json({error:'Playlist name is required.'});
+      const id=crypto.randomUUID(),isPublic=req.body?.isPublic!==false;
+      await pool.query(`INSERT INTO playlists(id,owner_sub,name,description,is_public,is_creator_playlist) VALUES($1,$2,$3,$4,$5,TRUE)`,[id,req.auth.session.sub,name,description,isPublic]);
+      res.status(201).json({playlist:{id,name,description,isPublic,videosCount:0}});
+    }catch(error){next(error);}
+  });
+  app.put('/api/creator/playlists/:id', requireAuth, requireActive, requireChannel, async(req,res,next)=>{
+    try{
+      if(!validUuid(req.params.id))return res.status(400).json({error:'Invalid playlist id.'});
+      const name=safeText(req.body?.name,80),description=safeText(req.body?.description,500);
+      if(!name)return res.status(400).json({error:'Playlist name is required.'});
+      const result=await pool.query(`UPDATE playlists SET name=$3,description=$4,is_public=$5,updated_at=NOW() WHERE id=$1 AND owner_sub=$2 AND is_creator_playlist=TRUE RETURNING id,name,description,is_public`,[req.params.id,req.auth.session.sub,name,description,req.body?.isPublic!==false]);
+      if(!result.rowCount)return res.status(404).json({error:'Creator playlist not found.'});
+      const p=result.rows[0];res.json({playlist:{id:p.id,name:p.name,description:p.description,isPublic:Boolean(p.is_public)}});
+    }catch(error){next(error);}
+  });
+  app.delete('/api/creator/playlists/:id', requireAuth, requireActive, requireChannel, async(req,res,next)=>{
+    try{
+      if(!validUuid(req.params.id))return res.status(400).json({error:'Invalid playlist id.'});
+      const result=await pool.query('DELETE FROM playlists WHERE id=$1 AND owner_sub=$2 AND is_creator_playlist=TRUE RETURNING id',[req.params.id,req.auth.session.sub]);
+      if(!result.rowCount)return res.status(404).json({error:'Creator playlist not found.'});
+      res.json({ok:true});
+    }catch(error){next(error);}
+  });
+  app.get('/api/creator/verification', requireAuth, requireChannel, async(req,res,next)=>{
+    try{
+      const result=await pool.query(`SELECT id,reason,proof_url,status,decision_note,created_at,reviewed_at FROM channel_verification_requests WHERE user_sub=$1 ORDER BY created_at DESC LIMIT 1`,[req.auth.session.sub]);
+      res.set('Cache-Control','private, no-store');res.json({isVerified:Boolean(req.auth.profile?.is_verified),application:result.rows[0]||null});
+    }catch(error){next(error);}
+  });
+  app.post('/api/creator/verification', requireAuth, requireActive, requireChannel, async(req,res,next)=>{
+    try{
+      if(req.auth.profile?.is_verified)return res.status(409).json({error:'This channel is already verified.'});
+      const reason=safeText(req.body?.reason,2000),rawUrl=safeText(req.body?.proofUrl,2048);let proofUrl=null;
+      if(reason.length<20)return res.status(400).json({error:'Explain why the channel should be verified (at least 20 characters).'});
+      if(rawUrl){try{const url=new URL(rawUrl);if(url.protocol!=='https:'||url.username||url.password)return res.status(400).json({error:'Proof link must use HTTPS.'});proofUrl=url.toString().slice(0,2048);}catch(_){return res.status(400).json({error:'Enter a valid HTTPS proof link.'});}}
+      const pending=await pool.query(`SELECT id FROM channel_verification_requests WHERE user_sub=$1 AND status='pending'`,[req.auth.session.sub]);
+      if(pending.rowCount)return res.status(409).json({error:'A verification request is already pending.'});
+      const id=crypto.randomUUID(),result=await pool.query(`INSERT INTO channel_verification_requests(id,user_sub,reason,proof_url) VALUES($1,$2,$3,$4) RETURNING id,reason,proof_url,status,decision_note,created_at`,[id,req.auth.session.sub,reason,proofUrl]);
+      res.status(201).json({application:result.rows[0]});
+    }catch(error){if(error.code==='23505')return res.status(409).json({error:'A verification request is already pending.'});next(error);}
+  });
+
 };

@@ -4,21 +4,21 @@
     const node = document.createElement(tag);
     for (const [key,value] of Object.entries(props || {})) {
       if (key === 'class') node.className = value;
-      else if (key === 'text') node.textContent = value == null ? '' : String(value);
+      else if (key === 'text') node.textContent = window.AtharoI18n?.t(value == null ? '' : String(value)) ?? (value == null ? '' : String(value));
       else if (key === 'onClick') node.addEventListener('click',value);
       else if (key === 'value') node.value = value == null ? '' : String(value);
       else if (key === 'checked') node.checked = Boolean(value);
       else if (key === 'disabled') node.disabled = Boolean(value);
       else if (key === 'hidden') node.hidden = Boolean(value);
-      else node.setAttribute(key,value);
+      else node.setAttribute(key,['placeholder','title','aria-label'].includes(key)?(window.AtharoI18n?.t(value)??value):value);
     }
     for (const child of children || []) if (child) node.append(child);
     return node;
   };
   const text = (v,fallback='—') => v === null || v === undefined || v === '' ? fallback : String(v);
-  const num = v => (Number(v)||0).toLocaleString('bn-BD');
-  const dateText = value => { if(!value) return '—'; try { return new Intl.DateTimeFormat('bn-BD',{dateStyle:'medium'}).format(new Date(value)); } catch(_) { return String(value); } };
-  const money = value => { try { return new Intl.NumberFormat('bn-BD',{style:'currency',currency:'BDT',maximumFractionDigits:2}).format(Number(value)||0); } catch(_) { return '৳'+num(value); } };
+  const num = v => (Number(v)||0).toLocaleString(window.AtharoI18n?.locale==='en'?'en-US':'bn-BD');
+  const dateText = value => { if(!value) return '—'; try { return new Intl.DateTimeFormat(window.AtharoI18n?.locale==='en'?'en-US':'bn-BD',{dateStyle:'medium'}).format(new Date(value)); } catch(_) { return String(value); } };
+  const money = value => { try { return new Intl.NumberFormat(window.AtharoI18n?.locale==='en'?'en-US':'bn-BD',{style:'currency',currency:'BDT',maximumFractionDigits:2}).format(Number(value)||0); } catch(_) { return '৳'+num(value); } };
   const badge = (label,kind='') => el('span',{class:'console-badge'+(kind?' '+kind:''),text:label});
   const panel = (title,description,content) => el('section',{class:'console-panel'},[el('h2',{text:title}),description?el('p',{text:description}):null,content]);
   const stat = (label,value,note='') => el('article',{class:'console-stat'},[el('span',{class:'console-stat-label',text:label}),el('strong',{class:'console-stat-value',text:value}),note?el('span',{class:'console-stat-note',text:note}):null]);
@@ -160,22 +160,37 @@
   async function renderReports(root,ctx){return renderReviewQueue(root,ctx,'report');}
   async function renderAppeals(root,ctx){return renderReviewQueue(root,ctx,'video_appeal');}
 
+  async function renderChannelApplications(root,ctx){
+    const status=select([['pending','Pending'],['all','All applications'],['approved','Approved'],['rejected','Rejected']],'pending'),list=el('div');
+    async function load(){list.replaceChildren(empty('Loading channel applications…'));try{const data=await ctx.jsonFetch('/api/admin/channel-applications?status='+encodeURIComponent(status.value));list.replaceChildren();const items=data.applications||[];if(!items.length){list.append(empty('No channel applications in this view.'));return;}for(const item of items){const card=el('article',{class:'review-card channel-application-card'}),top=el('div',{class:'review-card-copy'},[el('div',{class:'review-card-meta'},[badge(item.channelType,'warn'),statusBadge(item.status),el('span',{text:dateText(item.createdAt)})]),el('h3',{text:item.channelName}),el('div',{class:'console-muted',text:(item.name||'Google account')+' · '+item.email}),item.otherPlatformName?el('p',{text:'Other platform: '+item.otherPlatformName}):el('p',{class:'console-muted',text:'No other platform channel provided.'}),item.otherPlatformUrl?el('a',{href:item.otherPlatformUrl,target:'_blank',rel:'noopener noreferrer',text:'Open platform link ↗'}):null,item.decisionNote?el('p',{class:'console-notice',text:'Previous decision: '+item.decisionNote}):null]);card.append(top);if(item.status==='pending'){const note=el('textarea',{rows:'2',maxlength:'2000',placeholder:'Decision note (at least 5 characters)'}),actions=el('div',{class:'console-form-actions'});const decide=async decision=>{if(note.value.trim().length<5){ctx.notify('Write a decision note of at least 5 characters.','error');note.focus();return;}try{const result=await ctx.jsonFetch('/api/admin/channel-applications/'+encodeURIComponent(item.id)+'/decision',{method:'POST',body:{decision,note:note.value.trim()}});ctx.notify(decision==='approved'?'Channel approved. The applicant can now upload.':'Application rejected with a note.');await load();}catch(error){ctx.notify(error.message,'error');}};actions.append(button('Approve channel',()=>decide('approved'),'primary-cta'),button('Reject',()=>decide('rejected'),'console-small-button'));card.append(el('div',{class:'review-card-actions'},[field('Decision note',note),actions]));}list.append(card);}}
+      catch(error){list.replaceChildren(el('div',{class:'console-notice',text:error.message}));}}
+    status.addEventListener('change',load);root.replaceChildren(panel('Channel applications','Review the requested channel name, channel type, and existing platform presence. Approval creates the creator channel and unlocks upload access.',el('div',{},[el('div',{class:'studio-toolbar'},[field('Status',status)]),list])));await load();
+  }
+  async function renderVerificationRequests(root,ctx){
+    const status=select([['pending','Pending'],['all','All requests'],['approved','Approved'],['rejected','Rejected']],'pending'),list=el('div');
+    async function load(){list.replaceChildren(empty('Loading verification requests…'));try{const data=await ctx.jsonFetch('/api/admin/verification-requests?status='+encodeURIComponent(status.value));list.replaceChildren();const items=data.requests||[];if(!items.length){list.append(empty('No verification requests in this view.'));return;}for(const item of items){const card=el('article',{class:'review-card'}),copy=el('div',{class:'review-card-copy'},[el('div',{class:'review-card-meta'},[badge('@'+item.handle,'good'),statusBadge(item.status),el('span',{text:dateText(item.createdAt)})]),el('h3',{text:item.displayName||item.handle}),el('div',{class:'console-muted',text:item.email}),el('p',{text:item.reason}),item.proofUrl?el('a',{href:item.proofUrl,target:'_blank',rel:'noopener noreferrer',text:'Open proof link ↗'}):el('span',{class:'console-muted',text:'No proof link'}),item.decisionNote?el('p',{class:'console-notice',text:'Previous decision: '+item.decisionNote}):null]);card.append(copy);if(item.status==='pending'){const note=el('textarea',{rows:'2',maxlength:'2000',placeholder:'Decision note (at least 5 characters)'}),actions=el('div',{class:'console-form-actions'});const decide=async decision=>{if(note.value.trim().length<5){ctx.notify('Write a decision note of at least 5 characters.','error');note.focus();return;}try{await ctx.jsonFetch('/api/admin/verification-requests/'+encodeURIComponent(item.id)+'/decision',{method:'POST',body:{decision,note:note.value.trim()}});ctx.notify(decision==='approved'?'Channel verified.':'Verification request rejected.');await load();}catch(error){ctx.notify(error.message,'error');}};actions.append(button('Approve verification',()=>decide('approved'),'primary-cta'),button('Reject',()=>decide('rejected'),'console-small-button'));card.append(el('div',{class:'review-card-actions'},[field('Decision note',note),actions]));}list.append(card);}}
+      catch(error){list.replaceChildren(el('div',{class:'console-notice',text:error.message}));}}
+    status.addEventListener('change',load);root.replaceChildren(panel('Creator verification','Approve verified creators here. Approved channels receive the green verification badge beside their name.',el('div',{},[el('div',{class:'studio-toolbar'},[field('Status',status)]),list])));await load();
+  }
+
   async function renderAdmin(app,ctx,chosenTab) {
     const queryTab=new URLSearchParams(location.search).get('tab'),role=ctx.adminRole;
     if(!role){app.replaceChildren(heading('ATHARO ADMIN','অনুমতি নেই','এই panel শুধু অনুমোদিত Admin/Moderator-এর জন্য।'));return;}
-    const tabs=[['queue','Review queue'],['overview','Overview'],['moderation','Content & users'],['ads','Campaigns'],['audit','Audit log'],['staff','Staff & roles'],['settings','Platform settings']];
+    const tabs=[['queue','Review queue'],['applications','Channel applications'],['verification','Creator verification'],['overview','Overview'],['moderation','Content & users'],['ads','Campaigns'],['audit','Audit log'],['staff','Staff & roles'],['settings','Platform settings']];
     let activeTab=chosenTab||queryTab||'queue';
-    if((['ads','audit'].includes(activeTab)&&!['owner','admin'].includes(role))||(['staff','settings'].includes(activeTab)&&role!=='owner'))activeTab='queue';
+    if((['ads','audit','applications','verification'].includes(activeTab)&&!['owner','admin'].includes(role))||(['staff','settings'].includes(activeTab)&&role!=='owner'))activeTab='queue';
     app.replaceChildren();app.classList.add('console-page','admin-shell');
-    const toolbar=el('div',{class:'admin-toolbar'},[el('div',{class:'admin-brand'},[el('a',{href:'/', 'data-route':'',class:'brand-lockup', 'aria-label':'Atharo | আঠারো হোম'},[el('span',{class:'brand-latin',text:'Atharo |'}),el('img',{class:'brand-logo',src:'/assets/atharo-logo.png',alt:'Atharo | আঠারো'})]),el('div',{class:'admin-workspace-label'},[el('strong',{text:'Admin panel'}),el('span',{text:'Trust & Safety workspace'})])]),el('div',{class:'admin-toolbar-actions'},[badge(role==='owner'?'Owner':role==='admin'?'Admin':'Moderator','good'),el('a',{href:'/', 'data-route':'',class:'admin-return-link',text:'← Return to Atharo'}),button('Sign out',async()=>{try{await ctx.jsonFetch('/auth/logout',{method:'POST',body:{}});location.assign('/');}catch(error){ctx.notify(error.message,'error');}},'console-small-button')])]);
+    const toolbar=el('div',{class:'admin-toolbar'},[el('div',{class:'admin-brand'},[el('a',{href:'/', 'data-route':'',class:'brand-lockup', 'aria-label':'Atharo | আঠারো হোম'},[el('span',{class:'brand-latin',text:'Atharo |'}),el('img',{class:'brand-logo',src:'/assets/atharo-logo.png',alt:'Atharo | আঠারো'})]),el('div',{class:'admin-workspace-label'},[el('strong',{text:'Admin panel'}),el('span',{text:'Trust & Safety workspace'})])]),el('div',{class:'admin-toolbar-actions'},[window.AtharoI18n?.createSelector(),badge(role==='owner'?'Owner':role==='admin'?'Admin':'Moderator','good'),el('a',{href:'/', 'data-route':'',class:'admin-return-link',text:'← Return to Atharo'}),button('Sign out',async()=>{try{await ctx.jsonFetch('/auth/logout',{method:'POST',body:{}});location.assign('/');}catch(error){ctx.notify(error.message,'error');}},'console-small-button')])]);
     const roleText=role==='moderator'?'You can triage reports and take moderation actions. Staff, platform settings, campaigns, audit logs and appeals are reserved for Admin/Owner.':role==='admin'?'You can manage campaigns, review reports and appeals, moderate content, and inspect the audit log. Owner controls staff access and platform-wide settings.':'Owner access: all admin, moderation, campaign and platform controls.';
     app.append(toolbar,heading('TRUST & SAFETY',role==='moderator'?'Moderator workspace':'Admin workspace',roleText));
     const nav=el('nav',{class:'console-tabs admin-tabs','aria-label':'Admin sections'});
-    tabs.forEach(([id,label])=>{if(['ads','audit'].includes(id)&&!['owner','admin'].includes(role))return;if(['staff','settings'].includes(id)&&role!=='owner')return;nav.append(el('button',{type:'button',class:'console-tab'+(activeTab===id?' active':''),text:label,onClick:()=>ctx.navigate('/admin?tab='+id)}));});
+    tabs.forEach(([id,label])=>{if(['ads','audit','applications','verification'].includes(id)&&!['owner','admin'].includes(role))return;if(['staff','settings'].includes(id)&&role!=='owner')return;nav.append(el('button',{type:'button',class:'console-tab'+(activeTab===id?' active':''),text:label,onClick:()=>ctx.navigate('/admin?tab='+id)}));});
     app.append(nav);
     const content=el('div',{class:'admin-tab-content'});app.append(content);
     try{
       if(activeTab==='queue')await renderReviewQueue(content,ctx,'all');
+      else if(activeTab==='applications'&&['owner','admin'].includes(role))await renderChannelApplications(content,ctx);
+      else if(activeTab==='verification'&&['owner','admin'].includes(role))await renderVerificationRequests(content,ctx);
       else if(activeTab==='moderation')await renderModeration(content,ctx,role);
       else if(activeTab==='ads')await renderAds(content,ctx,role);
       else if(activeTab==='staff'&&role==='owner')await renderStaff(content,ctx);
