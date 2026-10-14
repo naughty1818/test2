@@ -1259,3 +1259,9 @@ body.admin-fullscreen .main-content { width:100%; max-width:none; min-height:100
 .account-name-row { flex:1; overflow:hidden; }
 .account-name-row .account-name { min-width:0; flex:1; }
 .account-menu .menu-note { display:flex; align-items:center; gap:5px; }
+
+
+/* Login page brand uses the same official Atharo artwork as the site header. */
+.login-brand-logo { display:block; width:128px; height:72px; margin:0 auto 18px; object-fit:contain; }
+.login-wide { cursor:pointer; }
+.login-wide:disabled { cursor:wait; opacity:.72; }
