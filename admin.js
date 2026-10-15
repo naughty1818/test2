@@ -2,6 +2,12 @@
 
 const crypto = require('crypto');
 const { pool, withTransaction } = require('./db');
+const {
+  DEFAULT_AD_LAYOUTS,
+  normalizeAdLayouts,
+  normalizeMonthlyImpressionCap,
+  normalizeFeedAdEveryRows
+} = require('./ad-layouts');
 
 module.exports = function registerConsole({ app, requireAuth, requireActive, loadSession, notifyUser }) {
   const OWNER_EMAIL = String(process.env.OWNER_EMAIL || '').trim().toLowerCase();
@@ -20,6 +26,16 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
   const jsonError = (res, status, error) => res.status(status).json({ error });
   const sha = value => crypto.createHash('sha256').update(String(value)).digest('hex');
   const fail = (res, error) => jsonError(res, 400, error);
+  const adSettingsPayload = row => {
+    let adLayoutSettings = DEFAULT_AD_LAYOUTS;
+    try { adLayoutSettings = normalizeAdLayouts(row?.ad_layout_settings); } catch (_) {}
+    return {
+      adLayoutSettings,
+      feedAdEveryRows: Number(row?.feed_ad_every_rows) || 4,
+      lBannerDurationSeconds: Number(row?.l_banner_duration_seconds) || 10,
+      lBannerSkippable: row?.l_banner_skippable !== false
+    };
+  };
 
   async function resolveRole(email) {
     const normalized = emailOf(email);
@@ -140,6 +156,14 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
     return token;
   }
 
+  app.get('/api/sponsor/settings', async (req, res, next) => {
+    try {
+      const result = await pool.query('SELECT ad_layout_settings,feed_ad_every_rows,l_banner_duration_seconds,l_banner_skippable FROM platform_settings WHERE id=1');
+      res.set('Cache-Control', 'no-store');
+      res.json(adSettingsPayload(result.rows[0] || {}));
+    } catch (error) { next(error); }
+  });
+
   // Public ad serving is disabled until the verified owner enables it and activates campaigns.
   app.get('/api/sponsor/serve', async (req, res, next) => {
     try {
@@ -147,17 +171,58 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const channelHandle = req.query.handle ? String(req.query.handle).replace(/^@/,'').trim() : null;
       if (!['feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'].includes(placement)) return fail(res, 'Invalid ad placement.');
       if (placement === 'channel' && !channelHandle) return fail(res, 'Channel handle is required.');
-      const settings = await pool.query('SELECT ads_enabled,ad_feed_enabled,ad_watch_sidebar_enabled,ad_channel_enabled,ad_sticky_enabled,ad_postroll_enabled,ad_l_banner_enabled,l_banner_duration_seconds FROM platform_settings WHERE id=1');
+      const settings = await pool.query('SELECT ads_enabled,ad_feed_enabled,ad_watch_sidebar_enabled,ad_channel_enabled,ad_sticky_enabled,ad_postroll_enabled,ad_l_banner_enabled,l_banner_duration_seconds,l_banner_skippable,feed_ad_every_rows,ad_layout_settings FROM platform_settings WHERE id=1');
       const settingKey = {feed:'ad_feed_enabled',watch_sidebar:'ad_watch_sidebar_enabled',channel:'ad_channel_enabled',sticky_banner:'ad_sticky_enabled',postroll:'ad_postroll_enabled',l_banner:'ad_l_banner_enabled'}[placement];
-      if (!settings.rows[0]?.ads_enabled || !settings.rows[0]?.[settingKey]) return res.json({ ad: null });
-      const result = await pool.query(`SELECT c.id,c.title,c.sponsor_name,c.placement,c.creative_url,c.destination_url
-        FROM ad_campaigns c WHERE c.placement=$1 AND c.status='active'
-          AND (c.starts_at IS NULL OR c.starts_at<=NOW()) AND (c.ends_at IS NULL OR c.ends_at>NOW())
-        ORDER BY (SELECT COUNT(*) FROM ad_events e WHERE e.campaign_id=c.id AND e.event_type='impression') ASC,
-                 c.created_at ASC LIMIT 1`, [placement]);
-      const row = result.rows[0];
+      const settingsRow = settings.rows[0] || {};
+      const publicSettings = adSettingsPayload(settingsRow);
+      const responseSettings = { ...publicSettings, placement };
+      if (!settingsRow.ads_enabled || !settingsRow[settingKey]) return res.json({ ad: null, settings: responseSettings });
+      // Caps count UTC-month impression events; ad_monthly_serves only smooths rotation.
+      const row = await withTransaction(async client => {
+        const candidates = await client.query(`SELECT c.id,c.title,c.sponsor_name,c.placement,c.creative_url,c.destination_url,
+            c.l_bottom_creative_url,c.l_bottom_destination_url,c.monthly_impression_cap,
+            COALESCE(ms.served_count,0)::int AS monthly_served,
+            COALESCE(mi.impression_count,0)::int AS monthly_impressions
+          FROM ad_campaigns c
+          LEFT JOIN ad_monthly_serves ms ON ms.campaign_id=c.id AND ms.month_start=DATE_TRUNC('month',NOW() AT TIME ZONE 'UTC')::date
+          LEFT JOIN LATERAL (
+            SELECT COUNT(*)::int AS impression_count FROM ad_events e
+            WHERE e.campaign_id=c.id AND e.event_type='impression'
+              AND e.created_at >= (DATE_TRUNC('month',NOW() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
+          ) mi ON TRUE
+          WHERE c.placement=$1 AND c.status='active'
+            AND (c.starts_at IS NULL OR c.starts_at<=NOW()) AND (c.ends_at IS NULL OR c.ends_at>NOW())
+            AND (c.monthly_impression_cap IS NULL OR COALESCE(mi.impression_count,0)<c.monthly_impression_cap)
+          ORDER BY COALESCE(ms.served_count,0) ASC,
+            (SELECT COUNT(*) FROM ad_events e WHERE e.campaign_id=c.id AND e.event_type='impression') ASC,
+            c.created_at ASC
+          LIMIT 1 FOR UPDATE OF c SKIP LOCKED`, [placement]);
+        const candidate=candidates.rows[0];
+        if(!candidate)return null;
+        const reserved=await client.query(`INSERT INTO ad_monthly_serves(campaign_id,month_start,served_count)
+          VALUES($1,DATE_TRUNC('month',NOW() AT TIME ZONE 'UTC')::date,1)
+          ON CONFLICT(campaign_id,month_start) DO UPDATE
+            SET served_count=ad_monthly_serves.served_count+1
+          RETURNING served_count`, [candidate.id]);
+        return { ...candidate, monthly_served_after:Number(reserved.rows[0].served_count) };
+      });
       res.set('Cache-Control', 'no-store');
-      res.json({ ad: row ? { id: row.id, title: row.title, sponsorName: row.sponsor_name, placement: row.placement, creativeUrl: row.creative_url, destinationUrl: row.destination_url, durationSeconds: Number(settings.rows[0]?.l_banner_duration_seconds || 10) } : null });
+      res.json({ ad: row ? {
+        id: row.id,
+        title: row.title,
+        sponsorName: row.sponsor_name,
+        placement: row.placement,
+        creativeUrl: row.creative_url,
+        destinationUrl: row.destination_url,
+        bottomCreativeUrl: row.l_bottom_creative_url || '',
+        bottomDestinationUrl: row.l_bottom_destination_url || row.destination_url,
+        monthlyImpressionCap: row.monthly_impression_cap === null ? null : Number(row.monthly_impression_cap),
+        monthlyServed: row.monthly_served_after,
+        monthlyImpressions: row.monthly_impressions,
+        layoutSettings: publicSettings.adLayoutSettings[placement],
+        durationSeconds: publicSettings.lBannerDurationSeconds,
+        skippable: publicSettings.lBannerSkippable
+      } : null, settings: responseSettings });
     } catch (error) { next(error); }
   });
 
@@ -196,11 +261,31 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const estimate = eventType === 'impression' && ['watch_sidebar','channel'].includes(placement) && creatorSub && creatorEligible && settings.monetization_enabled ? grossPerImpression * share : 0;
       const visitor = adVisitor(req, res);
       const dayKey = new Date().toISOString().slice(0,10);
-      const dedupe = sha(`${visitor}|${campaignId}|${eventType}|${videoId || 'feed'}|${dayKey}`);
-      const inserted = await pool.query(`INSERT INTO ad_events (campaign_id,video_id,creator_sub,event_type,dedupe_key,estimated_creator_earnings_bdt)
-        VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (campaign_id,event_type,dedupe_key) DO NOTHING RETURNING id`,
-        [campaignId, videoId, creatorSub, eventType, dedupe, estimate]);
-      res.json({ ok: true, counted: inserted.rowCount > 0 });
+      const impressionId = typeof req.body?.impressionId === 'string' && validUuid(req.body.impressionId) ? req.body.impressionId : '';
+      const dedupe = eventType === 'impression' && impressionId
+        ? sha(`${visitor}|${campaignId}|impression|${impressionId}`)
+        : sha(`${visitor}|${campaignId}|${eventType}|${videoId || 'feed'}|${dayKey}`);
+      const recorded = await withTransaction(async client => {
+        const locked = await client.query(`SELECT monthly_impression_cap FROM ad_campaigns WHERE id=$1 AND status='active'
+          AND (starts_at IS NULL OR starts_at<=NOW()) AND (ends_at IS NULL OR ends_at>NOW()) FOR UPDATE`, [campaignId]);
+        if (!locked.rowCount) return { unavailable: true, counted: false };
+        const existing = await client.query('SELECT id FROM ad_events WHERE campaign_id=$1 AND event_type=$2 AND dedupe_key=$3', [campaignId,eventType,dedupe]);
+        if (existing.rowCount) return { counted: false, duplicate: true };
+        if (eventType === 'impression' && locked.rows[0].monthly_impression_cap !== null) {
+          const monthly = await client.query(`SELECT COUNT(*)::int AS impressions FROM ad_events
+            WHERE campaign_id=$1 AND event_type='impression'
+              AND created_at >= (DATE_TRUNC('month',NOW() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')`, [campaignId]);
+          if (Number(monthly.rows[0]?.impressions || 0) >= Number(locked.rows[0].monthly_impression_cap)) {
+            return { counted: false, monthlyCapReached: true };
+          }
+        }
+        const inserted = await client.query(`INSERT INTO ad_events (campaign_id,video_id,creator_sub,event_type,dedupe_key,estimated_creator_earnings_bdt)
+          VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (campaign_id,event_type,dedupe_key) DO NOTHING RETURNING id`,
+          [campaignId, videoId, creatorSub, eventType, dedupe, estimate]);
+        return { counted: inserted.rowCount > 0 };
+      });
+      if (recorded.unavailable) return jsonError(res,404,'Ad campaign unavailable.');
+      res.json({ ok: true, ...recorded });
     } catch (error) { next(error); }
   });
 
@@ -430,12 +515,24 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
     try {
       const q=clean(req.query.q,120),pattern='%'+q.replace(/[\\%_]/g,'\\$&'), status=['all','draft','active','paused'].includes(String(req.query.status||''))?String(req.query.status):'all';
       const page=Math.max(1,Number.parseInt(req.query.page||'1',10)||1),limit=Math.min(50,Math.max(10,Number.parseInt(req.query.limit||'20',10)||20)),offset=(page-1)*limit;
-      const result = await pool.query(`SELECT c.id,c.title,c.sponsor_name,c.placement,c.creative_url,c.destination_url,c.cpm_bdt,c.status,c.starts_at,c.ends_at,c.created_at,
+      const result = await pool.query(`SELECT c.id,c.title,c.sponsor_name,c.placement,c.creative_url,c.destination_url,
+          c.l_bottom_creative_url,c.l_bottom_destination_url,c.monthly_impression_cap,
+          COALESCE(ms.served_count,0)::bigint AS monthly_served,COALESCE(mi.impression_count,0)::bigint AS monthly_impressions,
+          c.cpm_bdt,c.status,c.starts_at,c.ends_at,c.created_at,
           COUNT(e.id) FILTER (WHERE e.event_type='impression')::bigint AS impressions,
           COUNT(e.id) FILTER (WHERE e.event_type='click')::bigint AS clicks
-        FROM ad_campaigns c LEFT JOIN ad_events e ON e.campaign_id=c.id WHERE ($1='all' OR c.status=$1) AND (c.title ILIKE $2 OR c.sponsor_name ILIKE $2) GROUP BY c.id ORDER BY c.created_at DESC LIMIT $3 OFFSET $4`,[status,pattern,limit,offset]);
+        FROM ad_campaigns c
+        LEFT JOIN ad_events e ON e.campaign_id=c.id
+        LEFT JOIN ad_monthly_serves ms ON ms.campaign_id=c.id AND ms.month_start=DATE_TRUNC('month',NOW() AT TIME ZONE 'UTC')::date
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::bigint AS impression_count FROM ad_events e_month
+          WHERE e_month.campaign_id=c.id AND e_month.event_type='impression'
+            AND e_month.created_at >= (DATE_TRUNC('month',NOW() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
+        ) mi ON TRUE
+        WHERE ($1='all' OR c.status=$1) AND (c.title ILIKE $2 OR c.sponsor_name ILIKE $2)
+        GROUP BY c.id,ms.served_count,mi.impression_count ORDER BY c.created_at DESC LIMIT $3 OFFSET $4`,[status,pattern,limit,offset]);
       const total=await pool.query(`SELECT COUNT(*)::bigint AS n FROM ad_campaigns c WHERE ($1='all' OR c.status=$1) AND (c.title ILIKE $2 OR c.sponsor_name ILIKE $2)`,[status,pattern]);
-      res.json({page,limit,total:Number(total.rows[0].n),pages:Math.ceil(Number(total.rows[0].n)/limit),campaigns: result.rows.map(r=>({id:r.id,title:r.title,sponsorName:r.sponsor_name,placement:r.placement,creativeUrl:r.creative_url,destinationUrl:r.destination_url,cpmBdt:Number(r.cpm_bdt),status:r.status,startsAt:r.starts_at,endsAt:r.ends_at,createdAt:r.created_at,impressions:Number(r.impressions),clicks:Number(r.clicks)})) });
+      res.json({page,limit,total:Number(total.rows[0].n),pages:Math.ceil(Number(total.rows[0].n)/limit),campaigns: result.rows.map(r=>({id:r.id,title:r.title,sponsorName:r.sponsor_name,placement:r.placement,creativeUrl:r.creative_url,destinationUrl:r.destination_url,bottomCreativeUrl:r.l_bottom_creative_url,bottomDestinationUrl:r.l_bottom_destination_url,monthlyImpressionCap:r.monthly_impression_cap===null?null:Number(r.monthly_impression_cap),monthlyServed:Number(r.monthly_served||0),monthlyImpressions:Number(r.monthly_impressions||0),cpmBdt:Number(r.cpm_bdt),status:r.status,startsAt:r.starts_at,endsAt:r.ends_at,createdAt:r.created_at,impressions:Number(r.impressions),clicks:Number(r.clicks)})) });
     } catch (error) { next(error); }
   });
 
@@ -443,16 +540,21 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
     try {
       const title = clean(req.body?.title,120), sponsor = clean(req.body?.sponsorName,120);
       const placement = String(req.body?.placement || ''), creativeUrl = safeUrl(req.body?.creativeUrl), destinationUrl = safeUrl(req.body?.destinationUrl);
+      const bottomCreativeUrl = placement === 'l_banner' ? safeUrl(req.body?.bottomCreativeUrl) : null;
+      const bottomDestinationUrl = placement === 'l_banner' ? safeUrl(req.body?.bottomDestinationUrl) : null;
+      let monthlyImpressionCap;
+      try { monthlyImpressionCap = normalizeMonthlyImpressionCap(req.body?.monthlyImpressionCap); }
+      catch (error) { return fail(res,error.message); }
       const cpm = Number(req.body?.cpmBdt);
       const startsAt = req.body?.startsAt ? new Date(req.body.startsAt) : null;
       const endsAt = req.body?.endsAt ? new Date(req.body.endsAt) : null;
-      if (!title || !sponsor || !['feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'].includes(placement) || !creativeUrl || !destinationUrl || !Number.isFinite(cpm) || cpm < 0 || cpm > 1000000) return fail(res, 'Campaign-এর title, sponsor, HTTPS creative/landing URL, placement ও valid CPM দিন।');
+      if (!title || !sponsor || !['feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'].includes(placement) || !creativeUrl || !destinationUrl || (placement === 'l_banner' && (!bottomCreativeUrl || !bottomDestinationUrl)) || !Number.isFinite(cpm) || cpm < 0 || cpm > 1000000) return fail(res, 'Campaign-এর title, sponsor, HTTPS creative/landing URL, placement ও valid CPM দিন। L-shape-এর জন্য নিচের image ও landing URL-ও দিন।');
       if ((startsAt && Number.isNaN(startsAt.getTime())) || (endsAt && Number.isNaN(endsAt.getTime())) || (startsAt && endsAt && endsAt <= startsAt)) return fail(res, 'Campaign date range ঠিক নয়।');
       const id = crypto.randomUUID();
       await withTransaction(async client => {
-        await client.query(`INSERT INTO ad_campaigns (id,title,sponsor_name,placement,creative_url,destination_url,cpm_bdt,status,starts_at,ends_at,created_by_email)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,'paused',$8,$9,$10)`, [id,title,sponsor,placement,creativeUrl,destinationUrl,cpm,startsAt,endsAt,req.admin.email]);
-        await writeAudit(client,req.admin,'create_campaign','ad_campaign',id,'Campaign created paused.',{title,sponsor,placement,cpmBdt:cpm});
+        await client.query(`INSERT INTO ad_campaigns (id,title,sponsor_name,placement,creative_url,destination_url,l_bottom_creative_url,l_bottom_destination_url,monthly_impression_cap,cpm_bdt,status,starts_at,ends_at,created_by_email)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'paused',$11,$12,$13)`, [id,title,sponsor,placement,creativeUrl,destinationUrl,bottomCreativeUrl,bottomDestinationUrl,monthlyImpressionCap,cpm,startsAt,endsAt,req.admin.email]);
+        await writeAudit(client,req.admin,'create_campaign','ad_campaign',id,'Campaign created paused.',{title,sponsor,placement,cpmBdt:cpm,monthlyImpressionCap});
       });
       res.status(201).json({ok:true,id,status:'paused'});
     } catch (error) { next(error); }
@@ -461,13 +563,17 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
   app.put('/api/admin/campaigns/:id', adminAuth('admin'), async (req,res,next)=>{
     try{
       if(!validUuid(req.params.id))return fail(res,'Invalid campaign id.');
-      const title=clean(req.body?.title,120),sponsor=clean(req.body?.sponsorName,120),placement=String(req.body?.placement||''),creativeUrl=safeUrl(req.body?.creativeUrl),destinationUrl=safeUrl(req.body?.destinationUrl),cpm=Number(req.body?.cpmBdt),startsAt=req.body?.startsAt?new Date(req.body.startsAt):null,endsAt=req.body?.endsAt?new Date(req.body.endsAt):null;
-      if(!title||!sponsor||!['feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'].includes(placement)||!creativeUrl||!destinationUrl||!Number.isFinite(cpm)||cpm<0||cpm>1000000)return fail(res,'Campaign fields এবং HTTPS URLs সঠিকভাবে দিন।');
+      const title=clean(req.body?.title,120),sponsor=clean(req.body?.sponsorName,120),placement=String(req.body?.placement||''),creativeUrl=safeUrl(req.body?.creativeUrl),destinationUrl=safeUrl(req.body?.destinationUrl),bottomCreativeUrl=placement==='l_banner'?safeUrl(req.body?.bottomCreativeUrl):null,bottomDestinationUrl=placement==='l_banner'?safeUrl(req.body?.bottomDestinationUrl):null,cpm=Number(req.body?.cpmBdt),startsAt=req.body?.startsAt?new Date(req.body.startsAt):null,endsAt=req.body?.endsAt?new Date(req.body.endsAt):null;
+      const monthlyCapProvided = Object.prototype.hasOwnProperty.call(req.body || {},'monthlyImpressionCap');
+      let monthlyImpressionCap = null;
+      try { if(monthlyCapProvided)monthlyImpressionCap=normalizeMonthlyImpressionCap(req.body.monthlyImpressionCap); }
+      catch(error) { return fail(res,error.message); }
+      if(!title||!sponsor||!['feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'].includes(placement)||!creativeUrl||!destinationUrl||(placement==='l_banner'&&(!bottomCreativeUrl||!bottomDestinationUrl))||!Number.isFinite(cpm)||cpm<0||cpm>1000000)return fail(res,'Campaign fields এবং HTTPS URLs সঠিকভাবে দিন। L-shape-এর নিচের image ও landing URL-ও দিন।');
       if((startsAt&&Number.isNaN(startsAt.getTime()))||(endsAt&&Number.isNaN(endsAt.getTime()))||(startsAt&&endsAt&&endsAt<=startsAt))return fail(res,'Campaign date range ঠিক নয়।');
       const result=await withTransaction(async client=>{
-        const changed=await client.query(`UPDATE ad_campaigns SET title=$2,sponsor_name=$3,placement=$4,creative_url=$5,destination_url=$6,cpm_bdt=$7,starts_at=$8,ends_at=$9,updated_at=NOW() WHERE id=$1 RETURNING id`,[req.params.id,title,sponsor,placement,creativeUrl,destinationUrl,cpm,startsAt,endsAt]);
+        const changed=await client.query(`UPDATE ad_campaigns SET title=$2,sponsor_name=$3,placement=$4,creative_url=$5,destination_url=$6,l_bottom_creative_url=$7,l_bottom_destination_url=$8,monthly_impression_cap=CASE WHEN $9 THEN $10 ELSE monthly_impression_cap END,cpm_bdt=$11,starts_at=$12,ends_at=$13,updated_at=NOW() WHERE id=$1 RETURNING id`,[req.params.id,title,sponsor,placement,creativeUrl,destinationUrl,bottomCreativeUrl,bottomDestinationUrl,monthlyCapProvided,monthlyImpressionCap,cpm,startsAt,endsAt]);
         if(!changed.rowCount)return false;
-        await writeAudit(client,req.admin,'edit_campaign','ad_campaign',req.params.id,'Campaign details updated.',{title,sponsor,placement,cpmBdt:cpm});
+        await writeAudit(client,req.admin,'edit_campaign','ad_campaign',req.params.id,'Campaign details updated.',{title,sponsor,placement,cpmBdt:cpm,monthlyImpressionCap:monthlyCapProvided?monthlyImpressionCap:undefined});
         return true;
       });
       if(!result)return jsonError(res,404,'Campaign পাওয়া যায়নি।');
@@ -506,9 +612,9 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
 
   app.get('/api/admin/settings', adminAuth(), async (req, res, next) => {
     try {
-      const result = await pool.query('SELECT ads_enabled,monetization_enabled,creator_share_percent,ad_feed_enabled,ad_watch_sidebar_enabled,ad_channel_enabled,ad_sticky_enabled,ad_postroll_enabled,ad_l_banner_enabled,l_banner_duration_seconds,updated_at FROM platform_settings WHERE id=1');
+      const result = await pool.query('SELECT ads_enabled,monetization_enabled,creator_share_percent,ad_feed_enabled,ad_watch_sidebar_enabled,ad_channel_enabled,ad_sticky_enabled,ad_postroll_enabled,ad_l_banner_enabled,l_banner_duration_seconds,l_banner_skippable,feed_ad_every_rows,ad_layout_settings,updated_at FROM platform_settings WHERE id=1');
       const row = result.rows[0] || {};
-      res.json({adsEnabled:Boolean(row.ads_enabled),monetizationEnabled:Boolean(row.monetization_enabled),creatorSharePercent:row.creator_share_percent===null||row.creator_share_percent===undefined?null:Number(row.creator_share_percent),adToggles:{feed:Boolean(row.ad_feed_enabled),watchSidebar:Boolean(row.ad_watch_sidebar_enabled),channel:Boolean(row.ad_channel_enabled),sticky:Boolean(row.ad_sticky_enabled),postroll:Boolean(row.ad_postroll_enabled),lBanner:Boolean(row.ad_l_banner_enabled)},lBannerDurationSeconds:Number(row.l_banner_duration_seconds || 10),updatedAt:row.updated_at});
+      res.json({adsEnabled:Boolean(row.ads_enabled),monetizationEnabled:Boolean(row.monetization_enabled),creatorSharePercent:row.creator_share_percent===null||row.creator_share_percent===undefined?null:Number(row.creator_share_percent),adToggles:{feed:Boolean(row.ad_feed_enabled),watchSidebar:Boolean(row.ad_watch_sidebar_enabled),channel:Boolean(row.ad_channel_enabled),sticky:Boolean(row.ad_sticky_enabled),postroll:Boolean(row.ad_postroll_enabled),lBanner:Boolean(row.ad_l_banner_enabled)},...adSettingsPayload(row),updatedAt:row.updated_at});
     } catch (error) { next(error); }
   });
 
@@ -520,15 +626,28 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const toggles = req.body?.adToggles || {};
       const durationRaw = req.body?.lBannerDurationSeconds;
       const lBannerDurationSeconds = durationRaw === undefined || durationRaw === '' ? 10 : Number(durationRaw);
+      const layoutsProvided = Object.prototype.hasOwnProperty.call(req.body || {},'adLayoutSettings');
+      const feedRowsProvided = Object.prototype.hasOwnProperty.call(req.body || {},'feedAdEveryRows');
+      const skipProvided = Object.prototype.hasOwnProperty.call(req.body || {},'lBannerSkippable');
+      let adLayoutSettings = null, feedAdEveryRows = null, lBannerSkippable = null;
+      try {
+        if (layoutsProvided) adLayoutSettings = normalizeAdLayouts(req.body.adLayoutSettings);
+        if (feedRowsProvided) feedAdEveryRows = normalizeFeedAdEveryRows(req.body.feedAdEveryRows);
+      } catch (error) { return fail(res,error.message); }
+      if (skipProvided) {
+        if (typeof req.body.lBannerSkippable !== 'boolean') return fail(res,'L-shape skip setting must be on or off.');
+        lBannerSkippable = req.body.lBannerSkippable;
+      }
       const adFeed = toggles.feed !== false, adWatchSidebar = toggles.watchSidebar !== false, adChannel = toggles.channel !== false, adSticky = toggles.sticky === true, adPostroll = toggles.postroll === true, adLBanner = toggles.lBanner === true;
       const share = shareRaw === null || shareRaw === '' || shareRaw === undefined ? null : Number(shareRaw);
       if (typeof adsEnabled !== 'boolean' || typeof monetizationEnabled !== 'boolean' || !Number.isInteger(lBannerDurationSeconds) || lBannerDurationSeconds < 3 || lBannerDurationSeconds > 60 || (share !== null && (!Number.isFinite(share) || share < 0 || share > 100))) return fail(res,'Settings values invalid.');
       if (monetizationEnabled && (share === null || share <= 0)) return fail(res,'Monetization চালু করতে 0-এর বেশি creator share percentage সেট করুন।');
       await withTransaction(async client => {
-        await client.query(`UPDATE platform_settings SET ads_enabled=$1,monetization_enabled=$2,creator_share_percent=$3,ad_feed_enabled=$4,ad_watch_sidebar_enabled=$5,ad_channel_enabled=$6,ad_sticky_enabled=$7,ad_postroll_enabled=$8,ad_l_banner_enabled=$9,l_banner_duration_seconds=$10,updated_by_email=$11,updated_at=NOW() WHERE id=1`, [adsEnabled,monetizationEnabled,share,adFeed,adWatchSidebar,adChannel,adSticky,adPostroll,adLBanner,lBannerDurationSeconds,req.admin.email]);
-        await writeAudit(client,req.admin,'platform_settings','settings','1','', {adsEnabled,monetizationEnabled,creatorSharePercent:share,adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll,lBanner:adLBanner},lBannerDurationSeconds});
+        await client.query(`UPDATE platform_settings SET ads_enabled=$1,monetization_enabled=$2,creator_share_percent=$3,ad_feed_enabled=$4,ad_watch_sidebar_enabled=$5,ad_channel_enabled=$6,ad_sticky_enabled=$7,ad_postroll_enabled=$8,ad_l_banner_enabled=$9,l_banner_duration_seconds=$10,l_banner_skippable=COALESCE($11,l_banner_skippable),feed_ad_every_rows=COALESCE($12,feed_ad_every_rows),ad_layout_settings=COALESCE($13::jsonb,ad_layout_settings),updated_by_email=$14,updated_at=NOW() WHERE id=1`, [adsEnabled,monetizationEnabled,share,adFeed,adWatchSidebar,adChannel,adSticky,adPostroll,adLBanner,lBannerDurationSeconds,lBannerSkippable,feedAdEveryRows,adLayoutSettings===null?null:JSON.stringify(adLayoutSettings),req.admin.email]);
+        await writeAudit(client,req.admin,'platform_settings','settings','1','', {adsEnabled,monetizationEnabled,creatorSharePercent:share,adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll,lBanner:adLBanner},lBannerDurationSeconds,lBannerSkippable,feedAdEveryRows,adLayoutSettings});
       });
-      res.json({ok:true,adsEnabled,monetizationEnabled,creatorSharePercent:share,adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll,lBanner:adLBanner},lBannerDurationSeconds});
+      const saved=await pool.query('SELECT l_banner_skippable,feed_ad_every_rows,ad_layout_settings,l_banner_duration_seconds FROM platform_settings WHERE id=1');
+      res.json({ok:true,adsEnabled,monetizationEnabled,creatorSharePercent:share,adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll,lBanner:adLBanner},...adSettingsPayload(saved.rows[0]||{})});
     } catch (error) { next(error); }
   });
 
