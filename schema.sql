@@ -187,6 +187,9 @@ CREATE TABLE IF NOT EXISTS platform_settings (
   ad_postroll_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   ad_l_banner_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   l_banner_duration_seconds INTEGER NOT NULL DEFAULT 10,
+  l_banner_skippable BOOLEAN NOT NULL DEFAULT TRUE,
+  feed_ad_every_rows SMALLINT NOT NULL DEFAULT 4 CHECK (feed_ad_every_rows BETWEEN 1 AND 20),
+  ad_layout_settings JSONB NOT NULL DEFAULT '{}'::jsonb,
   updated_by_email TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CHECK (creator_share_percent IS NULL OR (creator_share_percent >= 0 AND creator_share_percent <= 100))
@@ -198,6 +201,14 @@ ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS ad_sticky_enabled BOOLEAN
 ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS ad_postroll_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS ad_l_banner_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS l_banner_duration_seconds INTEGER NOT NULL DEFAULT 10;
+ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS l_banner_skippable BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS feed_ad_every_rows SMALLINT NOT NULL DEFAULT 4;
+ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS ad_layout_settings JSONB NOT NULL DEFAULT '{}'::jsonb;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='platform_settings_feed_ad_every_rows_check') THEN
+    ALTER TABLE platform_settings ADD CONSTRAINT platform_settings_feed_ad_every_rows_check CHECK (feed_ad_every_rows BETWEEN 1 AND 20);
+  END IF;
+END $$;
 INSERT INTO platform_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS ad_campaigns (
@@ -207,6 +218,9 @@ CREATE TABLE IF NOT EXISTS ad_campaigns (
   placement TEXT NOT NULL CHECK (placement IN ('feed','watch_sidebar','channel','sticky_banner','postroll','l_banner')),
   creative_url TEXT NOT NULL,
   destination_url TEXT NOT NULL,
+  l_bottom_creative_url TEXT,
+  l_bottom_destination_url TEXT,
+  monthly_impression_cap INTEGER CHECK (monthly_impression_cap IS NULL OR monthly_impression_cap >= 1),
   cpm_bdt NUMERIC(12,4) NOT NULL DEFAULT 0 CHECK (cpm_bdt >= 0),
   status TEXT NOT NULL DEFAULT 'paused' CHECK (status IN ('draft','active','paused')),
   starts_at TIMESTAMPTZ,
@@ -216,11 +230,29 @@ CREATE TABLE IF NOT EXISTS ad_campaigns (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CHECK (ends_at IS NULL OR starts_at IS NULL OR ends_at > starts_at)
 );
+ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS l_bottom_creative_url TEXT;
+ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS l_bottom_destination_url TEXT;
+ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS monthly_impression_cap INTEGER;
+UPDATE ad_campaigns SET l_bottom_creative_url=COALESCE(l_bottom_creative_url,creative_url),
+  l_bottom_destination_url=COALESCE(l_bottom_destination_url,destination_url)
+  WHERE placement='l_banner' AND (l_bottom_creative_url IS NULL OR l_bottom_destination_url IS NULL);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='ad_campaigns_monthly_impression_cap_check') THEN
+    ALTER TABLE ad_campaigns ADD CONSTRAINT ad_campaigns_monthly_impression_cap_check CHECK (monthly_impression_cap IS NULL OR monthly_impression_cap >= 1);
+  END IF;
+END $$;
 DO $$ BEGIN
   ALTER TABLE ad_campaigns DROP CONSTRAINT IF EXISTS ad_campaigns_placement_check;
   ALTER TABLE ad_campaigns ADD CONSTRAINT ad_campaigns_placement_check CHECK (placement IN ('feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'));
 EXCEPTION WHEN undefined_table THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS ad_campaigns_serve_idx ON ad_campaigns (placement, status, starts_at, ends_at, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS ad_monthly_serves (
+  campaign_id UUID NOT NULL REFERENCES ad_campaigns(id) ON DELETE CASCADE,
+  month_start DATE NOT NULL,
+  served_count INTEGER NOT NULL DEFAULT 0 CHECK (served_count >= 0),
+  PRIMARY KEY (campaign_id, month_start)
+);
 
 CREATE TABLE IF NOT EXISTS ad_events (
   id BIGSERIAL PRIMARY KEY,

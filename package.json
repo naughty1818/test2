@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "migrate:r2": "node scripts/migrate-r2-json.js"
+    "migrate:r2": "node scripts/migrate-r2-json.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=18"

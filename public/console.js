@@ -227,14 +227,53 @@
     async function loadAnalytics(){try{const data=await ctx.jsonFetch('/api/admin/ad-analytics?days='+range.value),t=data.totals||{},n=Number(t.impressions)||0;analytics.replaceChildren(stat('Impressions',num(t.impressions)),stat('Clicks',num(t.clicks)),stat('CTR',(n?(Number(t.clicks)||0)/n*100:0).toFixed(2)+'%'),stat('Estimated creator revenue',money(t.estimatedCreatorEarningsBdt),'Estimate only'));chart.replaceChildren();const points=(data.daily||[]).slice(-14),max=Math.max(1,...points.map(x=>Number(x.impressions)||0));points.forEach(point=>{const bar=el('div',{class:'console-chart-bar'});bar.style.height=Math.max(3,Math.round((Number(point.impressions)||0)/max*88))+'px';bar.title=num(point.impressions)+' impressions · '+num(point.clicks)+' clicks · '+point.day;bar.append(el('span',{text:String(point.day).slice(5)}));chart.append(bar);});if(!points.length)chart.append(empty('No event data in this range.'));const rows=(data.placements||[]).map(x=>tr(cell(x.placement),cell(num(x.impressions)),cell(num(x.clicks)),cell(x.ctr.toFixed(2)+'%')));placementRows.replaceChildren(rows.length?table(['Placement','Impressions','Clicks','CTR'],rows):empty('No placement data.'));}catch(error){chart.replaceChildren(el('div',{class:'console-notice',text:error.message}));}}
     range.addEventListener('change',loadAnalytics);await loadAnalytics();
     const campaignSearch=el('input',{type:'search',placeholder:'Campaign title or sponsor'}),campaignStatus=select([['all','All statuses'],['draft','Draft'],['active','Active'],['paused','Paused']]);
-    const title=el('input',{type:'text',maxlength:'120',required:'',placeholder:'For example: Brand campaign'}),sponsor=el('input',{type:'text',maxlength:'120',required:'',placeholder:'Sponsor name'}),placement=select([['feed','Home feed native card · 16:9'],['watch_sidebar','Watch page sidebar · 4:3'],['channel','Creator channel sponsor · 16:9'],['sticky_banner','Sticky banner · 3:1'],['postroll','Post-roll sponsor · 16:9'],['l_banner','L-shape squeeze-back · 4:3']]),creative=el('input',{type:'url',required:'',placeholder:'HTTPS creative image URL'}),destination=el('input',{type:'url',required:'',placeholder:'HTTPS landing page URL'}),cpm=el('input',{type:'number',min:'0',max:'1000000',step:'0.01',value:'0',required:''}),starts=el('input',{type:'datetime-local'}),ends=el('input',{type:'datetime-local'}),previewImage=el('img',{alt:'Campaign creative preview',class:'campaign-preview-image'}),previewLink=el('a',{target:'_blank',rel:'noopener noreferrer',class:'campaign-preview-link',text:'Open landing page preview'}),preview=el('div',{class:'campaign-preview'},[previewImage,previewLink]);
-    const syncPreview=()=>{previewImage.src=creative.value.trim();previewImage.hidden=!creative.value.trim();previewLink.href=destination.value.trim()||'#';previewLink.hidden=!destination.value.trim();preview.classList.toggle('campaign-preview-empty',!creative.value.trim());preview.dataset.placement=placement.value;};creative.addEventListener('input',syncPreview);destination.addEventListener('input',syncPreview);placement.addEventListener('change',syncPreview);
-    const submit=el('button',{type:'submit',class:'primary-cta',text:'Create paused campaign'}),cancel=button('Cancel edit',()=>{editingId=null;form.reset();starts.value='';ends.value='';cpm.value='0';submit.textContent='Create paused campaign';cancel.hidden=true;syncPreview();},'console-small-button');cancel.hidden=true;
-    const form=el('form',{class:'console-form'},[field('Campaign title',title),field('Sponsor',sponsor),field('Placement',placement),field('CPM (BDT / 1,000 impressions)',cpm),field('Creative image URL (HTTPS)',creative,'span-2'),field('Landing page URL (HTTPS)',destination,'span-2'),field('Start (optional)',starts),field('End (optional)',ends),field('Creative preview',preview,'span-2'),el('div',{class:'console-notice span-2',text:'Ads stay off unless an Owner enables delivery. Campaign creation starts paused. No advertiser billing or creator payout is implemented.'}),el('div',{class:'console-form-actions'},[submit,cancel])]);
+    const title=el('input',{type:'text',maxlength:'120',required:'',placeholder:'For example: Brand campaign'}),sponsor=el('input',{type:'text',maxlength:'120',required:'',placeholder:'Sponsor name'});
+    const placement=select([['feed','Home feed native card'],['watch_sidebar','Watch page sidebar'],['channel','Creator channel sponsor'],['sticky_banner','Sticky banner'],['postroll','Post-roll sponsor'],['l_banner','L-shape squeeze-back']]);
+    const creative=el('input',{type:'url',required:'',placeholder:'HTTPS creative image URL'}),destination=el('input',{type:'url',required:'',placeholder:'HTTPS landing page URL'});
+    const bottomCreative=el('input',{type:'url',placeholder:'HTTPS bottom creative image URL'}),bottomDestination=el('input',{type:'url',placeholder:'HTTPS bottom landing URL'});
+    const monthlyCap=el('input',{type:'number',min:'1',max:'2147483647',step:'1',placeholder:'Blank = unlimited'});
+    const cpm=el('input',{type:'number',min:'0',max:'1000000',step:'0.01',value:'0',required:''}),starts=el('input',{type:'datetime-local'}),ends=el('input',{type:'datetime-local'});
+    let adLayouts=AD_LAYOUT_DEFAULTS;
+    const previewImage=el('img',{alt:'Campaign creative preview',class:'campaign-preview-image'}),previewFrame=el('div',{class:'campaign-preview-frame'},[previewImage]),previewLink=el('a',{target:'_blank',rel:'noopener noreferrer',class:'campaign-preview-link',text:'Open landing page preview'}),previewMeta=el('small',{class:'campaign-preview-meta'}),preview=el('div',{class:'campaign-preview'},[previewFrame,previewLink,previewMeta]);
+    const bottomPreviewImage=el('img',{alt:'L-shape bottom creative preview',class:'campaign-preview-image'}),bottomPreviewFrame=el('div',{class:'campaign-preview-frame'},[bottomPreviewImage]),bottomPreviewLink=el('a',{target:'_blank',rel:'noopener noreferrer',class:'campaign-preview-link',text:'Open bottom landing page'}),bottomPreviewMeta=el('small',{class:'campaign-preview-meta'}),bottomPreview=el('div',{class:'campaign-bottom-preview'},[bottomPreviewFrame,bottomPreviewLink,bottomPreviewMeta]);
+    const bottomFields=el('div',{class:'l-banner-fields span-2'},[field('L-shape bottom image URL (HTTPS)',bottomCreative),field('L-shape bottom landing URL (HTTPS)',bottomDestination),field('Bottom creative preview',bottomPreview,'span-2')]);
+    const setPreviewSize=(frame,meta,size,label)=>{const width=Number(size?.width)||640,height=Number(size?.height)||360,scale=Math.min(260/width,200/height);frame.style.width=`${width*scale}px`;frame.style.aspectRatio=`${width}/${height}`;meta.textContent=`${label} · ${width} × ${height} px · ${adRatioLabel(width,height)}`;};
+    const syncPreview=()=>{const isLShape=placement.value==='l_banner',device=window.matchMedia('(max-width:760px)').matches?'mobile':'desktop',layout=adLayouts[placement.value]?.[device]||AD_LAYOUT_DEFAULTS[placement.value][device],mainSize=isLShape?layout.right:layout;bottomFields.hidden=!isLShape;bottomCreative.required=isLShape;bottomDestination.required=isLShape;previewImage.src=creative.value.trim();previewImage.alt=isLShape?'L-shape right-side creative':'Campaign creative preview';previewFrame.hidden=!creative.value.trim();previewLink.href=destination.value.trim()||'#';previewLink.hidden=!destination.value.trim();preview.classList.toggle('campaign-preview-empty',!creative.value.trim());preview.dataset.placement=placement.value;setPreviewSize(previewFrame,previewMeta,mainSize,isLShape?'Right poster':'Creative');bottomPreviewImage.src=bottomCreative.value.trim();bottomPreviewImage.alt='L-shape bottom creative';bottomPreviewFrame.hidden=!bottomCreative.value.trim();bottomPreviewLink.href=bottomDestination.value.trim()||'#';bottomPreviewLink.hidden=!bottomDestination.value.trim();setPreviewSize(bottomPreviewFrame,bottomPreviewMeta,layout.bottom||AD_LAYOUT_DEFAULTS.l_banner[device].bottom,'Bottom creative');};
+    [creative,destination,bottomCreative,bottomDestination].forEach(input=>input.addEventListener('input',syncPreview));placement.addEventListener('change',syncPreview);
+    ctx.jsonFetch('/api/sponsor/settings').then(data=>{adLayouts=data.adLayoutSettings||AD_LAYOUT_DEFAULTS;syncPreview();}).catch(()=>{});
+    const submit=el('button',{type:'submit',class:'primary-cta',text:'Create paused campaign'}),cancel=button('Cancel edit',()=>{editingId=null;form.reset();starts.value='';ends.value='';cpm.value='0';monthlyCap.value='';bottomCreative.value='';bottomDestination.value='';submit.textContent='Create paused campaign';cancel.hidden=true;syncPreview();},'console-small-button console-danger');cancel.hidden=true;
+    const form=el('form',{class:'console-form'},[
+      field('Campaign title',title),field('Sponsor',sponsor),field('Placement',placement),field('CPM (BDT / 1,000 impressions)',cpm),
+      field('Creative image URL (HTTPS)',creative,'span-2'),field('Landing page URL (HTTPS)',destination,'span-2'),bottomFields,
+      field('Monthly impression cap (campaign ID / UTC month)',monthlyCap,'span-2'),field('Start (optional)',starts),field('End (optional)',ends),field('Creative preview',preview,'span-2'),
+      el('div',{class:'console-notice span-2',text:'Blank cap = unlimited. The campaign-ID cap is global per UTC calendar month and increments only after a unique impression is at least 50% visible for 1 second; duplicate events are ignored. At cap, the next eligible campaign rotates in. L-shape requires separate HTTPS image and landing URL for the bottom strip. Campaigns start paused; ads stay off until an Owner enables delivery. No advertiser billing or creator payout is implemented.'}),
+      el('div',{class:'console-form-actions'},[submit,cancel])
+    ]);
     syncPreview();
-    form.addEventListener('submit',async event=>{event.preventDefault();submit.disabled=true;const payload={title:title.value,sponsorName:sponsor.value,placement:placement.value,creativeUrl:creative.value,destinationUrl:destination.value,cpmBdt:Number(cpm.value),startsAt:starts.value?new Date(starts.value).toISOString():null,endsAt:ends.value?new Date(ends.value).toISOString():null};try{await ctx.jsonFetch(editingId?'/api/admin/campaigns/'+encodeURIComponent(editingId):'/api/admin/campaigns',{method:editingId?'PUT':'POST',body:payload});ctx.notify(editingId?'Campaign details saved.':'Campaign created in paused state.');editingId=null;form.reset();starts.value='';ends.value='';cpm.value='0';submit.textContent='Create paused campaign';cancel.hidden=true;syncPreview();await loadCampaigns();}catch(error){ctx.notify(error.message,'error');}finally{submit.disabled=false;}});
-    root.append(panel('Campaign editor','Create paused campaigns, preview creative and landing URL, or edit campaign details.',form));
-    const results=el('div');const loadCampaigns=async()=>{results.replaceChildren(empty('Loading campaigns…'));try{const params=new URLSearchParams({page:String(campaignPage),limit:'20',status:campaignStatus.value,q:campaignSearch.value.trim()});const data=await ctx.jsonFetch('/api/admin/campaigns?'+params);campaignPages=Math.max(1,data.pages||1);campaignPage=data.page||campaignPage;const rows=(data.campaigns||[]).map(c=>tr(cell(el('strong',{text:c.title}),el('div',{class:'console-muted',text:c.sponsorName+' · '+c.placement}),el('a',{href:c.destinationUrl,target:'_blank',rel:'noopener noreferrer',text:'Preview landing page'})),cell(statusBadge(c.status)),cell(num(c.impressions)),cell(num(c.clicks)),cell((c.impressions?(c.clicks/c.impressions*100):0).toFixed(2)+'%'),cell(money(c.cpmBdt)+' CPM'),cell(el('div',{class:'console-actions'},[button('Edit',()=>{editingId=c.id;title.value=c.title;sponsor.value=c.sponsorName;placement.value=c.placement;creative.value=c.creativeUrl;destination.value=c.destinationUrl;cpm.value=c.cpmBdt;starts.value=asLocalDateTime(c.startsAt);ends.value=asLocalDateTime(c.endsAt);submit.textContent='Save campaign changes';cancel.hidden=false;syncPreview();form.scrollIntoView({behavior:'smooth',block:'start'});},'console-small-button'),button(c.status==='active'?'Pause':'Activate',async()=>{try{await ctx.jsonFetch('/api/admin/campaigns/'+encodeURIComponent(c.id)+'/status',{method:'PATCH',body:{status:c.status==='active'?'paused':'active'}});ctx.notify('Campaign status updated.');await loadCampaigns();}catch(error){ctx.notify(error.message,'error');}})]))));results.replaceChildren(rows.length?table(['Campaign','Status','Impressions','Clicks','CTR','Rate','Actions'],rows):empty('No campaigns match these filters.'),pager(campaignPage,campaignPages,next=>{campaignPage=next;loadCampaigns();}));}catch(error){results.replaceChildren(el('div',{class:'console-notice',text:error.message}));}};
+    form.addEventListener('submit',async event=>{event.preventDefault();submit.disabled=true;const payload={title:title.value,sponsorName:sponsor.value,placement:placement.value,creativeUrl:creative.value,destinationUrl:destination.value,bottomCreativeUrl:bottomCreative.value,bottomDestinationUrl:bottomDestination.value,monthlyImpressionCap:monthlyCap.value===''?null:Number(monthlyCap.value),cpmBdt:Number(cpm.value),startsAt:starts.value?new Date(starts.value).toISOString():null,endsAt:ends.value?new Date(ends.value).toISOString():null};try{await ctx.jsonFetch(editingId?'/api/admin/campaigns/'+encodeURIComponent(editingId):'/api/admin/campaigns',{method:editingId?'PUT':'POST',body:payload});ctx.notify(editingId?'Campaign details saved.':'Campaign created in paused state.');editingId=null;form.reset();starts.value='';ends.value='';cpm.value='0';monthlyCap.value='';submit.textContent='Create paused campaign';cancel.hidden=true;syncPreview();await loadCampaigns();}catch(error){ctx.notify(error.message,'error');}finally{submit.disabled=false;}});
+    root.append(panel('Campaign editor','Create paused campaigns, set the global UTC-month impression cap per campaign, and preview the separate L-shape creatives.',form));
+    const results=el('div');
+    const loadCampaigns=async()=>{
+      results.replaceChildren(empty('Loading campaigns…'));
+      try{
+        const params=new URLSearchParams({page:String(campaignPage),limit:'20',status:campaignStatus.value,q:campaignSearch.value.trim()});
+        const data=await ctx.jsonFetch('/api/admin/campaigns?'+params);
+        campaignPages=Math.max(1,data.pages||1);campaignPage=data.page||campaignPage;
+        const rows=(data.campaigns||[]).map(c=>tr(
+          cell(el('strong',{text:c.title}),el('div',{class:'console-muted',text:c.sponsorName+' · '+c.placement}),el('a',{href:c.destinationUrl,target:'_blank',rel:'noopener noreferrer',text:'Preview landing page'})),
+          cell(statusBadge(c.status)),
+          cell(num(c.monthlyImpressions)+' / '+(c.monthlyImpressionCap==null?'∞':num(c.monthlyImpressionCap))),
+          cell(num(c.impressions)),cell(num(c.clicks)),
+          cell((c.impressions?(c.clicks/c.impressions*100):0).toFixed(2)+'%'),
+          cell(money(c.cpmBdt)+' CPM'),
+          cell(el('div',{class:'console-actions'},[
+            button('Edit',()=>{editingId=c.id;title.value=c.title;sponsor.value=c.sponsorName;placement.value=c.placement;creative.value=c.creativeUrl;destination.value=c.destinationUrl;bottomCreative.value=c.bottomCreativeUrl||'';bottomDestination.value=c.bottomDestinationUrl||'';monthlyCap.value=c.monthlyImpressionCap==null?'':c.monthlyImpressionCap;cpm.value=c.cpmBdt;starts.value=asLocalDateTime(c.startsAt);ends.value=asLocalDateTime(c.endsAt);submit.textContent='Save campaign changes';cancel.hidden=false;syncPreview();form.scrollIntoView({behavior:'smooth',block:'start'});},'console-small-button'),
+            button(c.status==='active'?'Pause':'Activate',async()=>{try{await ctx.jsonFetch('/api/admin/campaigns/'+encodeURIComponent(c.id)+'/status',{method:'PATCH',body:{status:c.status==='active'?'paused':'active'}});ctx.notify('Campaign status updated.');await loadCampaigns();}catch(error){ctx.notify(error.message,'error');}})
+          ]))
+        ));
+        results.replaceChildren(rows.length?table(['Campaign','Status','UTC-month impressions / cap','Lifetime impressions','Clicks','CTR','Rate','Actions'],rows):empty('No campaigns match these filters.'),pager(campaignPage,campaignPages,next=>{campaignPage=next;loadCampaigns();}));
+      }catch(error){results.replaceChildren(el('div',{class:'console-notice',text:error.message}));}
+    };
     const filters=el('div',{class:'console-form console-filter-bar'},[field('Search',campaignSearch),field('Status',campaignStatus),el('div',{class:'console-form-actions'},[button('Apply filters',()=>{campaignPage=1;loadCampaigns();},'primary-cta')])]);campaignSearch.addEventListener('keydown',e=>{if(e.key==='Enter'){campaignPage=1;loadCampaigns();}});campaignStatus.addEventListener('change',()=>{campaignPage=1;loadCampaigns();});root.append(panel('Campaign library','Filter and page through campaigns. CTR is clicks ÷ impressions; rates are not confirmed revenue.',el('div',{},[filters,results])));await loadCampaigns();
   }
 
@@ -289,6 +328,45 @@
     root.append(panel('বর্তমান staff','Admin campaign ও moderation পরিচালনা করতে পারে; Moderator moderation-এ সীমিত.',rows.length?table(['Google account','Role','Added','Access'],rows):empty('অন্য staff যোগ করা হয়নি।')));
   }
 
+  const AD_LAYOUT_DEFAULTS={feed:{desktop:{width:640,height:360},mobile:{width:360,height:203}},watch_sidebar:{desktop:{width:184,height:138},mobile:{width:92,height:69}},channel:{desktop:{width:720,height:405},mobile:{width:360,height:203}},sticky_banner:{desktop:{width:960,height:320},mobile:{width:360,height:120}},postroll:{desktop:{width:720,height:405},mobile:{width:360,height:203}},l_banner:{desktop:{right:{width:150,height:642},bottom:{width:320,height:78}},mobile:{right:{width:40,height:167},bottom:{width:160,height:39}}}};
+  const adRatioLabel=(width,height)=>{const ratio=Number(width)/Number(height);if(!Number.isFinite(ratio)||ratio<=0)return'—';return ratio>=1?`${ratio.toFixed(2)}:1`:`1:${(1/ratio).toFixed(2)}`;};
+  function buildAdLayoutEditor(source={}){
+    const labels={feed:'Home feed',watch_sidebar:'Watch sidebar',channel:'Creator channel',sticky_banner:'Sticky banner',postroll:'Post-roll',l_banner:'L-shape'};
+    const refs={};
+    function sizeControl(placement,device,part,label){
+      const fallback=part?AD_LAYOUT_DEFAULTS[placement][device][part]:AD_LAYOUT_DEFAULTS[placement][device];
+      const actual=part?source?.[placement]?.[device]?.[part]:source?.[placement]?.[device];
+      const width=el('input',{type:'number',min:'20',max:'4096',step:'1',required:'',value:actual?.width??fallback.width});
+      const height=el('input',{type:'number',min:'20',max:'4096',step:'1',required:'',value:actual?.height??fallback.height});
+      const ratio=el('strong',{class:'ad-layout-ratio'}),sample=el('div',{class:'ad-layout-sample'});
+      const update=()=>{const w=Number(width.value),h=Number(height.value);if(!w||!h){ratio.textContent='Enter width and height';sample.style.width='0';sample.style.height='0';sample.textContent='';return;}const scale=Math.min(150/w,90/h);ratio.textContent=`${w} × ${h} px · ${adRatioLabel(w,h)}`;sample.style.width=`${w*scale}px`;sample.style.height=`${h*scale}px`;sample.textContent=`${w}×${h}`;};
+      width.addEventListener('input',update);height.addEventListener('input',update);update();
+      if(!refs[placement])refs[placement]={};
+      if(!refs[placement][device])refs[placement][device]={};
+      const item={width,height};
+      if(part)refs[placement][device][part]=item;else refs[placement][device]=item;
+      return el('div',{class:'ad-layout-size'},[el('h4',{text:label}),el('div',{class:'ad-layout-dimensions'},[field('Width (px)',width),field('Height (px)',height)]),ratio,el('div',{class:'ad-layout-sample-wrap'},[sample])]);
+    }
+    const cards=Object.entries(labels).map(([placement,label])=>{
+      const desktop=placement==='l_banner'?el('div',{class:'ad-layout-device'},[el('h3',{text:'PC · right image'}),sizeControl(placement,'desktop','right','Right-side poster'),el('h3',{text:'PC · bottom image'}),sizeControl(placement,'desktop','bottom','Bottom-banner creative')]):el('div',{class:'ad-layout-device'},[el('h3',{text:'PC / Desktop'}),sizeControl(placement,'desktop',null,label+' creative')]);
+      const mobile=placement==='l_banner'?el('div',{class:'ad-layout-device'},[el('h3',{text:'Phone · right image'}),sizeControl(placement,'mobile','right','Right-side poster'),el('h3',{text:'Phone · bottom image'}),sizeControl(placement,'mobile','bottom','Bottom-banner creative')]):el('div',{class:'ad-layout-device'},[el('h3',{text:'Phone / Mobile'}),sizeControl(placement,'mobile',null,label+' creative')]);
+      return el('section',{class:'ad-layout-card'},[el('h3',{text:label}),el('div',{class:'ad-layout-device-grid'},[desktop,mobile])]);
+    });
+    return {node:el('div',{class:'ad-layout-editor'},cards),serialize(){
+      const result={};
+      for(const [placement,devices] of Object.entries(refs)){
+        result[placement]={};
+        for(const [device,parts] of Object.entries(devices)){
+          if(placement==='l_banner'){
+            result[placement][device]={};
+            for(const [part,size] of Object.entries(parts))result[placement][device][part]={width:Number(size.width.value),height:Number(size.height.value)};
+          }else{const size=parts;result[placement][device]={width:Number(size.width.value),height:Number(size.height.value)};}
+        }
+      }
+      return result;
+    }};
+  }
+
   async function renderSettings(root,ctx) {
     root.replaceChildren();
     const data=await ctx.jsonFetch('/api/admin/settings');
@@ -301,18 +379,31 @@
     const adPostroll=el('input',{type:'checkbox',checked:toggles.postroll===true});
     const adLBanner=el('input',{type:'checkbox',checked:toggles.lBanner===true});
     const lBannerDuration=el('input',{type:'number',min:'3',max:'60',step:'1',value:data.lBannerDurationSeconds||10});
+    const lBannerSkippable=el('input',{type:'checkbox',checked:data.lBannerSkippable!==false});
+    const feedAdEveryRows=el('input',{type:'number',min:'1',max:'20',step:'1',required:'',value:data.feedAdEveryRows||4});
+    const adLayoutEditor=buildAdLayoutEditor(data.adLayoutSettings||{});
     const monet=el('input',{type:'checkbox',checked:data.monetizationEnabled});
     const share=el('input',{type:'number',min:'0',max:'100',step:'0.01',value:data.creatorSharePercent==null?'':data.creatorSharePercent,placeholder:'0–100'});
     const form=el('form',{class:'console-form'},[
       field('Ads delivery',el('span',{class:'console-toggle'},[ads,el('span',{text:'Active campaign থাকলে public ad slot দেখাও'})]),'span-2'),
-      field('Feed ads',el('span',{class:'console-toggle'},[adFeed,el('span',{text:'Home native cards · 16:9'})])),field('Watch sidebar ads',el('span',{class:'console-toggle'},[adWatch,el('span',{text:'Desktop sidebar · 4:3'})])),field('Creator channel ads',el('span',{class:'console-toggle'},[adChannel,el('span',{text:'Channel sponsor · 16:9'})])),field('Sticky banner ads',el('span',{class:'console-toggle'},[adSticky,el('span',{text:'Reserved · 3:1'})])),field('Post-roll ads',el('span',{class:'console-toggle'},[adPostroll,el('span',{text:'Reserved · 16:9'})])),field('L-shape ads',el('span',{class:'console-toggle'},[adLBanner,el('span',{text:'Video squeeze-back · 4:3 image'})])),field('L-shape duration (seconds)',lBannerDuration),
+      field('Feed ads',el('span',{class:'console-toggle'},[adFeed,el('span',{text:'Home native cards'})])),
+      field('Watch sidebar ads',el('span',{class:'console-toggle'},[adWatch,el('span',{text:'Watch-page placement'})])),
+      field('Creator channel ads',el('span',{class:'console-toggle'},[adChannel,el('span',{text:'Channel sponsor'})])),
+      field('Sticky banner ads',el('span',{class:'console-toggle'},[adSticky,el('span',{text:'Sticky banner placement'})])),
+      field('Post-roll ads',el('span',{class:'console-toggle'},[adPostroll,el('span',{text:'After video ends'})])),
+      field('L-shape ads',el('span',{class:'console-toggle'},[adLBanner,el('span',{text:'Video squeeze-back'})])),
+      field('L-shape duration (seconds)',lBannerDuration),
+      field('L-shape skip button',el('span',{class:'console-toggle'},[lBannerSkippable,el('span',{text:'User × দিয়ে আগেই ad বন্ধ করতে পারবে'})])),
+      field('Home feed ad gap (content rows)',feedAdEveryRows),
+      el('div',{class:'console-notice span-2',text:'একটি ad-এর pixel box প্রতি device ও placement-এর জন্য আলাদা। Ratio পাশে হিসাব হয়। Creative contain-এ দেখায়—পুরো poster থাকবে; ratio না মিললে ফাঁকা band দেখা যেতে পারে। Player stage ছোট হলে L-shape-এর দুই box ratio না বদলে ছোট হয়। Feed gap কেবল video row গুনে; ad row গোনা হয় না।'}),
+      el('div',{class:'span-2'},[el('h3',{class:'ad-layout-heading',text:'Placement অনুযায়ী PC / phone pixel মাপ ও ratio'}),adLayoutEditor.node]),
       field('Creator monetization',el('span',{class:'console-toggle'},[monet,el('span',{text:'Eligible channel-গুলোর estimated revenue হিসাব করো'})]),'span-2'),
       field('Creator share (%)',share),
       el('div',{class:'console-notice span-2',text:'Creator share এবং CPM কেবল estimate গণনা করে। এটি advertiser payment বা creator payout নিশ্চিত করে না। 0% share দিয়ে monetization enable করা যাবে না.'}),
       el('div',{class:'console-form-actions'},[el('button',{type:'submit',class:'primary-cta',text:'Settings save'})])
     ]);
-    form.addEventListener('submit',async event=>{event.preventDefault();try{await ctx.jsonFetch('/api/admin/settings',{method:'PUT',body:{adsEnabled:ads.checked,monetizationEnabled:monet.checked,creatorSharePercent:share.value===''?null:Number(share.value),adToggles:{feed:adFeed.checked,watchSidebar:adWatch.checked,channel:adChannel.checked,sticky:adSticky.checked,postroll:adPostroll.checked,lBanner:adLBanner.checked},lBannerDurationSeconds:Number(lBannerDuration.value)}});ctx.notify('Platform settings save হয়েছে।');await renderSettings(root,ctx);}catch(error){ctx.notify(error.message,'error');}});
-    root.append(panel('Platform monetization settings','Ads default-off থাকে। Share percentage নিজের commercial policy অনুযায়ী নির্ধারণ করুন—এখানে কোনো default ভাগ ধরে নেওয়া হয়নি.',form));
+    form.addEventListener('submit',async event=>{event.preventDefault();try{await ctx.jsonFetch('/api/admin/settings',{method:'PUT',body:{adsEnabled:ads.checked,monetizationEnabled:monet.checked,creatorSharePercent:share.value===''?null:Number(share.value),adToggles:{feed:adFeed.checked,watchSidebar:adWatch.checked,channel:adChannel.checked,sticky:adSticky.checked,postroll:adPostroll.checked,lBanner:adLBanner.checked},lBannerDurationSeconds:Number(lBannerDuration.value),lBannerSkippable:lBannerSkippable.checked,feedAdEveryRows:Number(feedAdEveryRows.value),adLayoutSettings:adLayoutEditor.serialize()}});ctx.notify('Platform settings save হয়েছে।');await renderSettings(root,ctx);}catch(error){ctx.notify(error.message,'error');}});
+    root.append(panel('Platform monetization settings','Ads default-off থাকে। Campaign cap হলো campaign ID-প্রতি UTC calendar month-এ সর্বোচ্চ delivery; ফাঁকা cap মানে unlimited। Share percentage নিজের commercial policy অনুযায়ী নির্ধারণ করুন—এখানে কোনো default ভাগ ধরে নেওয়া হয়নি.',form));
   }
 
   window.AtharoConsole={renderStudio,renderAdmin,renderCreatorAssets};

@@ -318,17 +318,82 @@
       return url.toString();
     } catch (_) { return ''; }
   }
+  function trackAdImpression(element,ad,videoId=null,channelHandle=null,onCapReached=()=>element.remove()) {
+    let observer=null,timer=null,finished=false,fallbackCheck=null,imageWaits=0;
+    const impressionId=window.crypto?.randomUUID?.()||'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,character=>{const value=Math.random()*16|0;return(character==='x'?value:(value&3|8)).toString(16);});
+    const clearTimer=()=>{if(timer){clearTimeout(timer);timer=null;}};
+    const cleanup=()=>{observer?.disconnect();window.removeEventListener('scroll',fallbackCheck);window.removeEventListener('resize',fallbackCheck);document.removeEventListener('visibilitychange',onVisibility);clearTimer();};
+    const record=()=>{
+      if(finished)return;
+      timer=null;
+      if(element.dataset.adCreativeError==='true'){finished=true;cleanup();return;}
+      const images=[...element.querySelectorAll('img')];
+      if(images.some(image=>!image.complete)){if(imageWaits++>=20){finished=true;cleanup();return;}timer=setTimeout(record,500);return;}
+      if(images.some(image=>!image.naturalWidth)){finished=true;cleanup();return;}
+      finished=true;cleanup();
+      jsonFetch('/api/sponsor/events',{method:'POST',body:{campaignId:ad.id,eventType:'impression',videoId,channelHandle,impressionId}})
+        .then(result=>{if(result.monthlyCapReached)onCapReached();}).catch(()=>{});
+    };
+    const setVisible=visible=>{
+      if(visible&&document.visibilityState!=='hidden'){
+        if(!timer)timer=setTimeout(record,1000);
+      }else clearTimer();
+    };
+    const checkVisibility=()=>{
+      const rect=element.getBoundingClientRect(),area=Math.max(0,Math.min(rect.right,window.innerWidth)-Math.max(rect.left,0))*Math.max(0,Math.min(rect.bottom,window.innerHeight)-Math.max(rect.top,0));
+      setVisible(Boolean(rect.width&&rect.height&&area/(rect.width*rect.height)>=.5));
+    };
+    const onVisibility=()=>{if(document.visibilityState==='hidden')clearTimer();else if(observer){observer.unobserve(element);observer.observe(element);}else checkVisibility();};
+    if('IntersectionObserver' in window){
+      observer=new IntersectionObserver(entries=>{const entry=entries.find(item=>item.target===element);setVisible(Boolean(entry?.isIntersecting&&entry.intersectionRatio>=.5));},{threshold:[0,.5,1]});
+      observer.observe(element);
+    }else{
+      fallbackCheck=checkVisibility;window.addEventListener('scroll',fallbackCheck,{passive:true});window.addEventListener('resize',fallbackCheck);fallbackCheck();
+    }
+    document.addEventListener('visibilitychange',onVisibility);
+  }
   function sponsoredCard(ad, videoId = null, compact = false, channelHandle = null) {
     const card = $('article', { class: 'sponsored-card sponsored-' + text(ad.placement, 'feed') + (compact ? ' sponsored-watch' : '') });
+    const layout=ad.layoutSettings||{};
+    for(const device of ['desktop','mobile']){
+      const size=layout[device]||{};
+      const width=Number(size.width)||640,height=Number(size.height)||360;
+      card.style.setProperty(`--ad-${device}-width`,`${width}px`);
+      card.style.setProperty(`--ad-${device}-height`,`${height}px`);
+      card.style.setProperty(`--ad-${device}-ratio`,`${width}/${height}`);
+    }
     const link = $('a', { href: text(ad.destinationUrl, '#'), target: '_blank', rel: 'noopener noreferrer', 'aria-label': text(ad.title, 'Sponsored') });
     const image = $('img', { src: embeddedImageUrl(ad.creativeUrl), alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' });
-    image.addEventListener('error', () => image.remove());
+    image.addEventListener('error', () => {card.dataset.adCreativeError='true';image.remove();});
+    const imageFrame=$('div',{class:'sponsored-image-frame'},[image]);
     const copy = $('div', { class: 'sponsored-copy' }, [$('span', { class: 'sponsored-label', text: 'Sponsored · ' + text(ad.sponsorName, 'Partner') }), $('strong', { text: text(ad.title, 'Partner message') }), $('small', { text: 'প্রমোটেড কনটেন্ট' }), $('span', { class: 'sponsored-cta', text: 'আরও জানো ↗' })]);
-    link.append(image, copy);
+    link.append(imageFrame, copy);
+    trackAdImpression(card,ad,videoId,channelHandle);
     link.addEventListener('click', () => { jsonFetch('/api/sponsor/events', { method: 'POST', body: { campaignId: ad.id, eventType: 'click', videoId, channelHandle } }).catch(() => {}); });
     card.append(link);
-    jsonFetch('/api/sponsor/events', { method: 'POST', body: { campaignId: ad.id, eventType: 'impression', videoId, channelHandle } }).catch(() => {});
     return card;
+  }
+  function feedVideoRows(grid){
+    const rows=[];
+    for(const card of grid.querySelectorAll(':scope > .video-card')){
+      const top=Math.round(card.getBoundingClientRect().top);
+      let row=rows[rows.length-1];
+      if(!row||Math.abs(top-row.top)>2){row={top,cards:[]};rows.push(row);}
+      row.cards.push(card);
+    }
+    return rows;
+  }
+  async function insertFeedAds(grid,rowsPerAd,token){
+    const interval=Math.min(20,Math.max(1,Number(rowsPerAd)||4));
+    const rows=feedVideoRows(grid);
+    for(let index=interval;index<=rows.length;index+=interval){
+      const boundary=index,row=rows[index-1];
+      if(!row?.cards.length||grid.querySelector(`[data-feed-ad-after-row="${boundary}"]`))continue;
+      let result;try{result=await jsonFetch('/api/sponsor/serve?placement=feed');}catch(_){continue;}
+      if(token!==state.routeToken)return;
+      if(!result.ad)break;
+      const adCard=sponsoredCard(result.ad);adCard.classList.add('sponsored-feed-row');adCard.dataset.feedAdAfterRow=String(boundary);row.cards[row.cards.length-1].after(adCard);
+    }
   }
   function videoGrid(videos, message = 'এখনো কোনো প্রকাশিত ভিডিও নেই।', options = {}) {
     const grid = $('div', { class: 'video-grid' + (options.resume ? ' resume-grid' : '') });
@@ -373,11 +438,11 @@
     ]), linkButton('ভিডিও আপলোড  ↗', '/upload', 'outline-cta'));
     return section;
   }
-  function appendLoadMore(section, grid, query, category, offset, token, filters = {}) {
+  function appendLoadMore(section, grid, query, category, offset, token, filters = {}, afterAppend = null) {
     const more = button('আরও ভিডিও দেখো', 'outline-cta load-more');
     more.addEventListener('click', async () => {
       more.disabled = true;
-      try { const data = await jsonFetch(queryUrl(query, category, offset, 24, filters)); if (token !== state.routeToken) return; (data.videos || []).forEach(video => grid.append(videoCard(video))); if (data.hasMore) { offset += 24; more.disabled = false; } else more.remove(); }
+      try { const data = await jsonFetch(queryUrl(query, category, offset, 24, filters)); if (token !== state.routeToken) return; (data.videos || []).forEach(video => grid.append(videoCard(video))); if(afterAppend)await afterAppend(); if (data.hasMore) { offset += 24; more.disabled = false; } else more.remove(); }
       catch (error) { more.disabled = false; notify(error.message, 'error'); }
     });
     section.append(more);
@@ -387,6 +452,7 @@
     const homeParams = new URLSearchParams(location.search);
     state.category = homeParams.get('category') || '';
     const homeFilters = state.category === 'শেখা' ? { classLevel: homeParams.get('classLevel') || '', subject: homeParams.get('subject') || '', syllabusTag: homeParams.get('syllabusTag') || '' } : {};
+    const adSettingsPromise=jsonFetch('/api/sponsor/settings').catch(()=>({feedAdEveryRows:4}));
     const feed = $('section', { class: 'feed-section' });
     const heading = $('div', { class: 'feed-heading' }, [$('div', {}, [$('span', { class: 'section-kicker', text: 'তোমার জন্য' }), $('h2', { text: 'আজকের ভিডিও' })]), linkButton('সব দেখো  ↗', '/search', 'see-all')]);
     const selectHomeCategory = value => { const params = new URLSearchParams(); if (value) params.set('category', value); if (value === 'শেখা') for (const key of ['classLevel','subject','syllabusTag']) if (homeFilters[key]) params.set(key, homeFilters[key]); navigate('/' + (params.toString() ? '?' + params.toString() : '')); };
@@ -404,8 +470,12 @@
       const videos = data.videos || []; app.replaceChildren(heroPanel(videos[0] || null), homeStickyAdSlot, feed, creatorCallout());
       chips.replaceWith(categoryChips(state.category, selectHomeCategory));
       const nextGrid = videoGrid(videos, 'এখনো কোনো public video নেই। প্রথম ভিডিওটি তোমার হতে পারে.', { featuredFirst: true }); grid.replaceWith(nextGrid);
-      if (data.hasMore) appendLoadMore(feed, nextGrid, '', state.category, 24, token, homeFilters);
-      jsonFetch('/api/sponsor/serve?placement=feed').then(result => { if (token === state.routeToken && result.ad) nextGrid.append(sponsoredCard(result.ad)); }).catch(() => {});
+      const adSettings=await adSettingsPromise;if(token!==state.routeToken)return;
+      const feedAdEveryRows=Math.min(20,Math.max(1,Number(adSettings.feedAdEveryRows)||4));
+      let feedAdsSync=Promise.resolve();
+      const syncFeedAds=()=>{feedAdsSync=feedAdsSync.catch(()=>{}).then(()=>insertFeedAds(nextGrid,feedAdEveryRows,token));return feedAdsSync;};
+      if (data.hasMore) appendLoadMore(feed, nextGrid, '', state.category, 24, token, homeFilters, syncFeedAds);
+      syncFeedAds().catch(()=>{});
       jsonFetch('/api/sponsor/serve?placement=sticky_banner').then(result => { if (token === state.routeToken && result.ad) homeStickyAdSlot.append(sponsoredCard(result.ad)); }).catch(() => {});
       if(state.session.user)jsonFetch('/api/me/watch-progress?limit=6').then(result=>{if(token!==state.routeToken||!(result.videos||[]).length)return;const resume=$('section',{class:'resume-section'});resume.append($('div',{class:'feed-heading'},[$('div',{},[$('span',{class:'section-kicker',text:'যেখান থেকে থেমেছিলে'}),$('h2',{text:'আবার দেখা চালিয়ে যাও'})]),linkButton('ইতিহাস দেখো ↗','/history','see-all')]));resume.append(videoGrid((result.videos || []).slice(0, 3),'এখনো কোনো অসমাপ্ত ভিডিও নেই।',{resume:true}));app.insertBefore(resume,feed);}).catch(()=>{});
     } catch (error) { if (token === state.routeToken) grid.replaceWith(emptyState('ভিডিও লোড করা যায়নি', error.message, 'আবার চেষ্টা করো', '/')); }
@@ -526,15 +596,53 @@
       stage.addEventListener('mouseleave',()=>stage.classList.remove('player-controls-visible'));
       const lShapeAd = $('div', { class: 'l-shape-ad', hidden: true });
       const lShapeClose = button('×', 'l-shape-close', () => hideLAd());
-      const lShapeImage = $('img', { class: 'l-shape-image', alt: '' });
+      const lShapeImage = $('img', { class: 'l-shape-right-image', alt: '', referrerpolicy:'no-referrer' });
+      const lShapeRightLink = $('a', { class: 'l-shape-right-link', target: '_blank', rel: 'noopener noreferrer' }, [lShapeImage]);
       const lShapeBody = $('div', { class: 'l-shape-body' });
-      const lShapeLink = $('a', { class: 'l-shape-link', target: '_blank', rel: 'noopener noreferrer' }, [lShapeImage, lShapeBody]);
-      lShapeAd.append(lShapeLink, lShapeClose);
+      const lShapeLandingUrl = $('a', { class: 'l-shape-landing-url', target:'_blank', rel:'noopener noreferrer' });
+      const lShapeDetails = $('div', { class: 'l-shape-details' });
+      const lShapeBottomImage = $('img', { class: 'l-shape-bottom-image', alt: '', referrerpolicy:'no-referrer' });
+      const lShapeBottomImageLink = $('a', { class: 'l-shape-bottom-image-link', target:'_blank', rel:'noopener noreferrer' }, [lShapeBottomImage]);
+      lShapeBody.append(lShapeLandingUrl,lShapeDetails,lShapeBottomImageLink);
+      lShapeAd.append(lShapeRightLink,lShapeBody,lShapeClose);
       stage.append(player,playerStatus,retryPlayback,playerControls,settingsMenu,lShapeAd);if(player.readyState>=1)playerStatus.hidden=true;
-      let lAdShown = false, lAdTimer = null, lAdDismissTimer = null;
-      const hideLAd = () => { if (lShapeAd.hidden) return; lShapeAd.classList.remove('l-ad-visible'); lShapeAd.classList.add('l-ad-hiding'); stage.classList.remove('l-ad-active'); setTimeout(() => { lShapeAd.hidden = true; lShapeAd.classList.remove('l-ad-hiding'); }, 360); if (lAdDismissTimer) { clearTimeout(lAdDismissTimer); lAdDismissTimer = null; } };
-      const showLAd = ad => { if (lAdShown || document.fullscreenElement || document.pictureInPictureElement) return; lAdShown = true; lShapeImage.src = embeddedImageUrl(ad.creativeUrl); lShapeBody.replaceChildren($('strong',{text:text(ad.title,'Sponsored')}),$('small',{text:'Sponsored · '+text(ad.sponsorName,'Partner')}),$('span',{text:'আরও জানো ↗'})); lShapeLink.href = text(ad.destinationUrl,'#'); lShapeAd.hidden = false; lShapeAd.classList.remove('l-ad-hiding'); stage.classList.add('l-ad-active'); requestAnimationFrame(() => lShapeAd.classList.add('l-ad-visible')); jsonFetch('/api/sponsor/events',{method:'POST',body:{campaignId:ad.id,eventType:'impression'}}).catch(()=>{}); lShapeLink.addEventListener('click',()=>jsonFetch('/api/sponsor/events',{method:'POST',body:{campaignId:ad.id,eventType:'click'}}).catch(()=>{}),{once:true}); lAdDismissTimer = setTimeout(hideLAd, Math.max(3, Number(ad.durationSeconds) || 10) * 1000); };
-      const scheduleLAd = () => { if (lAdShown || lAdTimer) return; lAdTimer = setTimeout(() => { lAdTimer = null; jsonFetch('/api/sponsor/serve?placement=l_banner').then(result => { if (result.ad && token === state.routeToken) showLAd(result.ad); }).catch(()=>{}); }, 20000); };
+      let lAdShown = false, lAdTimer = null, lAdDismissTimer = null, lShapeLayout = null;
+      const fitLShapeToStage = () => {
+        if(!lShapeLayout)return;
+        const mobile=window.matchMedia('(max-width:760px)').matches,device=mobile?'mobile':'desktop',width=stage.clientWidth,height=stage.clientHeight;
+        if(!width||!height)return;
+        const fallback={desktop:{right:{width:150,height:642},bottom:{width:320,height:78}},mobile:{right:{width:40,height:167},bottom:{width:160,height:39}}};
+        const layout=lShapeLayout[device]||fallback[device],right=layout.right||fallback[device].right,bottom=layout.bottom||fallback[device].bottom;
+        const rightLimit=height*(mobile?.76:.892),rightScale=Math.min(1,rightLimit/right.height,width*.45/right.width);
+        const stripHeight=height*(mobile?.24:.108),bottomWidthLimit=width*(mobile?.42:.35),bottomScale=Math.min(1,bottomWidthLimit/bottom.width,stripHeight/bottom.height);
+        for(const [name,value] of Object.entries({
+          '--l-active-right-width':`${Math.max(1,Math.round(right.width*rightScale))}px`,
+          '--l-active-right-height':`${Math.max(1,Math.round(right.height*rightScale))}px`,
+          '--l-active-bottom-width':`${Math.max(1,Math.round(bottom.width*bottomScale))}px`,
+          '--l-active-bottom-height':`${Math.max(1,Math.round(bottom.height*bottomScale))}px`
+        })){stage.style.setProperty(name,value);lShapeAd.style.setProperty(name,value);}
+      };
+      const hideLAd = () => { if (lShapeAd.hidden) return; window.removeEventListener('resize',fitLShapeToStage);lShapeAd.classList.remove('l-ad-visible'); lShapeAd.classList.add('l-ad-hiding'); stage.classList.remove('l-ad-active'); setTimeout(() => { lShapeAd.hidden = true; lShapeAd.classList.remove('l-ad-hiding'); }, 360); if (lAdDismissTimer) { clearTimeout(lAdDismissTimer); lAdDismissTimer = null; } };
+      const showLAd = ad => {
+        if (lAdShown || document.fullscreenElement || document.pictureInPictureElement) return;
+        lAdShown = true;
+        lShapeLayout=ad.layoutSettings||{};
+        const destinationUrl=text(ad.destinationUrl,'#');
+        const bottomDestinationUrl=text(ad.bottomDestinationUrl||ad.destinationUrl,'#');
+        let landingLabel='Landing page';try{const url=new URL(bottomDestinationUrl);landingLabel=(url.hostname+url.pathname).slice(0,48);}catch(_){}
+        lShapeImage.src=embeddedImageUrl(ad.creativeUrl);lShapeImage.alt=text(ad.title,'Sponsored poster');
+        lShapeBottomImage.src=embeddedImageUrl(ad.bottomCreativeUrl||ad.creativeUrl);lShapeBottomImage.alt=text(ad.title,'Sponsored')+' · bottom creative';
+        lShapeRightLink.href=destinationUrl;lShapeBottomImageLink.href=bottomDestinationUrl;lShapeLandingUrl.href=bottomDestinationUrl;lShapeLandingUrl.textContent='↗ '+landingLabel;lShapeLandingUrl.title=bottomDestinationUrl;lShapeLandingUrl.setAttribute('aria-label','Landing URL: '+bottomDestinationUrl);
+        lShapeDetails.replaceChildren($('strong',{text:text(ad.title,'Sponsored')}),$('small',{text:'Sponsored · '+text(ad.sponsorName,'Partner')}));
+        lShapeClose.hidden=ad.skippable===false;
+        lShapeAd.hidden=false;lShapeAd.classList.remove('l-ad-hiding');stage.classList.add('l-ad-active');fitLShapeToStage();window.addEventListener('resize',fitLShapeToStage);
+        requestAnimationFrame(()=>lShapeAd.classList.add('l-ad-visible'));
+        trackAdImpression(lShapeAd,ad,null,null,hideLAd);
+        const recordClick=()=>jsonFetch('/api/sponsor/events',{method:'POST',body:{campaignId:ad.id,eventType:'click'}}).catch(()=>{});
+        [lShapeRightLink,lShapeBottomImageLink,lShapeLandingUrl].forEach(link=>link.addEventListener('click',recordClick,{once:true}));
+        lAdDismissTimer=setTimeout(hideLAd,Math.max(3,Number(ad.durationSeconds)||10)*1000);
+      };
+      const scheduleLAd = () => { if (lAdShown || lAdTimer) return; lAdTimer = setTimeout(() => { lAdTimer = null; if(document.fullscreenElement||document.pictureInPictureElement)return; jsonFetch('/api/sponsor/serve?placement=l_banner').then(result => { if (result.ad && token === state.routeToken && !document.fullscreenElement && !document.pictureInPictureElement) showLAd(result.ad); }).catch(()=>{}); }, 20000); };
       player.addEventListener('playing', scheduleLAd); player.addEventListener('pause', () => { if (lAdTimer) { clearTimeout(lAdTimer); lAdTimer = null; } });
       const postrollSlot = $('div', { class: 'postroll-ad-slot' });
       let postrollLoaded = false;
