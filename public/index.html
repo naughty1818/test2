@@ -11,16 +11,17 @@
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/atharo-favicon.png?v=atharo-icon-2">
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/atharo-apple-touch-icon.png?v=atharo-icon-2">
   <link rel="manifest" href="/manifest.webmanifest?v=atharo-icon-2">
-  <link rel="stylesheet" href="/clipnest.css?v=ad-feed-display-v1">
+  <link rel="stylesheet" href="/clipnest.css?v=home-nav-v1">
 </head>
 <body>
   <div class="app-frame">
     <header class="topbar">
-      <button class="icon-button mobile-menu-trigger" id="mobileToggle" type="button" aria-expanded="false" aria-controls="sidebar" aria-label="মেনু খুলুন">☰</button>
+      <button class="icon-button mobile-menu-trigger" id="mobileToggle" type="button" aria-expanded="false" aria-controls="sidebar" aria-label="মেনু খুলুন">⋮</button>
       <a href="/" data-route class="brand-lockup" aria-label="Atharo | আঠারো হোম">
         <span class="brand-latin">Atharo |</span>
         <img class="brand-logo" src="/assets/atharo-logo.png" alt="Atharo | আঠারো">
       </a>
+      <a href="/search" data-route class="icon-button mobile-search-link" aria-label="খুঁজে দেখো">⌕</a>
       <form class="top-search" id="searchForm" role="search">
         <span aria-hidden="true">⌕</span>
         <input id="globalSearch" type="search" placeholder="ভিডিও, চ্যানেল খুঁজে দেখো" aria-label="ভিডিও খুঁজুন" autocomplete="off">
@@ -33,7 +34,7 @@
       </div>
     </header>
     <div class="page-layout">
-      <aside class="sidebar" id="sidebar">
+      <aside class="sidebar" id="sidebar" aria-hidden="true" inert>
         <div class="sidebar-label">দেখো</div>
         <nav aria-label="প্রধান নেভিগেশন">
           <a href="/" data-route data-nav="home" class="nav-item"><span aria-hidden="true">⌂</span><span>হোম</span></a>
@@ -60,8 +61,8 @@
     </div>
     <nav class="mobile-bottom-nav" aria-label="মোবাইল নেভিগেশন">
       <a href="/" data-route data-mobile-nav="home"><span>⌂</span><span>হোম</span></a>
-      <a href="/search" data-route data-mobile-nav="search"><span>⌕</span><span>খুঁজে দেখো</span></a>
       <a href="/subscriptions" data-route data-mobile-nav="subscriptions"><span>▤</span><span>সাবস্ক্রিপশন</span></a>
+      <a href="/upload" data-route data-mobile-nav="upload"><span class="mobile-upload">↑</span><span>আপলোড</span></a>
       <a href="/playlists" data-route data-mobile-nav="playlists"><span>▣</span><span>লাইব্রেরি</span></a>
     </nav>
   </div>
@@ -76,6 +77,7 @@
   const accountArea = document.getElementById('accountArea');
   const notificationArea=document.getElementById('notificationArea');
   const languageSelect=document.getElementById('languageSelect');
+  let mobileLanguageSelect=null;
   const sidebar = document.getElementById('sidebar');
   const mobileToggle = document.getElementById('mobileToggle');
   const searchForm = document.getElementById('searchForm');
@@ -169,7 +171,7 @@
   function linkButton(label, path, cls = 'primary-cta') { return $('a', { href: path, 'data-route': '', class: cls, text: label }); }
   function setPage(children) { app.replaceChildren(...children); app.focus({ preventScroll: true }); }
   function loadingPage(message = 'লোড হচ্ছে…') { setPage([$ ('div', { class: 'empty-state' }, [$('span', { class: 'empty-state-icon', text: '…' }), $('h3', { text: message })])]); }
-  function closeMobile() { sidebar.classList.remove('sidebar-open'); mobileToggle.setAttribute('aria-expanded', 'false'); }
+  function closeMobile() { sidebar.classList.remove('sidebar-open'); sidebar.inert=true; sidebar.setAttribute('aria-hidden','true'); mobileToggle.setAttribute('aria-expanded', 'false'); mobileToggle.setAttribute('aria-label','মেনু খুলুন'); }
   function closeAccountMenu() { document.querySelectorAll('.account-menu.open').forEach(menu => { menu.classList.remove('open'); const toggle = menu.previousElementSibling; if (toggle) toggle.setAttribute('aria-expanded', 'false'); }); }
   function leaveRealtimeRooms() {
     if (socket && state.currentVideoId) socket.emit('video:leave', state.currentVideoId);
@@ -189,12 +191,14 @@
     });
     document.querySelectorAll('[data-mobile-nav]').forEach(link => {
       const target = link.dataset.mobileNav;
-      const active = target === 'home' ? path === '/' : target === 'search' ? path.startsWith('/search') : target === 'subscriptions' ? path.startsWith('/subscriptions') : target === 'playlists' ? path.startsWith('/playlists') || path.startsWith('/playlist/') : false;
+      const active = target === 'home' ? path === '/' : target === 'upload' ? path === '/upload' : target === 'subscriptions' ? path.startsWith('/subscriptions') : target === 'playlists' ? path.startsWith('/playlists') || path.startsWith('/playlist/') : false;
       link.classList.toggle('mobile-nav-active', active);
     });
   }
   function renderAccount() {
     accountArea.replaceChildren();
+    mobileLanguageSelect=null;
+    document.body.classList.toggle('has-user-profile',Boolean(state.session.user));
     if (!state.session.user) {
       const login = button('লগইন', 'login-button', () => beginGoogleSignIn());
       login.setAttribute('aria-label', 'Google দিয়ে লগইন');
@@ -207,6 +211,10 @@
     const toggle = $('button', { type: 'button', class: 'account-toggle', 'aria-expanded': 'false', 'aria-label': 'অ্যাকাউন্ট মেনু' }, [avatar, accountName, $('span', { class: 'chevron', text: '⌄' })]);
     const menu = $('div', { class: 'account-menu' });
     const menuNote=$('div',{class:'menu-note'});menuNote.append($('span',{text:name}));if(verified)menuNote.append(verifiedMark());menu.append(menuNote);
+    mobileLanguageSelect=$('select',{class:'language-control-select','aria-label':'Language'},[$('option',{value:'bn',text:'বাংলা'}),$('option',{value:'en',text:'English'})]);
+    mobileLanguageSelect.value=languageSelect?.value||'bn';
+    mobileLanguageSelect.addEventListener('change',()=>{if(!languageSelect)return;languageSelect.value=mobileLanguageSelect.value;languageSelect.dispatchEvent(new Event('change'));});
+    menu.append($('label',{class:'account-language-control'},[$('span',{text:'Language'}),mobileLanguageSelect]));
     (state.session.profile ? [['আমার চ্যানেল', '/channel/me'], ['Creator Studio', '/studio'], ['সাবস্ক্রিপশন', '/subscriptions'], ['প্লেলিস্ট', '/playlists'], ['ভিডিও আপলোড', '/upload']] : [['চ্যানেল তৈরি করুন', '/studio'], ['ভিডিও দেখুন', '/'], ['প্লেলিস্ট', '/playlists']]).forEach(([label, href]) => menu.append($('a', href === '/studio' ? { href, target: '_blank', rel: 'noopener noreferrer', text: label } : { href, 'data-route': '', text: label })));
     if (state.admin?.role) menu.append($('a', { href: '/admin', target: '_blank', rel: 'noopener noreferrer', text: 'Admin control panel' }));
     menu.append($('button', { type: 'button', class: 'logout-item', text: 'লগআউট', onClick: async () => {
@@ -935,6 +943,9 @@
     if (path !== '/admin') app.classList.remove('admin-shell', 'console-page');
     document.body.classList.toggle('studio-fullscreen', path === '/studio' && Boolean(state.session.profile));
     document.body.classList.toggle('admin-fullscreen', path === '/admin');
+    const watchPlayerPage=path.startsWith('/watch/')&&Boolean(state.session.user);
+    document.body.classList.toggle('watch-player-page',watchPlayerPage);
+    if(watchPlayerPage)closeMobile();
     if (path === '/') { document.title=window.AtharoI18n?.t('Atharo | আঠারো · বাংলা ভিডিও')??'Atharo | আঠারো · বাংলা ভিডিও'; return renderHome(token); }
     if (path === '/search') { document.title=window.AtharoI18n?.t('খুঁজে দেখো · Atharo | আঠারো')??'খুঁজে দেখো · Atharo | আঠারো'; return renderSearch(token); }
     if (path === '/login') { document.title=window.AtharoI18n?.t('লগইন · Atharo | আঠারো')??'লগইন · Atharo | আঠারো'; return renderLogin(); }
@@ -965,8 +976,8 @@
     event.preventDefault(); navigate(url.pathname + url.search);
   });
   window.addEventListener('popstate',()=>safeRenderRoute());
-  window.addEventListener('atharo:language-change',()=>{if(languageSelect&&window.AtharoI18n)languageSelect.value=window.AtharoI18n.locale;safeRenderRoute();});
-  mobileToggle.addEventListener('click', event => { event.stopPropagation(); closeAccountMenu(); const open = sidebar.classList.toggle('sidebar-open'); mobileToggle.setAttribute('aria-expanded', String(open)); });
+  window.addEventListener('atharo:language-change',()=>{if(languageSelect&&window.AtharoI18n)languageSelect.value=window.AtharoI18n.locale;if(mobileLanguageSelect&&window.AtharoI18n)mobileLanguageSelect.value=window.AtharoI18n.locale;safeRenderRoute();});
+  mobileToggle.addEventListener('click', event => { event.stopPropagation(); closeAccountMenu(); const open = sidebar.classList.toggle('sidebar-open'); sidebar.inert=!open; sidebar.setAttribute('aria-hidden',String(!open)); mobileToggle.setAttribute('aria-expanded', String(open)); mobileToggle.setAttribute('aria-label',open?'মেনু বন্ধ করুন':'মেনু খুলুন'); });
   document.addEventListener('pointerdown', event => {
     if (!sidebar.contains(event.target) && event.target !== mobileToggle && !mobileToggle.contains(event.target)) closeMobile();
     if (!event.target.closest('.account-wrap')) closeAccountMenu();
