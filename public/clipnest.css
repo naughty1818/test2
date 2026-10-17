@@ -719,7 +719,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .sponsored-watch { display:block; margin:14px 0; padding:10px; }
 .sponsored-watch > a { display:grid; grid-template-columns:minmax(0,var(--ad-size-width)) minmax(0,1fr); align-items:start; gap:11px; }
 .sponsored-watch .sponsored-image-frame { border-radius:9px; }
-.sponsored-feed-row { grid-column:1/-1; width:100%; margin:14px 0; }
+.sponsored-feed-cell { grid-column:auto; min-width:0; margin:0; }
 .console-muted { color:#8a8f88; font-size:10px; line-height:1.7; }
 .studio-shell { max-width:1280px; margin:0 auto; }
 .studio-hero { display:flex; justify-content:space-between; align-items:center; gap:22px; margin:4px 0 20px; padding:26px 28px; border:1px solid #294638; border-radius:22px; background:radial-gradient(ellipse at 92% 0%,#14553f88,transparent 46%),linear-gradient(120deg,#10231b,#0b1712); box-shadow:0 16px 44px #0002; }
@@ -993,7 +993,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible 
 
 .channel-ad-slot { margin: 18px 0 4px; }
 .channel-ad-slot:empty { display: none; }
-.channel-ad-slot .sponsored-card { max-width: 720px; }
+.channel-ad-slot .sponsored-card { width:100%; max-width:none; }
+.channel-ad-slot .sponsored-image-frame { max-width:100%; }
 
 .home-sticky-ad-slot { min-height: 0; }
 .home-sticky-ad-slot:empty { display: none; }
@@ -1032,6 +1033,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible 
   .player-stage.l-ad-active .player-controls { right:calc(5px + var(--l-active-right-width,40px)); }
 }
 .player-stage .player-media, .player-stage .player-controls { transition: width .36s ease, height .36s ease; }
+@media(max-width:760px){.sponsored-feed-cell{grid-column:1/-1;margin:14px 0}}
 
 
 /* Education filters appear only after choosing the Education category. */
@@ -1268,6 +1270,7 @@ body.admin-fullscreen .main-content { width:100%; max-width:none; min-height:100
 .ad-layout-card { min-width:0; padding:14px; border:1px solid #294638; border-radius:13px; background:#0b1912; }
 .ad-layout-card > h3 { margin:0 0 10px; color:#a8edd9; font-size:13px; }
 .ad-layout-device-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.ad-layout-display-controls { display:flex; flex-wrap:wrap; gap:12px 20px; margin:0 0 12px; padding:9px 10px; border:1px solid #20372c; border-radius:9px; background:#0a1711; }
 .ad-layout-device { min-width:0; padding:12px; border:1px solid #20372c; border-radius:10px; background:#0e1d15; }
 .ad-layout-device > h3 { margin:0 0 9px; color:#d7e6dd; font-size:11px; }
 .ad-layout-size { margin:0 0 11px; padding:9px; border:1px solid #20372c; border-radius:9px; background:#0a1711; }

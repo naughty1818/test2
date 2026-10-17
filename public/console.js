@@ -328,11 +328,11 @@
     root.append(panel('বর্তমান staff','Admin campaign ও moderation পরিচালনা করতে পারে; Moderator moderation-এ সীমিত.',rows.length?table(['Google account','Role','Added','Access'],rows):empty('অন্য staff যোগ করা হয়নি।')));
   }
 
-  const AD_LAYOUT_DEFAULTS={feed:{desktop:{width:640,height:360},mobile:{width:360,height:203}},watch_sidebar:{desktop:{width:184,height:138},mobile:{width:92,height:69}},channel:{desktop:{width:720,height:405},mobile:{width:360,height:203}},sticky_banner:{desktop:{width:960,height:320},mobile:{width:360,height:120}},postroll:{desktop:{width:720,height:405},mobile:{width:360,height:203}},l_banner:{desktop:{right:{width:150,height:642},bottom:{width:320,height:78}},mobile:{right:{width:40,height:167},bottom:{width:160,height:39}}}};
+  const AD_LAYOUT_DEFAULTS={feed:{showTitle:true,showLandingLink:true,desktop:{width:640,height:360},mobile:{width:360,height:203}},watch_sidebar:{showTitle:true,showLandingLink:true,desktop:{width:184,height:138},mobile:{width:92,height:69}},channel:{showTitle:true,showLandingLink:true,desktop:{width:720,height:405},mobile:{width:360,height:203}},sticky_banner:{showTitle:true,showLandingLink:true,desktop:{width:960,height:320},mobile:{width:360,height:120}},postroll:{showTitle:true,showLandingLink:true,desktop:{width:720,height:405},mobile:{width:360,height:203}},l_banner:{showTitle:true,showLandingLink:true,desktop:{right:{width:150,height:642},bottom:{width:320,height:78}},mobile:{right:{width:40,height:167},bottom:{width:160,height:39}}}};
   const adRatioLabel=(width,height)=>{const ratio=Number(width)/Number(height);if(!Number.isFinite(ratio)||ratio<=0)return'—';return ratio>=1?`${ratio.toFixed(2)}:1`:`1:${(1/ratio).toFixed(2)}`;};
   function buildAdLayoutEditor(source={}){
     const labels={feed:'Home feed',watch_sidebar:'Watch sidebar',channel:'Creator channel',sticky_banner:'Sticky banner',postroll:'Post-roll',l_banner:'L-shape'};
-    const refs={};
+    const refs={},displayRefs={};
     function sizeControl(placement,device,part,label){
       const fallback=part?AD_LAYOUT_DEFAULTS[placement][device][part]:AD_LAYOUT_DEFAULTS[placement][device];
       const actual=part?source?.[placement]?.[device]?.[part]:source?.[placement]?.[device];
@@ -348,14 +348,21 @@
       return el('div',{class:'ad-layout-size'},[el('h4',{text:label}),el('div',{class:'ad-layout-dimensions'},[field('Width (px)',width),field('Height (px)',height)]),ratio,el('div',{class:'ad-layout-sample-wrap'},[sample])]);
     }
     const cards=Object.entries(labels).map(([placement,label])=>{
+      const showTitle=el('input',{type:'checkbox',checked:source?.[placement]?.showTitle!==false});
+      const showLandingLink=el('input',{type:'checkbox',checked:source?.[placement]?.showLandingLink!==false});
+      displayRefs[placement]={showTitle,showLandingLink};
+      const displayControls=el('div',{class:'ad-layout-display-controls'},[
+        el('label',{class:'console-toggle'},[showTitle,el('span',{text:'Show campaign title below creative'})]),
+        el('label',{class:'console-toggle'},[showLandingLink,el('span',{text:'Show landing-page button'})])
+      ]);
       const desktop=placement==='l_banner'?el('div',{class:'ad-layout-device'},[el('h3',{text:'PC · right image'}),sizeControl(placement,'desktop','right','Right-side poster'),el('h3',{text:'PC · bottom image'}),sizeControl(placement,'desktop','bottom','Bottom-banner creative')]):el('div',{class:'ad-layout-device'},[el('h3',{text:'PC / Desktop'}),sizeControl(placement,'desktop',null,label+' creative')]);
       const mobile=placement==='l_banner'?el('div',{class:'ad-layout-device'},[el('h3',{text:'Phone · right image'}),sizeControl(placement,'mobile','right','Right-side poster'),el('h3',{text:'Phone · bottom image'}),sizeControl(placement,'mobile','bottom','Bottom-banner creative')]):el('div',{class:'ad-layout-device'},[el('h3',{text:'Phone / Mobile'}),sizeControl(placement,'mobile',null,label+' creative')]);
-      return el('section',{class:'ad-layout-card'},[el('h3',{text:label}),el('div',{class:'ad-layout-device-grid'},[desktop,mobile])]);
+      return el('section',{class:'ad-layout-card'},[el('h3',{text:label}),displayControls,el('div',{class:'ad-layout-device-grid'},[desktop,mobile])]);
     });
     return {node:el('div',{class:'ad-layout-editor'},cards),serialize(){
       const result={};
       for(const [placement,devices] of Object.entries(refs)){
-        result[placement]={};
+        result[placement]={showTitle:displayRefs[placement].showTitle.checked,showLandingLink:displayRefs[placement].showLandingLink.checked};
         for(const [device,parts] of Object.entries(devices)){
           if(placement==='l_banner'){
             result[placement][device]={};
@@ -394,8 +401,8 @@
       field('L-shape ads',el('span',{class:'console-toggle'},[adLBanner,el('span',{text:'Video squeeze-back'})])),
       field('L-shape duration (seconds)',lBannerDuration),
       field('L-shape skip button',el('span',{class:'console-toggle'},[lBannerSkippable,el('span',{text:'User × দিয়ে আগেই ad বন্ধ করতে পারবে'})])),
-      field('Home feed ad gap (content rows)',feedAdEveryRows),
-      el('div',{class:'console-notice span-2',text:'একটি ad-এর pixel box প্রতি device ও placement-এর জন্য আলাদা। Ratio পাশে হিসাব হয়। Creative contain-এ দেখায়—পুরো poster থাকবে; ratio না মিললে ফাঁকা band দেখা যেতে পারে। Player stage ছোট হলে L-shape-এর দুই box ratio না বদলে ছোট হয়। Feed gap কেবল video row গুনে; ad row গোনা হয় না।'}),
+      field('Home feed ad interval (rows)',feedAdEveryRows),
+      el('div',{class:'console-notice span-2',text:'প্রতিটি ad placement-এর জন্য title ও landing-page button আলাদাভাবে চালু/বন্ধ করা যায়; button বন্ধ থাকলেও creative image-এ click করলে landing page খুলবে। Desktop home feed-এ নির্ধারিত প্রতিটি Nth row-তে ২টি video tile ও ১টি ad tile থাকে; phone-এ প্রতি Nটি video row-এর পর full-width ad আসে। Ad row interval-এ গণনা হয় না। Pixel size ও ratio device অনুযায়ী; creative contain-এ দেখায়।'}),
       el('div',{class:'span-2'},[el('h3',{class:'ad-layout-heading',text:'Placement অনুযায়ী PC / phone pixel মাপ ও ratio'}),adLayoutEditor.node]),
       field('Creator monetization',el('span',{class:'console-toggle'},[monet,el('span',{text:'Eligible channel-গুলোর estimated revenue হিসাব করো'})]),'span-2'),
       field('Creator share (%)',share),

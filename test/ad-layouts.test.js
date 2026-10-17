@@ -19,6 +19,21 @@ test('legacy or empty layout settings receive a complete default configuration',
   const layouts = normalizeAdLayouts({});
   assert.deepEqual(layouts.feed.desktop, DEFAULT_AD_LAYOUTS.feed.desktop);
   assert.deepEqual(layouts.l_banner.mobile.bottom, DEFAULT_AD_LAYOUTS.l_banner.mobile.bottom);
+  assert.equal(layouts.sticky_banner.showTitle, true);
+  assert.equal(layouts.sticky_banner.showLandingLink, true);
+});
+
+test('placement display settings can hide campaign titles and landing buttons independently', () => {
+  const layouts = normalizeAdLayouts({ sticky_banner: { showTitle: false, showLandingLink: false } });
+  assert.equal(layouts.sticky_banner.showTitle, false);
+  assert.equal(layouts.sticky_banner.showLandingLink, false);
+  assert.equal(layouts.feed.showTitle, true);
+  assert.equal(layouts.l_banner.showLandingLink, true);
+});
+
+test('placement display settings only accept boolean values', () => {
+  assert.throws(() => normalizeAdLayouts({ feed: { showTitle: 'false' } }), /must be on or off/);
+  assert.throws(() => normalizeAdLayouts({ l_banner: { showLandingLink: 0 } }), /must be on or off/);
 });
 
 test('layout settings reject non-integer, undersized, and oversized CSS pixels', () => {

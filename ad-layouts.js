@@ -7,12 +7,14 @@ const MAX_PX = 4096;
 const MAX_MONTHLY_CAP = 2147483647;
 
 const DEFAULT_AD_LAYOUTS = Object.freeze({
-  feed: { desktop: { width: 640, height: 360 }, mobile: { width: 360, height: 203 } },
-  watch_sidebar: { desktop: { width: 184, height: 138 }, mobile: { width: 92, height: 69 } },
-  channel: { desktop: { width: 720, height: 405 }, mobile: { width: 360, height: 203 } },
-  sticky_banner: { desktop: { width: 960, height: 320 }, mobile: { width: 360, height: 120 } },
-  postroll: { desktop: { width: 720, height: 405 }, mobile: { width: 360, height: 203 } },
+  feed: { showTitle: true, showLandingLink: true, desktop: { width: 640, height: 360 }, mobile: { width: 360, height: 203 } },
+  watch_sidebar: { showTitle: true, showLandingLink: true, desktop: { width: 184, height: 138 }, mobile: { width: 92, height: 69 } },
+  channel: { showTitle: true, showLandingLink: true, desktop: { width: 720, height: 405 }, mobile: { width: 360, height: 203 } },
+  sticky_banner: { showTitle: true, showLandingLink: true, desktop: { width: 960, height: 320 }, mobile: { width: 360, height: 120 } },
+  postroll: { showTitle: true, showLandingLink: true, desktop: { width: 720, height: 405 }, mobile: { width: 360, height: 203 } },
   l_banner: {
+    showTitle: true,
+    showLandingLink: true,
     desktop: { right: { width: 150, height: 642 }, bottom: { width: 320, height: 78 } },
     mobile: { right: { width: 40, height: 167 }, bottom: { width: 160, height: 39 } }
   }
@@ -37,13 +39,22 @@ function normalizeAdLayouts(value) {
   if (value === undefined || value === null) return structuredClone(DEFAULT_AD_LAYOUTS);
   if (!isRecord(value)) throw new Error('Ad layouts must be an object.');
   const layouts = {};
-  for (const placement of PLACEMENTS) {
-    layouts[placement] = {};
-    for (const device of DEVICES) {
-      layouts[placement][device] = normalizeSize(value[placement]?.[device], DEFAULT_AD_LAYOUTS[placement][device], `${placement} ${device}`);
+  const normalizeDisplay = (source, placement) => {
+    if (source !== undefined && !isRecord(source)) throw new Error(`${placement} settings must be an object.`);
+    for (const key of ['showTitle', 'showLandingLink']) {
+      if (source?.[key] !== undefined && typeof source[key] !== 'boolean') throw new Error(`${placement} ${key} must be on or off.`);
     }
+    return { showTitle: source?.showTitle !== false, showLandingLink: source?.showLandingLink !== false };
+  };
+  for (const placement of PLACEMENTS) {
+    const source = value[placement];
+    const display = normalizeDisplay(source, placement);
+    layouts[placement] = { ...display };
+    for (const device of DEVICES) layouts[placement][device] = normalizeSize(source?.[device], DEFAULT_AD_LAYOUTS[placement][device], `${placement} ${device}`);
   }
   layouts.l_banner = {};
+  const lBannerDisplay = normalizeDisplay(value.l_banner, 'l_banner');
+  Object.assign(layouts.l_banner, lBannerDisplay);
   for (const device of DEVICES) {
     const fallback = DEFAULT_AD_LAYOUTS.l_banner[device];
     const sizeSet = value.l_banner?.[device];
