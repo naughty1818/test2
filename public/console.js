@@ -228,7 +228,7 @@
     range.addEventListener('change',loadAnalytics);await loadAnalytics();
     const campaignSearch=el('input',{type:'search',placeholder:'Campaign title or sponsor'}),campaignStatus=select([['all','All statuses'],['draft','Draft'],['active','Active'],['paused','Paused']]);
     const title=el('input',{type:'text',maxlength:'120',required:'',placeholder:'For example: Brand campaign'}),sponsor=el('input',{type:'text',maxlength:'120',required:'',placeholder:'Sponsor name'});
-    const placement=select([['feed','Home feed native card'],['watch_sidebar','Watch page sidebar'],['channel','Creator channel sponsor'],['sticky_banner','Sticky banner'],['postroll','Post-roll sponsor'],['l_banner','L-shape squeeze-back']]);
+    const placement=select([['feed','Home feed native card'],['watch_sidebar','Watch page sidebar'],['channel','Creator channel sponsor'],['sticky_banner','Sticky banner'],['postroll','Post-roll sponsor'],['l_banner','L-shape squeeze-back']],'feed');
     const creative=el('input',{type:'url',required:'',placeholder:'HTTPS creative image URL'}),destination=el('input',{type:'url',required:'',placeholder:'HTTPS landing page URL'});
     const bottomCreative=el('input',{type:'url',placeholder:'HTTPS bottom creative image URL'}),bottomDestination=el('input',{type:'url',placeholder:'HTTPS bottom landing URL'});
     const monthlyCap=el('input',{type:'number',min:'1',max:'2147483647',step:'1',placeholder:'Blank = unlimited'});
