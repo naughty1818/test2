@@ -7,14 +7,13 @@ const MAX_PX = 4096;
 const MAX_MONTHLY_CAP = 2147483647;
 
 const DEFAULT_AD_LAYOUTS = Object.freeze({
-  feed: { showTitle: true, showLandingLink: true, desktop: { width: 640, height: 360 }, mobile: { width: 360, height: 203 } },
-  watch_sidebar: { showTitle: true, showLandingLink: true, desktop: { width: 184, height: 138 }, mobile: { width: 92, height: 69 } },
-  channel: { showTitle: true, showLandingLink: true, desktop: { width: 720, height: 405 }, mobile: { width: 360, height: 203 } },
-  sticky_banner: { showTitle: true, showLandingLink: true, desktop: { width: 960, height: 320 }, mobile: { width: 360, height: 120 } },
-  postroll: { showTitle: true, showLandingLink: true, desktop: { width: 720, height: 405 }, mobile: { width: 360, height: 203 } },
+  feed: { showSponsorDetails: true, desktop: { width: 640, height: 360 }, mobile: { width: 360, height: 203 } },
+  watch_sidebar: { showSponsorDetails: true, desktop: { width: 184, height: 138 }, mobile: { width: 92, height: 69 } },
+  channel: { showSponsorDetails: true, desktop: { width: 720, height: 405 }, mobile: { width: 360, height: 203 } },
+  sticky_banner: { showSponsorDetails: true, desktop: { width: 960, height: 320 }, mobile: { width: 360, height: 120 } },
+  postroll: { showSponsorDetails: true, desktop: { width: 720, height: 405 }, mobile: { width: 360, height: 203 } },
   l_banner: {
-    showTitle: true,
-    showLandingLink: true,
+    showSponsorDetails: true,
     desktop: { right: { width: 150, height: 642 }, bottom: { width: 320, height: 78 } },
     mobile: { right: { width: 40, height: 167 }, bottom: { width: 160, height: 39 } }
   }
@@ -41,10 +40,13 @@ function normalizeAdLayouts(value) {
   const layouts = {};
   const normalizeDisplay = (source, placement) => {
     if (source !== undefined && !isRecord(source)) throw new Error(`${placement} settings must be an object.`);
-    for (const key of ['showTitle', 'showLandingLink']) {
+    for (const key of ['showSponsorDetails', 'showTitle', 'showLandingLink']) {
       if (source?.[key] !== undefined && typeof source[key] !== 'boolean') throw new Error(`${placement} ${key} must be on or off.`);
     }
-    return { showTitle: source?.showTitle !== false, showLandingLink: source?.showLandingLink !== false };
+    const showSponsorDetails = source?.showSponsorDetails !== undefined
+      ? source.showSponsorDetails
+      : source?.showTitle !== false && source?.showLandingLink !== false;
+    return { showSponsorDetails };
   };
   for (const placement of PLACEMENTS) {
     const source = value[placement];

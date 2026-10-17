@@ -68,7 +68,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/i18n.js?v=login-startup-fix-1"></script>
-  <script src="/console.js?v=ad-feed-display-v1"></script>
+  <script src="/console.js?v=ad-feed-display-v2"></script>
   <script src="/studio.js?v=creator-ui-fix-3"></script>
   <script>
   'use strict';
@@ -366,9 +366,8 @@
     const image = $('img', { src: embeddedImageUrl(ad.creativeUrl), alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' });
     image.addEventListener('error', () => {card.dataset.adCreativeError='true';image.remove();});
     const imageFrame=$('div',{class:'sponsored-image-frame'},[image]);
-    const campaignTitle=$('strong',{text:text(ad.title,'Partner message')});campaignTitle.hidden=layout.showTitle===false;
-    const landingCta=$('span',{class:'sponsored-cta',text:'আরও জানো ↗'});landingCta.hidden=layout.showLandingLink===false;
-    const copy = $('div', { class: 'sponsored-copy' }, [$('span', { class: 'sponsored-label', text: 'Sponsored · ' + text(ad.sponsorName, 'Partner') }), campaignTitle, $('small', { text: 'প্রমোটেড কনটেন্ট' }), landingCta]);
+    const copy = $('div', { class: 'sponsored-copy' }, [$('span', { class: 'sponsored-label', text: 'Sponsored · ' + text(ad.sponsorName, 'Partner') }), $('strong', { text: text(ad.title, 'Partner message') }), $('small', { text: 'প্রমোটেড কনটেন্ট' }), $('span', { class: 'sponsored-cta', text: 'আরও জানো ↗' })]);
+    copy.hidden=layout.showSponsorDetails===false;
     link.append(imageFrame, copy);
     trackAdImpression(card,ad,videoId,channelHandle);
     link.addEventListener('click', () => { jsonFetch('/api/sponsor/events', { method: 'POST', body: { campaignId: ad.id, eventType: 'click', videoId, channelHandle } }).catch(() => {}); });
@@ -626,8 +625,9 @@
         lShapeImage.src=embeddedImageUrl(ad.creativeUrl);lShapeImage.alt=text(ad.title,'Sponsored poster');
         lShapeBottomImage.src=embeddedImageUrl(ad.bottomCreativeUrl||ad.creativeUrl);lShapeBottomImage.alt=text(ad.title,'Sponsored')+' · bottom creative';
         lShapeRightLink.href=destinationUrl;lShapeBottomImageLink.href=bottomDestinationUrl;lShapeLandingUrl.href=bottomDestinationUrl;lShapeLandingUrl.textContent='↗ '+landingLabel;lShapeLandingUrl.title=bottomDestinationUrl;lShapeLandingUrl.setAttribute('aria-label','Landing URL: '+bottomDestinationUrl);
-        lShapeDetails.replaceChildren($('strong',{text:text(ad.title,'Sponsored'),hidden:lShapeLayout.showTitle===false}),$('small',{text:'Sponsored · '+text(ad.sponsorName,'Partner')}));
-        lShapeLandingUrl.hidden=lShapeLayout.showLandingLink===false;
+        lShapeDetails.replaceChildren($('strong',{text:text(ad.title,'Sponsored')}),$('small',{text:'Sponsored · '+text(ad.sponsorName,'Partner')}));
+        const showSponsorDetails=lShapeLayout.showSponsorDetails!==false;
+        lShapeDetails.hidden=!showSponsorDetails;lShapeLandingUrl.hidden=!showSponsorDetails;
         lShapeClose.hidden=ad.skippable===false;
         lShapeAd.hidden=false;lShapeAd.classList.remove('l-ad-hiding');stage.classList.add('l-ad-active');fitLShapeToStage();window.addEventListener('resize',fitLShapeToStage);
         requestAnimationFrame(()=>lShapeAd.classList.add('l-ad-visible'));
