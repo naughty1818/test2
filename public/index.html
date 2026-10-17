@@ -11,12 +11,12 @@
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/atharo-favicon.png?v=atharo-icon-2">
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/atharo-apple-touch-icon.png?v=atharo-icon-2">
   <link rel="manifest" href="/manifest.webmanifest?v=atharo-icon-2">
-  <link rel="stylesheet" href="/clipnest.css?v=home-nav-v2">
+  <link rel="stylesheet" href="/clipnest.css?v=profile-nav-polish-v3">
 </head>
 <body>
   <div class="app-frame">
     <header class="topbar">
-      <button class="icon-button mobile-menu-trigger" id="mobileToggle" type="button" aria-expanded="false" aria-controls="sidebar" aria-label="মেনু খুলুন">⋮</button>
+      <button class="icon-button mobile-menu-trigger" id="mobileToggle" type="button" aria-expanded="false" aria-controls="sidebar" aria-label="মেনু খুলুন">☰</button>
       <a href="/" data-route class="brand-lockup" aria-label="Atharo | আঠারো হোম">
         <span class="brand-latin">Atharo |</span>
         <img class="brand-logo" src="/assets/atharo-logo.png" alt="Atharo | আঠারো">
@@ -28,7 +28,7 @@
         <button type="submit" aria-label="সার্চ করো">⌕</button>
       </form>
       <div class="top-actions">
-        <label class="language-control"><span class="language-label">Language</span><select id="languageSelect" aria-label="Language"><option value="bn">বাংলা</option><option value="en">English</option></select></label>
+        <label class="language-control desktop-language-control"><span class="language-label">Language</span><select id="languageSelect" aria-label="Language"><option value="bn">বাংলা</option><option value="en">English</option></select></label>
         <a href="/upload" data-route class="upload-link"><span aria-hidden="true">＋</span><span>আপলোড</span></a>
         <div id="notificationArea"></div><div id="accountArea"></div>
       </div>
@@ -200,9 +200,18 @@
     mobileLanguageSelect=null;
     document.body.classList.toggle('has-user-profile',Boolean(state.session.user));
     if (!state.session.user) {
-      const login = button('লগইন', 'login-button', () => beginGoogleSignIn());
+      const login = button('লগইন', 'login-button', () => beginGoogleSignIn(login));
       login.setAttribute('aria-label', 'Google দিয়ে লগইন');
-      accountArea.append(login); return;
+      const toggle = $('button', { type: 'button', class: 'account-toggle account-login-toggle', 'aria-expanded': 'false', 'aria-label': 'অ্যাকাউন্ট মেনু' }, [
+        $('span', { class: 'profile-menu-icon', text: '◉' }), $('span', { class: 'account-login-label', text: 'লগইন' }), $('span', { class: 'chevron', text: '⌄' })
+      ]);
+      const menu = $('div', { class: 'account-menu' });
+      const language = $('select', { class: 'language-control-select', 'aria-label': 'Language' }, [$('option', { value: 'bn', text: 'বাংলা' }), $('option', { value: 'en', text: 'English' })]);
+      language.value = languageSelect?.value || 'bn';
+      language.addEventListener('change', () => { if (!languageSelect) return; languageSelect.value = language.value; languageSelect.dispatchEvent(new Event('change')); });
+      menu.append($('div', { class: 'menu-note', text: 'Atharo account' }), $('label', { class: 'account-language-control' }, [$('span', { text: 'Language' }), language]), login);
+      toggle.addEventListener('click', () => { const open = menu.classList.toggle('open'); toggle.setAttribute('aria-expanded', String(open)); });
+      accountArea.append($('div', { class: 'account-wrap' }, [toggle, menu])); return;
     }
     const name = getName(state.session.profile, state.session.user);
     const verified=Boolean(state.session.profile?.isVerified);
@@ -230,7 +239,7 @@
   }
   function drawNotifications(){
     if(!state.session.user){notificationArea.replaceChildren();return;}
-    const wrap=$('div',{class:'notification-wrap'}),toggle=button('♧','notification-toggle',async()=>{const pop=wrap.querySelector('.notification-popover');const open=pop.hidden;pop.hidden=!open;if(open){await refreshNotifications();const current=notificationArea.querySelector('.notification-popover');if(current)current.hidden=false;}});toggle.setAttribute('aria-label','Notifications');
+    const wrap=$('div',{class:'notification-wrap'}),toggle=button('','notification-toggle',async()=>{const pop=wrap.querySelector('.notification-popover');const open=pop.hidden;pop.hidden=!open;if(open){await refreshNotifications();const current=notificationArea.querySelector('.notification-popover');if(current)current.hidden=false;}});toggle.setAttribute('aria-label','Notifications');toggle.append($('img',{src:'/assets/notification-bell.png',alt:'',class:'notification-bell-icon'}));
     if(state.unreadNotifications)toggle.append($('span',{class:'notification-count',text:state.unreadNotifications>99?'99+':String(state.unreadNotifications)}));
     const pop=$('div',{class:'notification-popover',hidden:true}),head=$('div',{class:'notification-head'},[$('strong',{text:'Notifications'}),button('Mark all read','notification-mark-read',async()=>{try{await jsonFetch('/api/notifications/read-all',{method:'POST',body:{}});state.unreadNotifications=0;state.notifications=state.notifications.map(n=>({...n,readAt:n.readAt||new Date().toISOString()}));drawNotifications();const current=notificationArea.querySelector('.notification-popover');if(current)current.hidden=false;}catch(error){notify(error.message,'error');}})]),list=$('div',{class:'notification-list'});
     state.notifications.forEach(item=>{const row=$('a',{href:item.href||'/', 'data-route':'',class:'notification-item'+(!item.readAt?' notification-unread':'')});row.append($('span',{class:'notification-item-dot'}),$('span',{class:'notification-item-copy'},[$('strong',{text:item.title}),$('small',{text:item.detail}),$('time',{text:fmtDate(item.createdAt)})]));row.addEventListener('click',()=>{if(!item.readAt)jsonFetch('/api/notifications/'+encodeURIComponent(item.id)+'/read',{method:'PATCH',body:{}}).catch(()=>{});});list.append(row);});

@@ -1332,3 +1332,42 @@ body.admin-fullscreen .main-content { width:100%; max-width:none; min-height:100
   body.watch-player-page .mobile-menu-trigger,body.watch-player-page .sidebar { display:none !important; }
   body.watch-player-page .main-content { padding:16px 0 90px; }
 }
+
+/* 2026-10 navigation polish: green slide controls, profile-owned language, balanced cards. */
+.desktop-language-control { display: none !important; }
+.mobile-menu-trigger { color: #1aa36d; font-size: 25px; font-weight: 800; line-height: 1; }
+.mobile-menu-trigger:hover { color: #0d7f52; background: #e7f8ee; }
+.account-language-control { display: flex !important; flex-direction: column; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: 10px; font-weight: 700; }
+.account-language-control select { width: 100%; min-height: 36px; padding: 0 9px; border: 1px solid #4bb77b; border-radius: 8px; color: #116e45; background: #e5f8ec; font-size: 12px; font-weight: 700; }
+.account-login-toggle { min-width: 82px; justify-content: center; color: #116e45; border-color: #4bb77b; background: #e5f8ec; }
+.account-login-toggle:hover { color: #075d42; background: #d9f5e5; }
+.account-login-label { font-size: 12px; font-weight: 750; }
+.profile-menu-icon { color: #168c63; font-size: 15px; }
+.account-menu .login-button { width: 100%; min-height: 38px; margin: 6px 0 2px; color: #fff; background: #168c63; }
+.account-menu .login-button:hover { background: #0d704d; }
+.notification-toggle { overflow: visible; color: #118861; border-color: #78c89d; background: #eefbf3; }
+.notification-toggle:hover { color: #075d42; background: #dcf8e9; }
+.notification-bell-icon { width: 23px; height: 23px; display: block; object-fit: contain; }
+.notification-count { top: -7px; right: -7px; min-width: 19px; height: 19px; border-color: var(--background); background: #e04c42; font-size: 10px; }
+/* Keep the first card the same visual weight as every following card. */
+.video-card-featured { grid-column: auto; }
+.video-card-featured .video-thumb,
+.feed-section .video-card-featured .video-thumb { aspect-ratio: 16 / 9; border-radius: 12px; }
+.video-card-featured .video-title { font-size: 13px; }
+.video-card-featured .creator-avatar { width: 34px; height: 34px; }
+@media (max-width: 760px) {
+  .mobile-menu-trigger { font-size: 24px; }
+  .mobile-bottom-nav { height: 72px; padding: 7px 7px env(safe-area-inset-bottom); border-top-color: #bfe7cf; background: rgba(244, 253, 247, .98); }
+  .mobile-bottom-nav > a { min-width: 68px; min-height: 57px; justify-content: center; gap: 4px; color: #168c63; font-size: 10px; font-weight: 700; }
+  .mobile-bottom-nav > a > span:first-child { display: grid; place-items: center; width: 34px; height: 34px; color: #168c63; font-size: 24px; line-height: 1; }
+  .mobile-bottom-nav > a.mobile-nav-active { color: #075d42; }
+  .mobile-bottom-nav > a.mobile-nav-active > span:first-child { color: #075d42; }
+  .mobile-bottom-nav > a:has(.mobile-upload) > span:first-child { width: 40px; height: 40px; border-radius: 13px; color: #fff; background: #168c63; font-size: 27px; box-shadow: 0 5px 15px #168c6340; }
+  .account-login-toggle { min-width: 34px; width: 34px; height: 34px; padding: 3px; border: 1px solid #78c89d; }
+  .account-login-label, .account-login-toggle .chevron { display: none; }
+  .profile-menu-icon { font-size: 17px; }
+  .notification-bell-icon { width: 20px; height: 20px; }
+  .notification-count { top: -6px; right: -6px; }
+  .video-card-featured .video-thumb,
+  .feed-section .video-card-featured .video-thumb { aspect-ratio: 16 / 9; }
+}
