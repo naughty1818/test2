@@ -170,7 +170,7 @@
   }
   function linkButton(label, path, cls = 'primary-cta') { return $('a', { href: path, 'data-route': '', class: cls, text: label }); }
   function setPage(children) { app.replaceChildren(...children); app.focus({ preventScroll: true }); }
-  function loadingPage(message = 'লোড হচ্ছে…') { setPage([$ ('div', { class: 'empty-state' }, [$('span', { class: 'empty-state-icon', text: '…' }), $('h3', { text: message })])]); }
+  function loadingPage(message = 'লোড হচ্ছে…') { setPage([$ ('div', { class: 'atharo-page-loader' }, [$('img', { src: '/assets/atharo-favicon.png?v=atharo-icon-2', alt: 'Atharo' }), $('span', { text: message })])]); }
   function closeMobile() { sidebar.classList.remove('sidebar-open'); sidebar.inert=true; sidebar.setAttribute('aria-hidden','true'); mobileToggle.setAttribute('aria-expanded', 'false'); mobileToggle.setAttribute('aria-label','মেনু খুলুন'); }
   function closeAccountMenu() { document.querySelectorAll('.account-menu.open').forEach(menu => { menu.classList.remove('open'); const toggle = menu.previousElementSibling; if (toggle) toggle.setAttribute('aria-expanded', 'false'); }); }
   function leaveRealtimeRooms() {
@@ -564,43 +564,51 @@
       const stage = $('div', { class: 'player-stage player-stage-has-video' });
       const player = $('video', { class: 'player-media', autoplay: '', preload: 'metadata', playsinline: '', 'aria-label': text(video.title, 'ভিডিও প্লেয়ার') }); player.src = text(video.url, ''); if(video.thumbnailUrl)player.poster=video.thumbnailUrl;
       const playerStatus=$('div',{class:'player-status','aria-live':'polite',text:'ভিডিও লোড হচ্ছে…'}),retryPlayback=button('পুনরায় চেষ্টা','outline-cta',()=>{retryPlayback.hidden=true;playerStatus.textContent='ভিডিও আবার লোড হচ্ছে…';playerStatus.hidden=false;player.load();});retryPlayback.hidden=true;
+      const playerLoader=$('div',{class:'atharo-player-loader',hidden:true},[$('img',{src:'/assets/atharo-favicon.png?v=atharo-icon-2',alt:'Atharo'}),$('span',{text:'লোড হচ্ছে…'})]);
+      const actionFeedback=$('div',{class:'player-action-feedback','aria-live':'polite',hidden:true});
+      const showAction=message=>{actionFeedback.textContent=message;actionFeedback.hidden=false;clearTimeout(showAction.timer);showAction.timer=setTimeout(()=>{actionFeedback.hidden=true;},850);};
       const playButton=button('▶','player-control-button player-play-button');playButton.setAttribute('aria-label','ভিডিও চালাও');
       const progress=$('input',{type:'range',class:'player-progress',min:'0',max:'100',value:'0',step:'0.1','aria-label':'ভিডিওর অগ্রগতি'});
       const timeLabel=$('span',{class:'player-time',text:'0:00 / 0:00'});
-      const volumeButton=button('🔊','player-control-button player-volume-button');volumeButton.setAttribute('aria-label','শব্দ বন্ধ করো');
+      const volumeButton=button('◖','player-control-button player-volume-button');volumeButton.setAttribute('aria-label','শব্দ বন্ধ করো');
       const volume=$('input',{type:'range',class:'player-volume-range',min:'0',max:'1',step:'0.05',value:'1','aria-label':'শব্দের মাত্রা'});
       const captions=$('select',{class:'player-caption-select','aria-label':'Subtitle নির্বাচন'});captions.append($('option',{value:'',text:'CC'}));
+      const castButton=button('◫','player-control-button player-cast-button');castButton.setAttribute('aria-label','Cast করো');
+      const autoNextButton=button('↻','player-control-button player-autonext-button');autoNextButton.setAttribute('aria-label','Auto next চালু বা বন্ধ করো');
+      const autoNextKey='atharo:auto-next',autoNext=localStorage.getItem(autoNextKey)!=='off';autoNextButton.setAttribute('aria-pressed',String(autoNext));autoNextButton.classList.toggle('player-toggle-active',autoNext);
       const speed=$('select',{class:'player-speed','aria-label':'Playback speed'});[['0.75','0.75×'],['1','1×'],['1.25','1.25×'],['1.5','1.5×'],['2','2×']].forEach(([value,label])=>speed.append($('option',{value,text:label})));
       const savedSpeed=Number(localStorage.getItem('atharo:video-speed'))||1;speed.value=String([0.75,1,1.25,1.5,2].includes(savedSpeed)?savedSpeed:1);
-      const settingsButton=button('⋮','player-control-button player-settings-button');settingsButton.setAttribute('aria-label','ভিডিও সেটিংস');
+      const settingsButton=button('⚙','player-control-button player-settings-button');settingsButton.setAttribute('aria-label','ভিডিও সেটিংস');
       const fullscreenButton=button('⛶','player-control-button player-fullscreen-button');fullscreenButton.setAttribute('aria-label','পূর্ণ পর্দা');
-      const pipButton=button('▣','player-control-button player-pip-button');pipButton.setAttribute('aria-label','Picture-in-Picture');pipButton.hidden=typeof document.pictureInPictureEnabled==='boolean'&&!document.pictureInPictureEnabled;
       const settingsMenu=$('div',{class:'player-settings-menu',hidden:true},[$('span',{text:'Playback speed'}),speed]);
-      const playerControls=$('div',{class:'player-controls'},[playButton,progress,timeLabel,volumeButton,volume,captions,pipButton,fullscreenButton,settingsButton]);
+      const playerTopControls=$('div',{class:'player-top-controls'},[captions,castButton,autoNextButton,settingsButton]);
+      const playerControls=$('div',{class:'player-controls'},[playButton,progress,timeLabel,volumeButton,volume,fullscreenButton]);
       const positionKey='atharo:video-position:'+id, savedPosition=Number(localStorage.getItem(positionKey))||0;
       const setPlaying=playing=>{playButton.textContent=playing?'❚❚':'▶';playButton.setAttribute('aria-label',playing?'ভিডিও থামাও':'ভিডিও চালাও');};
-      const syncProgress=()=>{const duration=Number(player.duration)||0;progress.max=duration||100;progress.value=Number(player.currentTime)||0;timeLabel.textContent=formatDuration(player.currentTime)+' / '+formatDuration(duration);if(player.currentTime>0)try{localStorage.setItem(positionKey,String(Math.floor(player.currentTime)));}catch(_){}};
-      const toggleFullscreen=()=>{if(document.fullscreenElement)document.exitFullscreen?.();else stage.requestFullscreen?.();};
+      const syncProgress=()=>{const duration=Number(player.duration)||0;progress.max=duration||100;progress.value=Number(player.currentTime)||0;timeLabel.textContent=formatDuration(player.currentTime)+' / '+formatDuration(duration);if(player.currentTime>0)try{localStorage.setItem(positionKey,String(Math.floor(player.currentTime)));}catch(_){} };
+      const toggleFullscreen=async()=>{if(document.fullscreenElement){document.exitFullscreen?.();try{await screen.orientation?.unlock?.();}catch(_){} }else{try{await stage.requestFullscreen?.();await screen.orientation?.lock?.('landscape');}catch(_){stage.requestFullscreen?.();}}};
+      document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement){try{screen.orientation?.unlock?.();}catch(_){}}},{once:false});
       playButton.addEventListener('click',()=>{if(player.paused)player.play().catch(()=>{});else player.pause();});
       let clickTimer=null;
       player.addEventListener('click',()=>{clearTimeout(clickTimer);clickTimer=setTimeout(()=>{if(player.paused)player.play().catch(()=>{});else player.pause();},180);});
-      player.addEventListener('dblclick',event=>{clearTimeout(clickTimer);const rect=player.getBoundingClientRect();player.currentTime=Math.max(0,Math.min(Number(player.duration)||0,player.currentTime+(event.clientX-rect.left<rect.width/2?-10:10)));syncProgress();});
-      player.addEventListener('timeupdate',syncProgress);player.addEventListener('loadedmetadata',()=>{playerStatus.hidden=true;if(savedPosition>2&&savedPosition<player.duration-5)player.currentTime=savedPosition;player.playbackRate=Number(speed.value)||1;syncProgress();player.play().catch(()=>{});});
+      player.addEventListener('dblclick',event=>{clearTimeout(clickTimer);const rect=player.getBoundingClientRect(),delta=event.clientX-rect.left<rect.width/2?-5:5;player.currentTime=Math.max(0,Math.min(Number(player.duration)||0,player.currentTime+delta));showAction((delta>0?'+5':'-5')+' seconds');syncProgress();});
+      player.addEventListener('timeupdate',syncProgress);player.addEventListener('loadstart',()=>{playerLoader.hidden=false;playerStatus.hidden=false;});player.addEventListener('loadedmetadata',()=>{playerLoader.hidden=true;playerStatus.hidden=true;if(savedPosition>2&&savedPosition<player.duration-5)player.currentTime=savedPosition;player.playbackRate=Number(speed.value)||1;syncProgress();player.play().catch(()=>{});});
       player.addEventListener('ended',()=>{try{localStorage.removeItem(positionKey);}catch(_){}});
       progress.addEventListener('input',()=>{player.currentTime=Number(progress.value)||0;syncProgress();});
       volume.addEventListener('input',()=>{player.volume=Number(volume.value);player.muted=player.volume===0;volumeButton.textContent=player.muted?'🔇':'🔊';});
-      volumeButton.addEventListener('click',()=>{player.muted=!player.muted;volumeButton.textContent=player.muted?'🔇':'🔊';});
+      volumeButton.addEventListener('click',()=>{player.muted=!player.muted;volumeButton.textContent=player.muted?'◌':'◖';showAction(player.muted?'Muted':'Sound on');});
+      castButton.addEventListener('click',()=>{if(player.remote?.prompt){player.remote.prompt().catch(()=>notify('এই browser-এ Cast চালু করা যায়নি।','error'));}else notify('এই browser-এ Cast সমর্থন নেই।','error');});
+      autoNextButton.addEventListener('click',()=>{const next=autoNextButton.getAttribute('aria-pressed')!=='true';autoNextButton.setAttribute('aria-pressed',String(next));autoNextButton.classList.toggle('player-toggle-active',next);try{localStorage.setItem(autoNextKey,next?'on':'off');}catch(_){}showAction(next?'Auto next on':'Auto next off');});
       speed.addEventListener('change',()=>{player.playbackRate=Number(speed.value)||1;try{localStorage.setItem('atharo:video-speed',speed.value);}catch(_){}});
-      settingsButton.addEventListener('click',()=>{settingsMenu.hidden=!settingsMenu.hidden;});
+      settingsButton.addEventListener('click',()=>{settingsMenu.hidden=!settingsMenu.hidden;showAction('Settings');});
       fullscreenButton.addEventListener('click',toggleFullscreen);
-      pipButton.addEventListener('click',()=>{if(document.pictureInPictureElement)document.exitPictureInPicture?.();else player.requestPictureInPicture?.().catch(()=>{});});
-      const playerKeydown=event=>{const tag=event.target?.tagName?.toLowerCase();if(['input','select','textarea'].includes(tag))return;const key=event.key.toLowerCase();if(![' ','arrowleft','arrowright','arrowup','arrowdown','f','m','c','i'].includes(key))return;event.preventDefault();if(key===' ')return player.paused?player.play().catch(()=>{}):player.pause();if(key==='arrowleft')player.currentTime=Math.max(0,player.currentTime-5);if(key==='arrowright')player.currentTime=Math.min(player.duration||Infinity,player.currentTime+5);if(key==='arrowup')player.volume=Math.min(1,player.volume+0.1);if(key==='arrowdown')player.volume=Math.max(0,player.volume-0.1);if(key==='arrowup'||key==='arrowdown'){volume.value=String(player.volume);player.muted=player.volume===0;volumeButton.textContent=player.muted?'🔇':'🔊';}if(key==='f')toggleFullscreen();if(key==='m')volumeButton.click();if(key==='c'){captions.selectedIndex=captions.selectedIndex>0?0:Math.min(1,captions.options.length-1);captions.dispatchEvent(new Event('change'));}if(key==='i')pipButton.click();syncProgress();};
+      const playerKeydown=event=>{const tag=event.target?.tagName?.toLowerCase();if(['input','select','textarea'].includes(tag))return;const key=event.key.toLowerCase();if(![' ','arrowleft','arrowright','arrowup','arrowdown','f','m','c','i'].includes(key))return;event.preventDefault();if(key===' ')return player.paused?player.play().catch(()=>{}):player.pause();if(key==='arrowleft'){player.currentTime=Math.max(0,player.currentTime-5);showAction('-5 seconds');}if(key==='arrowright'){player.currentTime=Math.min(player.duration||Infinity,player.currentTime+5);showAction('+5 seconds');}if(key==='arrowup')player.volume=Math.min(1,player.volume+0.1);if(key==='arrowdown')player.volume=Math.max(0,player.volume-0.1);if(key==='arrowup'||key==='arrowdown'){volume.value=String(player.volume);player.muted=player.volume===0;volumeButton.textContent=player.muted?'🔇':'🔊';}if(key==='f')toggleFullscreen();if(key==='m')volumeButton.click();if(key==='c'){captions.selectedIndex=captions.selectedIndex>0?0:Math.min(1,captions.options.length-1);captions.dispatchEvent(new Event('change'));}syncProgress();};
       window.__atharoPlayerKeydown?.();document.addEventListener('keydown',playerKeydown);window.__atharoPlayerKeydown=()=>document.removeEventListener('keydown',playerKeydown);
-      player.addEventListener('waiting',()=>{playerStatus.textContent='ভিডিও বাফার হচ্ছে… নেটওয়ার্ক ধীর হলে কিছুক্ষণ অপেক্ষা করো।';playerStatus.hidden=false;});
-      player.addEventListener('stalled',()=>{playerStatus.textContent='ভিডিও ডেটা আসতে দেরি হচ্ছে।';playerStatus.hidden=false;});
-      player.addEventListener('playing',()=>{playerStatus.hidden=true;retryPlayback.hidden=true;setPlaying(true);});
-      player.addEventListener('pause',()=>setPlaying(false));
-      player.addEventListener('error',()=>{playerStatus.textContent='ভিডিও লোড হয়নি। সংযোগ পরীক্ষা করে আবার চেষ্টা করো।';playerStatus.hidden=false;retryPlayback.hidden=false;});
+      player.addEventListener('waiting',()=>{playerLoader.hidden=false;playerStatus.textContent='ভিডিও বাফার হচ্ছে… নেটওয়ার্ক ধীর হলে কিছুক্ষণ অপেক্ষা করো।';playerStatus.hidden=false;showAction('Buffering');});
+      player.addEventListener('stalled',()=>{playerLoader.hidden=false;playerStatus.textContent='ভিডিও ডেটা আসতে দেরি হচ্ছে।';playerStatus.hidden=false;showAction('Loading');});
+      player.addEventListener('playing',()=>{playerLoader.hidden=true;playerStatus.hidden=true;retryPlayback.hidden=true;setPlaying(true);});
+      player.addEventListener('pause',()=>{setPlaying(false);showAction('❚❚ Paused');});
+      player.addEventListener('error',()=>{playerLoader.hidden=true;playerStatus.textContent='ভিডিও লোড হয়নি। সংযোগ পরীক্ষা করে আবার চেষ্টা করো।';playerStatus.hidden=false;retryPlayback.hidden=false;showAction('Playback error');});
       stage.addEventListener('mousemove',()=>{stage.classList.add('player-controls-visible');clearTimeout(stage._controlsTimer);stage._controlsTimer=setTimeout(()=>stage.classList.remove('player-controls-visible'),2500);});
       stage.addEventListener('mouseleave',()=>stage.classList.remove('player-controls-visible'));
       const lShapeAd = $('div', { class: 'l-shape-ad', hidden: true });
@@ -614,8 +622,8 @@
       const lShapeBottomImageLink = $('a', { class: 'l-shape-bottom-image-link', target:'_blank', rel:'noopener noreferrer' }, [lShapeBottomImage]);
       lShapeBody.append(lShapeLandingUrl,lShapeDetails,lShapeBottomImageLink);
       lShapeAd.append(lShapeRightLink,lShapeBody,lShapeClose);
-      stage.append(player,playerStatus,retryPlayback,playerControls,settingsMenu,lShapeAd);if(player.readyState>=1)playerStatus.hidden=true;
-      let lAdShown = false, lAdTimer = null, lAdDismissTimer = null, lShapeLayout = null;
+      stage.append(player,playerLoader,actionFeedback,playerStatus,retryPlayback,playerTopControls,playerControls,settingsMenu,lShapeAd);if(player.readyState>=1)playerStatus.hidden=true;
+      let lAdShown = false, lAdTimer = null, lAdDismissTimer = null, lShapeLayout = null, nextVideoId = null;
       const fitLShapeToStage = () => {
         if(!lShapeLayout)return;
         const mobile=window.matchMedia('(max-width:760px)').matches,device=mobile?'mobile':'desktop',width=stage.clientWidth,height=stage.clientHeight;
@@ -657,7 +665,7 @@
       player.addEventListener('playing', scheduleLAd); player.addEventListener('pause', () => { if (lAdTimer) { clearTimeout(lAdTimer); lAdTimer = null; } });
       const postrollSlot = $('div', { class: 'postroll-ad-slot' });
       let postrollLoaded = false;
-      player.addEventListener('ended', () => { if (postrollLoaded) return; postrollLoaded = true; jsonFetch('/api/sponsor/serve?placement=postroll').then(result => { if (token === state.routeToken && result.ad) postrollSlot.append(sponsoredCard(result.ad)); }).catch(() => {}); });
+      player.addEventListener('ended', () => { if(autoNextButton.getAttribute('aria-pressed')==='true'&&nextVideoId){showAction('Next video');setTimeout(()=>navigate('/watch/'+encodeURIComponent(nextVideoId)),450);} if (postrollLoaded) return; postrollLoaded = true; jsonFetch('/api/sponsor/serve?placement=postroll').then(result => { if (token === state.routeToken && result.ad) postrollSlot.append(sponsoredCard(result.ad)); }).catch(() => {}); });
       const title = $('h1', { class: 'watch-title', text: text(video.title, 'শিরোনামহীন ভিডিও') });
       const subtitle = $('div', { class: 'watch-subtitle' }, [$('span', { text: number(data.viewsCount) + ' ভিউ' }), $('span', { class: 'meta-dot' }), $('span', { text: fmtDate(video.created) }), $('span', { class: 'watch-category', text: categoryLabel(video.category) })]);
       const ownerName = text(video.ownerName, 'Atharo নির্মাতা'); const ownerHandle = text(video.ownerHandle, '');
@@ -714,9 +722,9 @@
       }));
       const description = $('details', { class: 'video-description' }, [$('summary', { text: 'ভিডিওর বিবরণ  ·  ' + fmtDate(video.created) }), $('p', { text: text(video.description, 'এই ভিডিওটির কোনো বিবরণ নেই।') }), $('span', { text: 'Atharo · সরাসরি Cloudflare R2 playback' })]);
       const chaptersPanel=$('section',{class:'chapters-panel',hidden:true}),transcript=$('details',{class:'transcript-details',hidden:true});transcript.append($('summary',{text:'ভিডিও transcript দেখো'}),$('pre',{class:'transcript-copy',text:'Transcript লোড হচ্ছে…'}));
-      const discussion = $('section', { class: 'discussion' });
+      const discussion = $('section', { class: 'discussion comments-collapsed' });
       const commentsHeadingCount = $('span', { class: 'comment-count', text: video.commentsEnabled === false ? 'মন্তব্য বন্ধ' : number(data.commentsCount) + 'টি মন্তব্য' });
-      discussion.append($('div', { class: 'comments-heading' }, [$('h2', { text: 'মন্তব্য ও আলোচনা' }), commentsHeadingCount]));
+      const commentsHeading=$('div', { class: 'comments-heading', role: 'button', tabindex: '0', 'aria-expanded': 'false' }, [$('h2', { text: 'মন্তব্য ও আলোচনা' }), commentsHeadingCount, $('span', { class: 'comments-toggle-hint', text: 'চাপলে সব মন্তব্য দেখো' })]);discussion.append(commentsHeading);
       const replyNotice = $('div', { class: 'reply-notice', hidden: true });
       let replyTo = null;
       const commentInput = $('textarea', { maxlength: '2000', rows: '2', placeholder: state.session.user ? 'মন্তব্য যোগ করো…' : 'মন্তব্য করতে লগইন করো', disabled: !state.session.user });
@@ -743,7 +751,7 @@
         try { const result = await jsonFetch('/api/videos/' + encodeURIComponent(id) + '/comments', { method: 'POST', body: { body, parentId: replyTo } }); addComment(result.comment); commentInput.value = ''; replyTo = null; replyNotice.hidden = true; commentInput.placeholder = 'মন্তব্য যোগ করো…'; updateStats({ commentsCount: result.commentsCount }); }
         catch (error) { notify(error.message, 'error'); } finally { commentSubmit.disabled = !state.session.user; }
       });
-      discussion.append(video.commentsEnabled === false ? $('div', { class: 'console-notice', text: 'এই ভিডিওতে নির্মাতা মন্তব্য বন্ধ রেখেছেন।' }) : commentForm, commentsList);
+      let commentsLoaded=false;const loadComments=async()=>{if(commentsLoaded||video.commentsEnabled===false)return;commentsLoaded=true;try{const comments=await jsonFetch('/api/videos/'+encodeURIComponent(id)+'/comments?limit=50');if(token===state.routeToken)(comments.comments||[]).forEach(addComment);}catch(error){if(token===state.routeToken)commentsList.append($('p',{class:'inline-error',text:'মন্তব্য লোড করা যায়নি: '+error.message}));}};const expandComments=()=>{discussion.classList.remove('comments-collapsed');commentsHeading.setAttribute('aria-expanded','true');loadComments();};commentsHeading.addEventListener('click',expandComments);commentsHeading.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();expandComments();}});discussion.append(video.commentsEnabled === false ? $('div', { class: 'console-notice', text: 'এই ভিডিওতে নির্মাতা মন্তব্য বন্ধ রেখেছেন।' }) : commentForm, commentsList);
       if(ownerHandle&&(!state.session.profile||state.session.profile.handle?.toLowerCase()!==ownerHandle.toLowerCase()))creator.append(reportButton('channel',ownerHandle));
       creator.append(actions); main.append(stage, postrollSlot, title, subtitle, creator, playlistPicker, description, chaptersPanel, transcript, discussion);
       const aside = $('aside', { class: 'recommendations' }, [$('div', { class: 'recommendations-title' }, [$('h2', { text: 'এরপর দেখো' }), $('span', { text: 'এই বিভাগের আরও ভিডিও' })])]);
@@ -769,13 +777,11 @@
         const result = await jsonFetch('/api/videos/' + encodeURIComponent(id) + '/views', { method: 'POST', body: {} });
         if (token === state.routeToken) updateStats(result);
       } catch (_) {}
-      try {
-        const comments = await jsonFetch('/api/videos/' + encodeURIComponent(id) + '/comments?limit=50');
-        if (token === state.routeToken) (comments.comments || []).forEach(addComment);
-      } catch (error) { if (token === state.routeToken) commentsList.append($('p', { class: 'inline-error', text: 'মন্তব্য লোড করা যায়নি: ' + error.message })); }
+      if (!window.matchMedia('(max-width:760px)').matches) await loadComments();
       try {
         const recs = await jsonFetch(queryUrl('', video.category || '', 0, 8)); if (token !== state.routeToken) return;
         const others = (recs.videos || []).filter(item => item.id !== id).slice(0, 6);
+        nextVideoId=others[0]?.id||null;
         if (others.length) others.forEach(item => aside.append(videoCard(item))); else aside.append(emptyState('আরও ভিডিও আসছে', 'নতুন ভিডিও প্রকাশ হলে এখানে দেখাবে।'));
       } catch (_) { aside.append(emptyState('এখনো সুপারিশ নেই', 'পরে আবার দেখে নিও।')); }
     } catch (error) { if (token === state.routeToken) setPage([emptyState('ভিডিওটি পাওয়া যায়নি', error.message, 'হোমে ফিরে যাও', '/')]); }
