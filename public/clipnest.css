@@ -661,9 +661,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .hero-caption,.hero-progress { z-index: 2; }
 #app:focus { outline: none; }
 
-@media (min-width: 761px) { .mobile-menu-trigger { display: none !important; } }
-
-
 /* Creator studio, administration, advertising and moderation console */
 .console-page { max-width: 1120px; margin: 0 auto; }
 .console-heading { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; margin: 4px 0 22px; }
