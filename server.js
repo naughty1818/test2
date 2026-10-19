@@ -341,6 +341,14 @@ async function objectHead(key) {
   try { return await s3.send(new HeadObjectCommand({ Bucket: R2_BUCKET, Key: key })); }
   catch (error) { if (error.name === 'NotFound' || error.name === 'NoSuchKey' || error.$metadata?.httpStatusCode === 404) return null; throw error; }
 }
+async function deleteStorageObjects(keys) {
+  const failures = [];
+  for (const key of [...new Set(keys.filter(Boolean))]) {
+    try { await s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: key })); }
+    catch (error) { failures.push({ key, error: error.message }); console.error('R2 delete failed:', key, error.message); }
+  }
+  return failures;
+}
 async function accessVideo(req, res, next) {
   try {
     req.auth = req.auth || await loadSession(req);
@@ -393,6 +401,47 @@ app.get('/auth/me', async (req, res, next) => {
   try {
     const auth = await loadSession(req);
     res.json(auth ? { user: sessionUser(auth.session), profile: publicProfile(auth.profile) } : { user: null, profile: null });
+  } catch (error) { next(error); }
+});
+app.delete('/api/me/creator', requireAuth, async (req, res, next) => {
+  try {
+    const sub = req.auth.session.sub;
+    const result = await withTransaction(async client => {
+      const profile = await client.query('SELECT sub,handle FROM profiles WHERE sub=$1 FOR UPDATE', [sub]);
+      if (!profile.rowCount) return null;
+      const media = await client.query('SELECT object_name,thumbnail_object_name FROM videos WHERE owner_sub=$1', [sub]);
+      const uploads = await client.query('SELECT object_name FROM upload_intents WHERE owner_sub=$1', [sub]);
+      await client.query('DELETE FROM videos WHERE owner_sub=$1', [sub]);
+      await client.query('DELETE FROM upload_intents WHERE owner_sub=$1', [sub]);
+      await client.query('DELETE FROM playlists WHERE owner_sub=$1', [sub]);
+      await client.query('DELETE FROM subscriptions WHERE channel_sub=$1 OR subscriber_sub=$1', [sub]);
+      await client.query('DELETE FROM channel_applications WHERE user_sub=$1', [sub]);
+      await client.query('DELETE FROM channel_verification_requests WHERE user_sub=$1', [sub]);
+      await client.query('DELETE FROM profiles WHERE sub=$1', [sub]);
+      return { handle: profile.rows[0].handle, keys: [...media.rows.flatMap(row => [row.object_name, row.thumbnail_object_name]), ...uploads.rows.map(row => row.object_name)] };
+    });
+    if (!result) return jsonError(res, 404, 'Creator channel not found.');
+    const storageFailures = await deleteStorageObjects(result.keys);
+    res.json({ ok: true, deleted: 'creator', storageFailures });
+  } catch (error) { next(error); }
+});
+app.delete('/api/me/account', requireAuth, async (req, res, next) => {
+  try {
+    const sub = req.auth.session.sub;
+    const result = await withTransaction(async client => {
+      const user = await client.query('SELECT google_sub FROM app_users WHERE google_sub=$1 FOR UPDATE', [sub]);
+      if (!user.rowCount) return null;
+      const media = await client.query('SELECT object_name,thumbnail_object_name FROM videos WHERE owner_sub=$1', [sub]);
+      const uploads = await client.query('SELECT object_name FROM upload_intents WHERE owner_sub=$1', [sub]);
+      await client.query('DELETE FROM videos WHERE owner_sub=$1', [sub]);
+      await client.query('DELETE FROM upload_intents WHERE owner_sub=$1', [sub]);
+      await client.query('DELETE FROM app_users WHERE google_sub=$1', [sub]);
+      return { keys: [...media.rows.flatMap(row => [row.object_name, row.thumbnail_object_name]), ...uploads.rows.map(row => row.object_name)] };
+    });
+    if (!result) return jsonError(res, 404, 'Account not found.');
+    const storageFailures = await deleteStorageObjects(result.keys);
+    clearCookie(res, req, 'vh_session');
+    res.json({ ok: true, deleted: 'account', storageFailures });
   } catch (error) { next(error); }
 });
 app.patch('/api/me/preferences', requireAuth, requireActive, async (req, res, next) => {

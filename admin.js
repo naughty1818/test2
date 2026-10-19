@@ -209,6 +209,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
   app.get('/api/sponsor/serve', async (req, res, next) => {
     try {
       const placement = String(req.query.placement || '');
+      const device = ['mobile','desktop'].includes(String(req.query.device || '')) ? String(req.query.device) : (/Mobile|Android|iPhone|iPad/i.test(req.get('user-agent') || '') ? 'mobile' : 'desktop');
       const channelHandle = req.query.handle ? String(req.query.handle).replace(/^@/,'').trim() : null;
       if (!['feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'].includes(placement)) return fail(res, 'Invalid ad placement.');
       if (placement === 'channel' && !channelHandle) return fail(res, 'Channel handle is required.');
@@ -220,7 +221,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       if (!settingsRow.ads_enabled || !settingsRow[settingKey]) return res.json({ ad: null, settings: responseSettings });
       // Caps count UTC-month impression events; ad_monthly_serves only smooths rotation.
       const row = await withTransaction(async client => {
-        const candidates = await client.query(`SELECT c.id,c.title,c.sponsor_name,c.placement,c.creative_url,c.destination_url,
+        const candidates = await client.query(`SELECT c.id,c.title,c.sponsor_name,c.placement,c.creative_url,c.desktop_creative_url,c.mobile_creative_url,c.destination_url,
             c.l_bottom_creative_url,c.l_bottom_destination_url,c.monthly_impression_cap,
             COALESCE(ms.served_count,0)::int AS monthly_served,
             COALESCE(mi.impression_count,0)::int AS monthly_impressions
@@ -253,7 +254,9 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
         title: row.title,
         sponsorName: row.sponsor_name,
         placement: row.placement,
-        creativeUrl: row.creative_url,
+        creativeUrl: device === 'mobile' ? (row.mobile_creative_url || row.creative_url) : (row.desktop_creative_url || row.creative_url),
+        desktopCreativeUrl: row.desktop_creative_url || row.creative_url,
+        mobileCreativeUrl: row.mobile_creative_url || row.creative_url,
         destinationUrl: row.destination_url,
         bottomCreativeUrl: row.l_bottom_creative_url || '',
         bottomDestinationUrl: row.l_bottom_destination_url || row.destination_url,
@@ -585,7 +588,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
     try {
       const q=clean(req.query.q,120),pattern='%'+q.replace(/[\\%_]/g,'\\$&'), status=['all','draft','active','paused'].includes(String(req.query.status||''))?String(req.query.status):'all';
       const page=Math.max(1,Number.parseInt(req.query.page||'1',10)||1),limit=Math.min(50,Math.max(10,Number.parseInt(req.query.limit||'20',10)||20)),offset=(page-1)*limit;
-      const result = await pool.query(`SELECT c.id,c.title,c.sponsor_name,c.placement,c.creative_url,c.destination_url,
+      const result = await pool.query(`SELECT c.id,c.title,c.sponsor_name,c.placement,c.creative_url,c.desktop_creative_url,c.mobile_creative_url,c.destination_url,
           c.l_bottom_creative_url,c.l_bottom_destination_url,c.monthly_impression_cap,
           COALESCE(ms.served_count,0)::bigint AS monthly_served,COALESCE(mi.impression_count,0)::bigint AS monthly_impressions,
           c.cpm_bdt,c.status,c.starts_at,c.ends_at,c.created_at,
@@ -602,14 +605,14 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
         WHERE ($1='all' OR c.status=$1) AND (c.title ILIKE $2 OR c.sponsor_name ILIKE $2)
         GROUP BY c.id,ms.served_count,mi.impression_count ORDER BY c.created_at DESC LIMIT $3 OFFSET $4`,[status,pattern,limit,offset]);
       const total=await pool.query(`SELECT COUNT(*)::bigint AS n FROM ad_campaigns c WHERE ($1='all' OR c.status=$1) AND (c.title ILIKE $2 OR c.sponsor_name ILIKE $2)`,[status,pattern]);
-      res.json({page,limit,total:Number(total.rows[0].n),pages:Math.ceil(Number(total.rows[0].n)/limit),campaigns: result.rows.map(r=>({id:r.id,title:r.title,sponsorName:r.sponsor_name,placement:r.placement,creativeUrl:r.creative_url,destinationUrl:r.destination_url,bottomCreativeUrl:r.l_bottom_creative_url,bottomDestinationUrl:r.l_bottom_destination_url,monthlyImpressionCap:r.monthly_impression_cap===null?null:Number(r.monthly_impression_cap),monthlyServed:Number(r.monthly_served||0),monthlyImpressions:Number(r.monthly_impressions||0),cpmBdt:Number(r.cpm_bdt),status:r.status,startsAt:r.starts_at,endsAt:r.ends_at,createdAt:r.created_at,impressions:Number(r.impressions),clicks:Number(r.clicks)})) });
+      res.json({page,limit,total:Number(total.rows[0].n),pages:Math.ceil(Number(total.rows[0].n)/limit),campaigns: result.rows.map(r=>({id:r.id,title:r.title,sponsorName:r.sponsor_name,placement:r.placement,creativeUrl:r.creative_url,desktopCreativeUrl:r.desktop_creative_url||r.creative_url,mobileCreativeUrl:r.mobile_creative_url||r.creative_url,destinationUrl:r.destination_url,bottomCreativeUrl:r.l_bottom_creative_url,bottomDestinationUrl:r.l_bottom_destination_url,monthlyImpressionCap:r.monthly_impression_cap===null?null:Number(r.monthly_impression_cap),monthlyServed:Number(r.monthly_served||0),monthlyImpressions:Number(r.monthly_impressions||0),cpmBdt:Number(r.cpm_bdt),status:r.status,startsAt:r.starts_at,endsAt:r.ends_at,createdAt:r.created_at,impressions:Number(r.impressions),clicks:Number(r.clicks)})) });
     } catch (error) { next(error); }
   });
 
   app.post('/api/admin/campaigns', adminAuth('admin'), async (req, res, next) => {
     try {
       const title = clean(req.body?.title,120), sponsor = clean(req.body?.sponsorName,120);
-      const placement = String(req.body?.placement || ''), creativeUrl = safeUrl(req.body?.creativeUrl), destinationUrl = safeUrl(req.body?.destinationUrl);
+      const placement = String(req.body?.placement || ''), desktopCreativeUrl = safeUrl(req.body?.desktopCreativeUrl || req.body?.creativeUrl), mobileCreativeUrl = safeUrl(req.body?.mobileCreativeUrl || req.body?.desktopCreativeUrl || req.body?.creativeUrl), creativeUrl = desktopCreativeUrl, destinationUrl = safeUrl(req.body?.destinationUrl);
       const bottomCreativeUrl = placement === 'l_banner' ? safeUrl(req.body?.bottomCreativeUrl) : null;
       const bottomDestinationUrl = placement === 'l_banner' ? safeUrl(req.body?.bottomDestinationUrl) : null;
       let monthlyImpressionCap;
@@ -618,12 +621,12 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const cpm = Number(req.body?.cpmBdt);
       const startsAt = req.body?.startsAt ? new Date(req.body.startsAt) : null;
       const endsAt = req.body?.endsAt ? new Date(req.body.endsAt) : null;
-      if (!title || !sponsor || !['feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'].includes(placement) || !creativeUrl || !destinationUrl || (placement === 'l_banner' && (!bottomCreativeUrl || !bottomDestinationUrl)) || !Number.isFinite(cpm) || cpm < 0 || cpm > 1000000) return fail(res, 'Campaign-এর title, sponsor, HTTPS creative/landing URL, placement ও valid CPM দিন। L-shape-এর জন্য নিচের image ও landing URL-ও দিন।');
+      if (!title || !sponsor || !['feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'].includes(placement) || !desktopCreativeUrl || !mobileCreativeUrl || !destinationUrl || (placement === 'l_banner' && (!bottomCreativeUrl || !bottomDestinationUrl)) || !Number.isFinite(cpm) || cpm < 0 || cpm > 1000000) return fail(res, 'Campaign-এর title, sponsor, PC/phone HTTPS creative, landing URL, placement ও valid CPM দিন। L-shape-এর জন্য নিচের image ও landing URL-ও দিন।');
       if ((startsAt && Number.isNaN(startsAt.getTime())) || (endsAt && Number.isNaN(endsAt.getTime())) || (startsAt && endsAt && endsAt <= startsAt)) return fail(res, 'Campaign date range ঠিক নয়।');
       const id = crypto.randomUUID();
       await withTransaction(async client => {
-        await client.query(`INSERT INTO ad_campaigns (id,title,sponsor_name,placement,creative_url,destination_url,l_bottom_creative_url,l_bottom_destination_url,monthly_impression_cap,cpm_bdt,status,starts_at,ends_at,created_by_email)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'paused',$11,$12,$13)`, [id,title,sponsor,placement,creativeUrl,destinationUrl,bottomCreativeUrl,bottomDestinationUrl,monthlyImpressionCap,cpm,startsAt,endsAt,req.admin.email]);
+        await client.query(`INSERT INTO ad_campaigns (id,title,sponsor_name,placement,creative_url,desktop_creative_url,mobile_creative_url,destination_url,l_bottom_creative_url,l_bottom_destination_url,monthly_impression_cap,cpm_bdt,status,starts_at,ends_at,created_by_email)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'paused',$13,$14,$15)`, [id,title,sponsor,placement,desktopCreativeUrl,desktopCreativeUrl,mobileCreativeUrl,destinationUrl,bottomCreativeUrl,bottomDestinationUrl,monthlyImpressionCap,cpm,startsAt,endsAt,req.admin.email]);
         await writeAudit(client,req.admin,'create_campaign','ad_campaign',id,'Campaign created paused.',{title,sponsor,placement,cpmBdt:cpm,monthlyImpressionCap});
       });
       res.status(201).json({ok:true,id,status:'paused'});
@@ -633,15 +636,15 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
   app.put('/api/admin/campaigns/:id', adminAuth('admin'), async (req,res,next)=>{
     try{
       if(!validUuid(req.params.id))return fail(res,'Invalid campaign id.');
-      const title=clean(req.body?.title,120),sponsor=clean(req.body?.sponsorName,120),placement=String(req.body?.placement||''),creativeUrl=safeUrl(req.body?.creativeUrl),destinationUrl=safeUrl(req.body?.destinationUrl),bottomCreativeUrl=placement==='l_banner'?safeUrl(req.body?.bottomCreativeUrl):null,bottomDestinationUrl=placement==='l_banner'?safeUrl(req.body?.bottomDestinationUrl):null,cpm=Number(req.body?.cpmBdt),startsAt=req.body?.startsAt?new Date(req.body.startsAt):null,endsAt=req.body?.endsAt?new Date(req.body.endsAt):null;
+      const title=clean(req.body?.title,120),sponsor=clean(req.body?.sponsorName,120),placement=String(req.body?.placement||''),desktopCreativeUrl=safeUrl(req.body?.desktopCreativeUrl||req.body?.creativeUrl),mobileCreativeUrl=safeUrl(req.body?.mobileCreativeUrl||req.body?.desktopCreativeUrl||req.body?.creativeUrl),creativeUrl=desktopCreativeUrl,destinationUrl=safeUrl(req.body?.destinationUrl),bottomCreativeUrl=placement==='l_banner'?safeUrl(req.body?.bottomCreativeUrl):null,bottomDestinationUrl=placement==='l_banner'?safeUrl(req.body?.bottomDestinationUrl):null,cpm=Number(req.body?.cpmBdt),startsAt=req.body?.startsAt?new Date(req.body.startsAt):null,endsAt=req.body?.endsAt?new Date(req.body.endsAt):null;
       const monthlyCapProvided = Object.prototype.hasOwnProperty.call(req.body || {},'monthlyImpressionCap');
       let monthlyImpressionCap = null;
       try { if(monthlyCapProvided)monthlyImpressionCap=normalizeMonthlyImpressionCap(req.body.monthlyImpressionCap); }
       catch(error) { return fail(res,error.message); }
-      if(!title||!sponsor||!['feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'].includes(placement)||!creativeUrl||!destinationUrl||(placement==='l_banner'&&(!bottomCreativeUrl||!bottomDestinationUrl))||!Number.isFinite(cpm)||cpm<0||cpm>1000000)return fail(res,'Campaign fields এবং HTTPS URLs সঠিকভাবে দিন। L-shape-এর নিচের image ও landing URL-ও দিন।');
+      if(!title||!sponsor||!['feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'].includes(placement)||!desktopCreativeUrl||!mobileCreativeUrl||!destinationUrl||(placement==='l_banner'&&(!bottomCreativeUrl||!bottomDestinationUrl))||!Number.isFinite(cpm)||cpm<0||cpm>1000000)return fail(res,'Campaign fields, PC/phone HTTPS creative URLs সঠিকভাবে দিন। L-shape-এর নিচের image ও landing URL-ও দিন।');
       if((startsAt&&Number.isNaN(startsAt.getTime()))||(endsAt&&Number.isNaN(endsAt.getTime()))||(startsAt&&endsAt&&endsAt<=startsAt))return fail(res,'Campaign date range ঠিক নয়।');
       const result=await withTransaction(async client=>{
-        const changed=await client.query(`UPDATE ad_campaigns SET title=$2,sponsor_name=$3,placement=$4,creative_url=$5,destination_url=$6,l_bottom_creative_url=$7,l_bottom_destination_url=$8,monthly_impression_cap=CASE WHEN $9 THEN $10 ELSE monthly_impression_cap END,cpm_bdt=$11,starts_at=$12,ends_at=$13,updated_at=NOW() WHERE id=$1 RETURNING id`,[req.params.id,title,sponsor,placement,creativeUrl,destinationUrl,bottomCreativeUrl,bottomDestinationUrl,monthlyCapProvided,monthlyImpressionCap,cpm,startsAt,endsAt]);
+        const changed=await client.query(`UPDATE ad_campaigns SET title=$2,sponsor_name=$3,placement=$4,creative_url=$5,desktop_creative_url=$6,mobile_creative_url=$7,destination_url=$8,l_bottom_creative_url=$9,l_bottom_destination_url=$10,monthly_impression_cap=CASE WHEN $11 THEN $12 ELSE monthly_impression_cap END,cpm_bdt=$13,starts_at=$14,ends_at=$15,updated_at=NOW() WHERE id=$1 RETURNING id`,[req.params.id,title,sponsor,placement,desktopCreativeUrl,desktopCreativeUrl,mobileCreativeUrl,destinationUrl,bottomCreativeUrl,bottomDestinationUrl,monthlyCapProvided,monthlyImpressionCap,cpm,startsAt,endsAt]);
         if(!changed.rowCount)return false;
         await writeAudit(client,req.admin,'edit_campaign','ad_campaign',req.params.id,'Campaign details updated.',{title,sponsor,placement,cpmBdt:cpm,monthlyImpressionCap:monthlyCapProvided?monthlyImpressionCap:undefined});
         return true;

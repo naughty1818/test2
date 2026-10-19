@@ -230,6 +230,16 @@
     menu.append($('label',{class:'account-language-control'},[$('span',{text:'ভিডিও preference · Viewer type'}),viewerTypeControl]));
     (state.session.profile ? [['আমার চ্যানেল', '/channel/me'], ['Creator Studio', '/studio'], ['সাবস্ক্রিপশন', '/subscriptions'], ['প্লেলিস্ট', '/playlists'], ['ভিডিও আপলোড', '/upload']] : [['চ্যানেল তৈরি করুন', '/studio'], ['ভিডিও দেখুন', '/'], ['প্লেলিস্ট', '/playlists']]).forEach(([label, href]) => menu.append($('a', href === '/studio' ? { href, target: '_blank', rel: 'noopener noreferrer', text: label } : { href, 'data-route': '', text: label })));
     if (state.admin?.role) menu.append($('a', { href: '/admin', target: '_blank', rel: 'noopener noreferrer', text: 'Admin control panel' }));
+    if (state.session.profile) menu.append($('button', { type: 'button', class: 'logout-item danger-action', text: 'Creator account permanently delete', onClick: async () => {
+      if (!window.confirm('তোমার creator channel, সব video, upload data ও creator playlists স্থায়ীভাবে মুছে যাবে। চালিয়ে যাবেন?')) return;
+      try { await jsonFetch('/api/me/creator', { method: 'DELETE' }); state.session.profile = null; renderAccount(); notify('Creator account স্থায়ীভাবে মুছে ফেলা হয়েছে।'); safeRenderRoute(); }
+      catch (error) { notify(error.message, 'error'); }
+    } }));
+    menu.append($('button', { type: 'button', class: 'logout-item danger-action', text: 'User account permanently delete', onClick: async () => {
+      if (!window.confirm('তোমার সম্পূর্ণ user account, channel, video, subscription ও history স্থায়ীভাবে মুছে যাবে। এই কাজ undo করা যাবে না।')) return;
+      try { await jsonFetch('/api/me/account', { method: 'DELETE' }); state.session = { user: null, profile: null }; renderAccount(); notify('User account স্থায়ীভাবে মুছে ফেলা হয়েছে।'); safeRenderRoute(); }
+      catch (error) { notify(error.message, 'error'); }
+    } }));
     menu.append($('button', { type: 'button', class: 'logout-item', text: 'লগআউট', onClick: async () => {
       try { await jsonFetch('/auth/logout', { method: 'POST', body: {} }); state.session = { user: null, profile: null }; renderAccount(); notify('লগআউট হয়েছে।'); safeRenderRoute(); }
       catch (error) { notify(error.message, 'error'); }

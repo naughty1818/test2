@@ -252,6 +252,8 @@ CREATE TABLE IF NOT EXISTS ad_campaigns (
   sponsor_name TEXT NOT NULL CHECK (char_length(sponsor_name) BETWEEN 1 AND 120),
   placement TEXT NOT NULL CHECK (placement IN ('feed','watch_sidebar','channel','sticky_banner','postroll','l_banner')),
   creative_url TEXT NOT NULL,
+  desktop_creative_url TEXT,
+  mobile_creative_url TEXT,
   destination_url TEXT NOT NULL,
   l_bottom_creative_url TEXT,
   l_bottom_destination_url TEXT,
@@ -267,7 +269,11 @@ CREATE TABLE IF NOT EXISTS ad_campaigns (
 );
 ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS l_bottom_creative_url TEXT;
 ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS l_bottom_destination_url TEXT;
+ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS desktop_creative_url TEXT;
+ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS mobile_creative_url TEXT;
 ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS monthly_impression_cap INTEGER;
+UPDATE ad_campaigns SET desktop_creative_url=COALESCE(desktop_creative_url,creative_url),mobile_creative_url=COALESCE(mobile_creative_url,creative_url)
+  WHERE desktop_creative_url IS NULL OR mobile_creative_url IS NULL;
 UPDATE ad_campaigns SET l_bottom_creative_url=COALESCE(l_bottom_creative_url,creative_url),
   l_bottom_destination_url=COALESCE(l_bottom_destination_url,destination_url)
   WHERE placement='l_banner' AND (l_bottom_creative_url IS NULL OR l_bottom_destination_url IS NULL);

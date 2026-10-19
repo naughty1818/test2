@@ -17,6 +17,8 @@ Node.js/Express-ভিত্তিক বাংলা-first video sharing site�
 - Admin/Moderator panel-এ Islamic certification review queue; approve/reject সিদ্ধান্ত note-সহ audit log-এ যায়। এটি Atharo-র অভ্যন্তরীণ moderation decision—কোনো ধর্মীয় কর্তৃপক্ষের endorsement নয়।
 - Admin-controlled sponsored cards in feed/watch page. Ads global default-এ বন্ধ এবং নতুন campaigns Paused থাকে
 - Responsive Bengali UI, mobile navigation, share link ও owner-only video deletion
+- Account menu থেকে Normal/Islamic viewer mode switch, creator channel permanent delete এবং পুরো user account permanent delete; account deletion-এর সময় owned database records ও R2 media cleanup-এর চেষ্টা হয়
+- Campaign editor-এ PC/Desktop ও Phone/Mobile-এর জন্য আলাদা HTTPS creative image URL; ad serving request-এর user-agent অনুযায়ী সঠিক image বেছে নেওয়া হয়, পুরনো campaign URL fallback হিসেবে থাকে
 - Education-first P0 tools: class/subject/syllabus metadata, indexed advanced search filters, Bengali/English WebVTT captions with searchable transcript, creator thumbnails, duration badges, timestamp chapters, playback-speed control, signed direct-to-R2 playback, continue-watching, sampled watch-time/retention, content reports and moderation appeals
 
 ## শিক্ষা ও playback P0: কী আছে, কী নেই
