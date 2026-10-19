@@ -36,6 +36,8 @@ Node.js/Express-ভিত্তিক বাংলা-first video sharing site�
 
 এটি এখন **নিজস্ব sponsor campaign ও estimated-revenue framework**—Google AdSense/YouTube ad network integration নয়। Owner/admin campaign-এ HTTPS creative/landing URL এবং CPM (BDT/1,000 impressions) দেয়; Owner global ads delivery ও creator share চালু না করা পর্যন্ত visitor-কে ad দেখানো হয় না। `watch_sidebar` placement-এর public video-তে approved creator-এর revenue estimate record হয়। Home-feed ad impression creator-কে স্বয়ংক্রিয়ভাবে credit হয় না।
 
+Owner-এর Platform settings থেকে monetization eligibility-এর **minimum subscriber** ও **minimum watch-hour milestone** বেছে নেওয়া যায় (default: 1,000 subscribers এবং 4,000 watch hours)। Creator Studio-তে channel-এর all-time subscribers এবং pseudonymous watch-session hours-এর বিপরীতে এই দুই milestone-এর progress ও eligibility দেখা যায়। Eligibility দেখানো হলেও creator monetization approval এবং platform monetization switch আলাদা admin control হিসেবে থাকে।
+
 **এখানে real advertiser billing, contract/invoice, fraud review, tax handling, payout account বা creator cash payment নেই।** Creator Studio-র আয় কেবল campaign CPM ও configured share থেকে হিসাব করা estimate; এটি earned/withdrawable money-এর নিশ্চয়তা নয়। বাস্তবে টাকা দেওয়ার আগে advertiser payment, platform terms, Bangladesh tax/payment compliance, identity/eligibility review এবং payout provider আলাদাভাবে যুক্ত করতে হবে।
 
 ## কোথায় কোন ডেটা থাকে

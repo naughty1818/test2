@@ -396,6 +396,9 @@
     const adLayoutEditor=buildAdLayoutEditor(data.adLayoutSettings||{});
     const monet=el('input',{type:'checkbox',checked:data.monetizationEnabled});
     const share=el('input',{type:'number',min:'0',max:'100',step:'0.01',value:data.creatorSharePercent==null?'':data.creatorSharePercent,placeholder:'0–100'});
+    const milestones=data.monetizationMilestones||{};
+    const requiredSubscribers=el('input',{type:'number',min:'1',step:'1',required:'',value:milestones.requiredSubscribers||1000});
+    const requiredWatchHours=el('input',{type:'number',min:'0.01',step:'0.01',required:'',value:milestones.requiredWatchHours||4000});
     const form=el('form',{class:'console-form'},[
       field('Ads delivery',el('span',{class:'console-toggle'},[ads,el('span',{text:'Active campaign থাকলে public ad slot দেখাও'})]),'span-2'),
       field('Feed ads',el('span',{class:'console-toggle'},[adFeed,el('span',{text:'Home native cards'})])),
@@ -411,10 +414,12 @@
       el('div',{class:'span-2'},[el('h3',{class:'ad-layout-heading',text:'Placement অনুযায়ী PC / phone pixel মাপ ও ratio'}),adLayoutEditor.node]),
       field('Creator monetization',el('span',{class:'console-toggle'},[monet,el('span',{text:'Eligible channel-গুলোর estimated revenue হিসাব করো'})]),'span-2'),
       field('Creator share (%)',share),
-      el('div',{class:'console-notice span-2',text:'Creator share এবং CPM কেবল estimate গণনা করে। এটি advertiser payment বা creator payout নিশ্চিত করে না। 0% share দিয়ে monetization enable করা যাবে না.'}),
+      field('Required subscribers',requiredSubscribers),
+      field('Required watch hours',requiredWatchHours),
+      el('div',{class:'console-notice span-2',text:'এই দুইটি milestone পূরণ হলে creator panel-এ eligibility দেখাবে। Creator share এবং CPM কেবল estimate গণনা করে; advertiser payment বা payout নিশ্চিত করে না। 0% share দিয়ে monetization enable করা যাবে না.'}),
       el('div',{class:'console-form-actions'},[el('button',{type:'submit',class:'primary-cta',text:'Settings save'})])
     ]);
-    form.addEventListener('submit',async event=>{event.preventDefault();try{await ctx.jsonFetch('/api/admin/settings',{method:'PUT',body:{adsEnabled:ads.checked,monetizationEnabled:monet.checked,creatorSharePercent:share.value===''?null:Number(share.value),adToggles:{feed:adFeed.checked,watchSidebar:adWatch.checked,channel:adChannel.checked,sticky:adSticky.checked,postroll:adPostroll.checked,lBanner:adLBanner.checked},lBannerDurationSeconds:Number(lBannerDuration.value),lBannerSkippable:lBannerSkippable.checked,feedAdEveryRows:Number(feedAdEveryRows.value),adLayoutSettings:adLayoutEditor.serialize()}});ctx.notify('Platform settings save হয়েছে।');await renderSettings(root,ctx);}catch(error){ctx.notify(error.message,'error');}});
+    form.addEventListener('submit',async event=>{event.preventDefault();try{await ctx.jsonFetch('/api/admin/settings',{method:'PUT',body:{adsEnabled:ads.checked,monetizationEnabled:monet.checked,creatorSharePercent:share.value===''?null:Number(share.value),monetizationMilestones:{requiredSubscribers:Number(requiredSubscribers.value),requiredWatchHours:Number(requiredWatchHours.value)},adToggles:{feed:adFeed.checked,watchSidebar:adWatch.checked,channel:adChannel.checked,sticky:adSticky.checked,postroll:adPostroll.checked,lBanner:adLBanner.checked},lBannerDurationSeconds:Number(lBannerDuration.value),lBannerSkippable:lBannerSkippable.checked,feedAdEveryRows:Number(feedAdEveryRows.value),adLayoutSettings:adLayoutEditor.serialize()}});ctx.notify('Platform settings save হয়েছে।');await renderSettings(root,ctx);}catch(error){ctx.notify(error.message,'error');}});
     root.append(panel('Platform monetization settings','Ads default-off থাকে। Campaign cap হলো campaign ID-প্রতি UTC calendar month-এ সর্বোচ্চ delivery; ফাঁকা cap মানে unlimited। Share percentage নিজের commercial policy অনুযায়ী নির্ধারণ করুন—এখানে কোনো default ভাগ ধরে নেওয়া হয়নি.',form));
   }
 

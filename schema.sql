@@ -210,9 +210,13 @@ CREATE TABLE IF NOT EXISTS platform_settings (
   l_banner_skippable BOOLEAN NOT NULL DEFAULT TRUE,
   feed_ad_every_rows SMALLINT NOT NULL DEFAULT 4 CHECK (feed_ad_every_rows BETWEEN 1 AND 20),
   ad_layout_settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+  monetization_min_subscribers INTEGER NOT NULL DEFAULT 1000,
+  monetization_min_watch_hours NUMERIC(12,2) NOT NULL DEFAULT 4000,
   updated_by_email TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CHECK (creator_share_percent IS NULL OR (creator_share_percent >= 0 AND creator_share_percent <= 100))
+  CHECK (creator_share_percent IS NULL OR (creator_share_percent >= 0 AND creator_share_percent <= 100)),
+  CHECK (monetization_min_subscribers BETWEEN 1 AND 1000000000),
+  CHECK (monetization_min_watch_hours > 0 AND monetization_min_watch_hours <= 1000000000)
 );
 ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS ad_feed_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS ad_watch_sidebar_enabled BOOLEAN NOT NULL DEFAULT TRUE;
@@ -224,6 +228,16 @@ ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS l_banner_duration_seconds
 ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS l_banner_skippable BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS feed_ad_every_rows SMALLINT NOT NULL DEFAULT 4;
 ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS ad_layout_settings JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS monetization_min_subscribers INTEGER NOT NULL DEFAULT 1000;
+ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS monetization_min_watch_hours NUMERIC(12,2) NOT NULL DEFAULT 4000;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='platform_settings_monetization_min_subscribers_check') THEN
+    ALTER TABLE platform_settings ADD CONSTRAINT platform_settings_monetization_min_subscribers_check CHECK (monetization_min_subscribers BETWEEN 1 AND 1000000000);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='platform_settings_monetization_min_watch_hours_check') THEN
+    ALTER TABLE platform_settings ADD CONSTRAINT platform_settings_monetization_min_watch_hours_check CHECK (monetization_min_watch_hours > 0 AND monetization_min_watch_hours <= 1000000000);
+  END IF;
+END $$;
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='platform_settings_feed_ad_every_rows_check') THEN
     ALTER TABLE platform_settings ADD CONSTRAINT platform_settings_feed_ad_every_rows_check CHECK (feed_ad_every_rows BETWEEN 1 AND 20);
