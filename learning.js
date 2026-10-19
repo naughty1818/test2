@@ -46,7 +46,7 @@ module.exports = function registerLearningFeatures({
     const video = await getVideo(req.params.id);
     if (!video) { fail(res, 404, 'ভিডিও পাওয়া যায়নি।'); return null; }
     req.auth = req.auth || await loadSession(req);
-    if (!await canView(video, req.auth?.session?.sub)) { fail(res, 403, 'এই ভিডিও দেখার অনুমতি নেই।'); return null; }
+    if (!await canView(video, req.auth?.session?.sub, req.auth?.session?.viewerType || 'normal')) { fail(res, 403, 'এই ভিডিও দেখার অনুমতি নেই।'); return null; }
     return video;
   }
   async function ownedVideo(req, res) {
@@ -186,16 +186,17 @@ module.exports = function registerLearningFeatures({
         wp.current_seconds,wp.duration_seconds AS progress_duration,wp.updated_at AS progress_updated
         FROM watch_progress wp JOIN videos v ON v.id=wp.video_id LEFT JOIN profiles p ON p.sub=v.owner_sub LEFT JOIN app_users u ON u.google_sub=v.owner_sub
         WHERE wp.user_sub=$1 AND COALESCE(v.moderation_status,'active')='active' AND COALESCE(u.account_status,'active')='active'
+          AND ($2::text<>'islamic' OR (v.is_islamic=TRUE AND v.islamic_certification_status='approved'))
           AND (v.visibility='Public' OR v.owner_sub=$1) AND wp.current_seconds>5
           AND (wp.duration_seconds=0 OR wp.current_seconds<wp.duration_seconds-10)
-        ORDER BY wp.updated_at DESC LIMIT $2`,[req.auth.session.sub,limit]);
+        ORDER BY wp.updated_at DESC LIMIT $3`,[req.auth.session.sub,req.auth.session.viewerType||'normal',limit]);
       res.json({ videos:result.rows.map(row=>({id:row.id,title:row.title,description:row.description,category:row.category,created:new Date(row.created_at).toISOString(),ownerHandle:row.owner_handle||null,ownerName:row.owner_name,ownerAvatar:row.owner_avatar||null,thumbnailUrl:row.thumbnail_object_name?`/api/videos/${encodeURIComponent(row.id)}/thumbnail`:null,viewsCount:Number(row.views_count)||0,likesCount:Number(row.likes_count)||0,commentsCount:Number(row.comments_count)||0,durationSeconds:Number(row.duration_seconds)||Number(row.progress_duration)||0,currentSeconds:Number(row.current_seconds)||0,progressUpdatedAt:row.progress_updated}))});
     } catch(error){next(error);}
   });
   app.get('/api/me/watch-progress/:id', requireAuth, requireValidId, async (req,res,next)=>{
     try{
       const video=await getVideo(req.params.id);if(!video)return fail(res,404,'ভিডিও পাওয়া যায়নি।');
-      if(!await canView(video,req.auth.session.sub))return fail(res,403,'এই ভিডিও দেখার অনুমতি নেই।');
+      if(!await canView(video,req.auth.session.sub,req.auth.session.viewerType||'normal'))return fail(res,403,'এই ভিডিও দেখার অনুমতি নেই।');
       const result=await pool.query('SELECT current_seconds,duration_seconds,updated_at FROM watch_progress WHERE user_sub=$1 AND video_id=$2',[req.auth.session.sub,video.id]);
       const row=result.rows[0];res.json({progress:row?{currentSeconds:Number(row.current_seconds),durationSeconds:Number(row.duration_seconds),updatedAt:row.updated_at}:null});
     }catch(error){next(error);}
@@ -203,7 +204,7 @@ module.exports = function registerLearningFeatures({
   app.put('/api/videos/:id/watch-progress', requireAuth, requireActive, requireValidId, async (req,res,next)=>{
     try{
       const video=await getVideo(req.params.id);if(!video)return fail(res,404,'ভিডিও পাওয়া যায়নি।');
-      if(!await canView(video,req.auth.session.sub))return fail(res,403,'এই ভিডিও দেখার অনুমতি নেই।');
+      if(!await canView(video,req.auth.session.sub,req.auth.session.viewerType||'normal'))return fail(res,403,'এই ভিডিও দেখার অনুমতি নেই।');
       const current=safeNumber(req.body?.currentSeconds);const duration=safeNumber(req.body?.durationSeconds);
       if(current===null||duration===null||current>duration+5)return fail(res,400,'Playback position সঠিক নয়।');
       if(duration>0&&current>=duration-8){await pool.query('DELETE FROM watch_progress WHERE user_sub=$1 AND video_id=$2',[req.auth.session.sub,video.id]);return res.json({ok:true,completed:true});}
@@ -276,12 +277,12 @@ module.exports = function registerLearningFeatures({
       if(details.length<10)return fail(res,400,'কমপক্ষে ১০ অক্ষরের ব্যাখ্যা লিখুন।');
       let videoId=null,channelSub=null,commentId=null;
       if(type==='video'){
-        const video=await getVideo(targetId);if(!video||!await canView(video,req.auth.session.sub))return fail(res,404,'ভিডিও পাওয়া যায়নি।');videoId=video.id;
+        const video=await getVideo(targetId);if(!video||!await canView(video,req.auth.session.sub,req.auth.session.viewerType||'normal'))return fail(res,404,'ভিডিও পাওয়া যায়নি।');videoId=video.id;
       }else if(type==='channel'){
         const channel=await pool.query('SELECT sub FROM profiles WHERE handle=$1 OR sub=$1 LIMIT 1',[targetId]);if(!channel.rowCount)return fail(res,404,'Channel পাওয়া যায়নি।');channelSub=channel.rows[0].sub;
       }else{
         if(!/^[0-9a-f-]{36}$/i.test(targetId))return fail(res,400,'Comment id সঠিক নয়.');
-        const comment=await pool.query('SELECT c.id,c.video_id FROM comments c JOIN videos v ON v.id=c.video_id WHERE c.id=$1 AND v.visibility IN (\'Public\',\'Unlisted\') AND v.moderation_status=\'active\'',[targetId]);
+        const comment=await pool.query("SELECT c.id,c.video_id FROM comments c JOIN videos v ON v.id=c.video_id WHERE c.id=$1 AND v.visibility IN ('Public','Unlisted') AND v.moderation_status='active' AND ($2::text<>'islamic' OR (v.is_islamic=TRUE AND v.islamic_certification_status='approved'))",[targetId,req.auth.session.viewerType||'normal']);
         if(!comment.rowCount)return fail(res,404,'Comment পাওয়া যায়নি।');commentId=comment.rows[0].id;
       }
       const id=crypto.randomUUID();

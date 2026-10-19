@@ -9,7 +9,7 @@ const {
   normalizeFeedAdEveryRows
 } = require('./ad-layouts');
 
-module.exports = function registerConsole({ app, requireAuth, requireActive, loadSession, notifyUser }) {
+module.exports = function registerConsole({ app, requireAuth, requireActive, loadSession, notifyUser, getVideo, signedVideoUrl }) {
   const OWNER_EMAIL = String(process.env.OWNER_EMAIL || '').trim().toLowerCase();
   const validUuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
   const validVideoId = value => typeof value === 'string' && (validUuid(value) || /^\d+-[0-9a-f]{8}$/i.test(value));
@@ -71,8 +71,8 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
   app.get('/api/admin/channel-applications',adminAuth('admin'),async(req,res,next)=>{
     try{
       const status=['pending','approved','rejected','all'].includes(String(req.query.status||''))?String(req.query.status):'pending';
-      const result=await pool.query(`SELECT a.id,a.user_sub,a.channel_name,a.channel_type,a.other_platform_name,a.other_platform_url,a.status,a.decision_note,a.created_at,a.reviewed_at,u.email,u.google_name,u.google_picture FROM channel_applications a JOIN app_users u ON u.google_sub=a.user_sub WHERE ($1='all' OR a.status=$1) ORDER BY CASE a.status WHEN 'pending' THEN 0 ELSE 1 END,a.created_at ASC LIMIT 100`,[status]);
-      res.json({applications:result.rows.map(a=>({id:a.id,userSub:a.user_sub,channelName:a.channel_name,channelType:a.channel_type,otherPlatformName:a.other_platform_name,otherPlatformUrl:a.other_platform_url,status:a.status,decisionNote:a.decision_note,createdAt:a.created_at,reviewedAt:a.reviewed_at,email:a.email,name:a.google_name,picture:a.google_picture}))});
+      const result=await pool.query(`SELECT a.id,a.user_sub,a.channel_name,a.channel_type,a.creator_type,a.other_platform_name,a.other_platform_url,a.status,a.decision_note,a.created_at,a.reviewed_at,u.email,u.google_name,u.google_picture FROM channel_applications a JOIN app_users u ON u.google_sub=a.user_sub WHERE ($1='all' OR a.status=$1) ORDER BY CASE a.status WHEN 'pending' THEN 0 ELSE 1 END,a.created_at ASC LIMIT 100`,[status]);
+      res.json({applications:result.rows.map(a=>({id:a.id,userSub:a.user_sub,channelName:a.channel_name,channelType:a.channel_type,creatorType:a.creator_type||'normal',otherPlatformName:a.other_platform_name,otherPlatformUrl:a.other_platform_url,status:a.status,decisionNote:a.decision_note,createdAt:a.created_at,reviewedAt:a.reviewed_at,email:a.email,name:a.google_name,picture:a.google_picture}))});
     }catch(error){next(error);}
   });
   app.post('/api/admin/channel-applications/:id/decision',adminAuth('admin'),async(req,res,next)=>{
@@ -92,7 +92,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
           const base=makeHandle(user.rows[0].email||a.channel_name);
           for(let i=0;i<12;i++){
             const candidate=i===0?base:`${base.slice(0,18)}-${crypto.randomBytes(2).toString('hex')}`;
-            const inserted=await client.query(`INSERT INTO profiles(sub,handle,display_name,bio,avatar_url,channel_type) VALUES($1,$2,$3,'',$4,$5) ON CONFLICT(handle) DO NOTHING RETURNING handle`,[a.user_sub,candidate,a.channel_name,user.rows[0].google_picture||null,a.channel_type]);
+            const inserted=await client.query(`INSERT INTO profiles(sub,handle,display_name,bio,avatar_url,channel_type,creator_type) VALUES($1,$2,$3,'',$4,$5,$6) ON CONFLICT(handle) DO NOTHING RETURNING handle`,[a.user_sub,candidate,a.channel_name,user.rows[0].google_picture||null,a.channel_type,a.creator_type||'normal']);
             if(inserted.rowCount){handle=inserted.rows[0].handle;break;}
           }
           if(!handle)throw new Error('Could not allocate a unique channel handle.');
@@ -133,6 +133,47 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       });
       if(!result)return jsonError(res,404,'Verification request not found.');
       if(notifyUser)await notifyUser(result.userSub,null,'verification_'+decision,decision==='approved'?'Channel verified':'Verification request update',decision==='approved'?`Your channel is now verified. Note: ${note}`:`Your verification request was not approved. Note: ${note}`,'/studio?tab=verification');
+      res.json({ok:true,decision});
+    }catch(error){if(error.status)return jsonError(res,error.status,error.message);next(error);}
+  });
+
+  app.get('/api/admin/islamic-review',adminAuth('admin','moderator'),async(req,res,next)=>{
+    try{
+      const status=['pending','approved','rejected','all'].includes(String(req.query.status||''))?String(req.query.status):'pending';
+      const result=await pool.query(`SELECT v.id,v.title,v.description,v.islamic_certification_status,v.islamic_review_note,v.created_at,v.islamic_reviewed_at,p.handle,p.display_name,u.email
+        FROM videos v LEFT JOIN profiles p ON p.sub=v.owner_sub LEFT JOIN app_users u ON u.google_sub=v.owner_sub
+        WHERE v.is_islamic=TRUE AND ($1='all' OR v.islamic_certification_status=$1)
+        ORDER BY CASE v.islamic_certification_status WHEN 'pending' THEN 0 ELSE 1 END,v.created_at ASC LIMIT 200`,[status]);
+      res.json({videos:result.rows.map(v=>({id:v.id,title:v.title,description:v.description,status:v.islamic_certification_status,reviewNote:v.islamic_review_note,createdAt:v.created_at,reviewedAt:v.islamic_reviewed_at,handle:v.handle,creatorName:v.display_name,email:v.email}))});
+    }catch(error){next(error);}
+  });
+  app.get('/api/admin/islamic-review/:id/preview',adminAuth('admin','moderator'),async(req,res,next)=>{
+    try{
+      if(!validVideoId(req.params.id))return jsonError(res,400,'Invalid video id.');
+      const video=await getVideo(req.params.id);
+      if(!video||!video.is_islamic)return jsonError(res,404,'Islamic video not found.');
+      res.set('Cache-Control','private, no-store');
+      res.json({url:await signedVideoUrl(video.object_name)});
+    }catch(error){next(error);}
+  });
+  app.post('/api/admin/islamic-review/:id/decision',adminAuth('admin','moderator'),async(req,res,next)=>{
+    try{
+      if(!validVideoId(req.params.id))return fail(res,'Invalid video id.');
+      const decision=String(req.body?.decision||''),note=clean(req.body?.note,2000);
+      if(!['approved','rejected'].includes(decision))return fail(res,'Choose approve or reject.');
+      if(note.length<5)return fail(res,'Add a review note of at least 5 characters.');
+      const result=await withTransaction(async client=>{
+        const locked=await client.query('SELECT id,owner_sub,title,is_islamic,islamic_certification_status FROM videos WHERE id=$1 FOR UPDATE',[req.params.id]);
+        if(!locked.rowCount)return null;
+        const video=locked.rows[0];
+        if(!video.is_islamic)throw Object.assign(new Error('This video is no longer marked Islamic.'),{status:409});
+        if(video.islamic_certification_status!=='pending')throw Object.assign(new Error('This video is not awaiting certification review.'),{status:409});
+        await client.query('UPDATE videos SET islamic_certification_status=$2,islamic_reviewed_by_email=$3,islamic_review_note=$4,islamic_reviewed_at=NOW() WHERE id=$1',[video.id,decision,req.admin.email,note]);
+        await writeAudit(client,req.admin,'islamic_certification_'+decision,'video',video.id,note,{videoTitle:video.title,ownerSub:video.owner_sub});
+        return {ownerSub:video.owner_sub,title:video.title};
+      });
+      if(!result)return jsonError(res,404,'Video not found.');
+      if(result.ownerSub&&notifyUser)await notifyUser(result.ownerSub,null,'islamic_certification_'+decision,'Islamic video review update',decision==='approved'?`“${result.title}” has been approved for Islamic mode.`:`“${result.title}” was not approved for Islamic mode. Note: ${note}`,'/studio?tab=content');
       res.json({ok:true,decision});
     }catch(error){if(error.status)return jsonError(res,error.status,error.message);next(error);}
   });
