@@ -180,7 +180,8 @@ END $$;
 CREATE INDEX IF NOT EXISTS videos_moderation_owner_idx ON videos (moderation_status, owner_sub, created_at DESC);
 
 ALTER TABLE profiles
-  ADD COLUMN IF NOT EXISTS monetization_status TEXT NOT NULL DEFAULT 'pending';
+  ADD COLUMN IF NOT EXISTS monetization_status TEXT NOT NULL DEFAULT 'pending',
+  ADD COLUMN IF NOT EXISTS monetization_applied_at TIMESTAMPTZ;
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'profiles_monetization_status_check') THEN
     ALTER TABLE profiles ADD CONSTRAINT profiles_monetization_status_check CHECK (monetization_status IN ('pending','enabled','paused','rejected'));

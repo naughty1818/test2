@@ -670,6 +670,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .console-tab { border:0; border-radius:9px; padding:9px 13px; color:#62685f; background:transparent; font-size:11px; font-weight:700; }
 .console-tab.active,.console-tab:hover { color:#b84534; background:#fff0eb; }
 .console-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:18px; }
+.milestone-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; align-items:stretch; }
+.milestone-progress,.milestone-apply { padding:16px; border:1px solid #e9e6de; border-radius:15px; background:#fff; }
+.milestone-progress-heading { display:flex; justify-content:space-between; gap:12px; color:#252925; }
+.milestone-progress-heading span { color:#248a58; font-weight:800; }
+.milestone-progress-track { height:10px; margin:12px 0 8px; overflow:hidden; border-radius:999px; background:#e7eee9; }
+.milestone-progress-fill { height:100%; min-width:0; border-radius:inherit; background:linear-gradient(90deg,#2baa68,#54c77e); transition:width .35s ease; }
+.milestone-apply { display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
+.milestone-apply strong { color:#248a58; font-size:18px; }
+.milestone-apply .primary-cta:disabled { cursor:not-allowed; opacity:.55; }
 .console-stat { min-width:0; padding:16px; border:1px solid #e9e6de; border-radius:15px; background:#fff; }
 .console-stat-label { display:block; color:#858a83; font-size:10px; font-weight:650; }
 .console-stat-value { display:block; margin-top:8px; color:#252925; font-size:24px; font-weight:800; letter-spacing:-.04em; overflow-wrap:anywhere; }
@@ -751,7 +760,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 @media(max-width:900px){.studio-layout{grid-template-columns:1fr}.studio-nav{position:static;display:flex;overflow-x:auto}.studio-nav button{white-space:nowrap}.studio-hero{align-items:flex-start;flex-direction:column}}
 @media(max-width:560px){.studio-hero{padding:20px;border-radius:17px}.studio-resource-grid{grid-template-columns:1fr}.studio-comment{min-width:220px}}
 @media (max-width:900px) { .console-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-@media (max-width:760px) { .console-heading { align-items:flex-start; flex-direction:column; } .console-tabs { width:100%; overflow-x:auto; flex-wrap:nowrap; } .console-tab { white-space:nowrap; } .console-form { grid-template-columns:1fr; } .console-form .span-2,.console-form-actions { grid-column:1; } .console-panel { padding:14px; } .console-chart { gap:4px; } .console-stat-value { font-size:20px; } }
+@media (max-width:760px) { .console-heading { align-items:flex-start; flex-direction:column; } .console-tabs { width:100%; overflow-x:auto; flex-wrap:nowrap; } .console-tab { white-space:nowrap; } .console-form { grid-template-columns:1fr; } .console-form .span-2,.console-form-actions { grid-column:1; } .console-panel { padding:14px; } .console-chart { gap:4px; } .console-stat-value { font-size:20px; } .milestone-grid { grid-template-columns:1fr; } }
 
 
 /* Atharo | আঠারো — deep green-black theme */
@@ -816,6 +825,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible 
 .hero-cta:hover,.primary-cta:hover,.follow-button:hover { color:#041c15; background:#56d9bb; }
 .feed-heading h2,.results-heading h2,.recommendations-title h2 { color:#e7f4ed; }
 .category-chip,.action-pill,.outline-cta,.console-actions button,.console-small-button { color:#c7dbd0; background:#101e18; border-color:#2a4136; }
+.milestone-progress,.milestone-apply { color:#dcebe3; background:#0e1b16; border-color:#293f34; }
+.milestone-progress-heading { color:#e5f2ec; }
+.milestone-progress-track { background:#20372d; }
 .category-chip:hover,.action-pill:hover,.outline-cta:hover,.console-actions button:hover,.console-small-button:hover { color:#9af0d9; border-color:#28745f; background:#153329; }
 .category-chip-active,.category-chip-active:hover { color:#eafff7; border-color:#166b57; background:#115540; }
 .video-title:hover,.creator-name:hover,.channel-tab-active,.channel-upload-link { color:#7ee2c7; }

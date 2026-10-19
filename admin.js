@@ -362,7 +362,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
             COUNT(*) FILTER (WHERE event_type='click')::bigint AS clicks,
             COALESCE(SUM(estimated_creator_earnings_bdt),0)::numeric(14,4) AS estimated_earnings_bdt
           FROM ad_events WHERE creator_sub=$1 AND created_at>=NOW()-($2::int*INTERVAL '1 day')`, [sub, days]),
-        pool.query(`SELECT p.monetization_status,s.ads_enabled,s.monetization_enabled,s.creator_share_percent,s.monetization_min_subscribers,s.monetization_min_watch_hours
+        pool.query(`SELECT p.monetization_status,p.monetization_applied_at,s.ads_enabled,s.monetization_enabled,s.creator_share_percent,s.monetization_min_subscribers,s.monetization_min_watch_hours
           FROM profiles p CROSS JOIN platform_settings s WHERE p.sub=$1 AND s.id=1`, [sub]),
         pool.query("SELECT COUNT(*)::bigint AS n FROM copyright_strikes WHERE channel_sub=$1 AND status IN ('active','appealed')", [sub]),
         pool.query(`SELECT COALESCE(SUM(vws.watch_seconds),0)::numeric AS watch_seconds
@@ -376,8 +376,34 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
         videos: videos.rows.map(row => ({ id: row.id, title: row.title, visibility: row.visibility, moderationStatus: row.moderation_status, createdAt: row.created_at, views: Number(row.views_count)||0, likes: Number(row.likes_count)||0, comments: Number(row.comments_count)||0, adImpressions: Number(row.ad_impressions)||0, adClicks: Number(row.ad_clicks)||0, estimatedEarningsBdt: Number(row.estimated_earnings_bdt)||0 })),
         ads: { impressions: Number(ads.impressions)||0, clicks: Number(ads.clicks)||0, estimatedEarningsBdt: Number(ads.estimated_earnings_bdt)||0 },
         monetizationStatus: monet.monetization_status || 'pending', monetizationEnabled: Boolean(monet.monetization_enabled), adsEnabled: Boolean(monet.ads_enabled), creatorSharePercent: monet.creator_share_percent === null || monet.creator_share_percent === undefined ? null : Number(monet.creator_share_percent), activeStrikes: Number(strikes.rows[0]?.n)||0,
-        monetizationMilestones: { requiredSubscribers: Number(monet.monetization_min_subscribers)||1000, currentSubscribers: Number(subscriberTotal.rows[0]?.n)||0, requiredWatchHours: Number(monet.monetization_min_watch_hours)||4000, currentWatchHours: Number(watchTime.rows[0]?.watch_seconds||0)/3600 } });
+        monetizationMilestones: { requiredSubscribers: Number(monet.monetization_min_subscribers)||1000, currentSubscribers: Number(subscriberTotal.rows[0]?.n)||0, requiredWatchHours: Number(monet.monetization_min_watch_hours)||4000, currentWatchHours: Number(watchTime.rows[0]?.watch_seconds||0)/3600 }, monetizationAppliedAt: monet.monetization_applied_at || null });
     } catch (error) { next(error); }
+  });
+
+  app.post('/api/creator/monetization/apply', requireAuth, async (req, res, next) => {
+    try {
+      const result = await withTransaction(async client => {
+        const check = await client.query(`SELECT p.monetization_status,p.monetization_applied_at,s.monetization_enabled,
+            s.monetization_min_subscribers,s.monetization_min_watch_hours,
+            (SELECT COUNT(*) FROM subscriptions WHERE channel_sub=$1) AS subscribers,
+            (SELECT COALESCE(SUM(vws.watch_seconds),0) FROM video_watch_sessions vws JOIN videos v ON v.id=vws.video_id WHERE v.owner_sub=$1) AS watch_seconds
+          FROM profiles p CROSS JOIN platform_settings s WHERE p.sub=$1 AND s.id=1 FOR UPDATE`, [req.auth.session.sub]);
+        if (!check.rowCount) throw Object.assign(new Error('Creator channel not found.'), { status: 404 });
+        const row = check.rows[0];
+        if (!row.monetization_enabled) throw Object.assign(new Error('Platform monetization is not enabled yet.'), { status: 409 });
+        if (row.monetization_status === 'enabled') throw Object.assign(new Error('Monetization is already approved.'), { status: 409 });
+        const subscribers = Number(row.subscribers) || 0;
+        const watchHours = (Number(row.watch_seconds) || 0) / 3600;
+        if (subscribers < Number(row.monetization_min_subscribers) || watchHours < Number(row.monetization_min_watch_hours)) {
+          throw Object.assign(new Error('দুইটি monetization milestone পূরণ করার পর apply করতে হবে।'), { status: 409 });
+        }
+        const updated = await client.query(`UPDATE profiles SET monetization_status='pending',monetization_applied_at=NOW(),updated_at=NOW()
+          WHERE sub=$1 RETURNING monetization_status,monetization_applied_at`, [req.auth.session.sub]);
+        await writeAudit(client,{email:req.auth.session.email,role:'creator'},'creator_monetization_apply','creator',req.auth.session.sub,'Creator applied after completing monetization milestones',{subscribers,watchHours});
+        return { subscribers, watchHours, appliedAt: updated.rows[0].monetization_applied_at };
+      });
+      res.status(201).json({ ok: true, status: 'pending', ...result });
+    } catch (error) { if (error.status) return jsonError(res,error.status,error.message); next(error); }
   });
 
   app.get('/api/creator/strikes', requireAuth, async (req, res, next) => {
@@ -545,7 +571,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const reason = clean(req.body?.reason, 1000);
       if (!['pending','enabled','paused','rejected'].includes(status)) return fail(res, 'Invalid monetization status.');
       const result = await withTransaction(async client => {
-        const update = await client.query('UPDATE profiles SET monetization_status=$2,updated_at=NOW() WHERE sub=$1 RETURNING handle', [sub,status]);
+        const update = await client.query("UPDATE profiles SET monetization_status=$2,monetization_applied_at=CASE WHEN $2='rejected' THEN NULL ELSE monetization_applied_at END,updated_at=NOW() WHERE sub=$1 RETURNING handle", [sub,status]);
         if (!update.rowCount) return false;
         await writeAudit(client,req.admin,'creator_monetization','creator',sub,reason,{status,handle:update.rows[0].handle});
         return true;
