@@ -12,6 +12,7 @@ const {
 } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { pool, initializeDatabase, withTransaction } = require('./db');
+const { normalizeViewerType, normalizeCreatorType, resolveIslamicFlag, isIslamicEligible } = require('./content-policy');
 
 const PORT = Number(process.env.PORT || 3000);
 const MAX_FILE_MB = Number(process.env.MAX_FILE_MB || 500);
@@ -81,6 +82,7 @@ const VIDEO_SELECT = `
          v.visibility, v.size, v.created_at, v.legacy, v.likes_count,
          v.views_count, v.comments_count, v.moderation_status,v.scheduled_at,v.comments_enabled,
          v.thumbnail_object_name, v.class_level, v.subject, v.syllabus_tags, v.duration_seconds,
+         v.is_islamic, v.islamic_certification_status,
          EXISTS(SELECT 1 FROM video_captions vc WHERE vc.video_id=v.id) AS has_captions,
          p.handle AS owner_handle,
          COALESCE(NULLIF(p.display_name,''), NULLIF(u.google_name,''), 'Atharo নির্মাতা') AS owner_name,
@@ -152,7 +154,7 @@ function suggestedHandle(user) {
 }
 function publicProfile(profile) {
   if (!profile) return null;
-  return { displayName: profile.display_name || profile.displayName || 'Creator', handle: profile.handle || null, bio: profile.bio || '', avatarUrl: profile.avatar_url || profile.avatarUrl || null, coverUrl: profile.cover_url || profile.coverUrl || null, isVerified: Boolean(profile.is_verified ?? profile.isVerified), channelType: profile.channel_type || profile.channelType || 'general' };
+  return { displayName: profile.display_name || profile.displayName || 'Creator', handle: profile.handle || null, bio: profile.bio || '', avatarUrl: profile.avatar_url || profile.avatarUrl || null, coverUrl: profile.cover_url || profile.coverUrl || null, isVerified: Boolean(profile.is_verified ?? profile.isVerified), channelType: profile.channel_type || profile.channelType || 'general', creatorType: profile.creator_type || profile.creatorType || 'normal' };
 }
 function toISO(value) { return value instanceof Date ? value.toISOString() : new Date(value).toISOString(); }
 function videoCard(row) {
@@ -164,7 +166,8 @@ function videoCard(row) {
     viewsCount: Number(row.views_count) || 0, commentsCount: Number(row.comments_count) || 0,
     thumbnailUrl: row.thumbnail_object_name ? `/api/videos/${encodeURIComponent(row.id)}/thumbnail` : null,
     classLevel: row.class_level || '', subject: row.subject || '', syllabusTags: row.syllabus_tags || [],
-    durationSeconds: Number(row.duration_seconds) || 0, hasCaptions: Boolean(row.has_captions), scheduledAt:row.scheduled_at||null, commentsEnabled:row.comments_enabled!==false,
+    durationSeconds: Number(row.duration_seconds) || 0, isIslamic: Boolean(row.is_islamic), islamicCertificationStatus: row.islamic_certification_status || 'not_applicable',
+    hasCaptions: Boolean(row.has_captions), scheduledAt:row.scheduled_at||null, commentsEnabled:row.comments_enabled!==false,
     liked: Boolean(row.liked), watchLater: Boolean(row.watch_later), feedback: row.feedback || null
   };
 }
@@ -173,23 +176,23 @@ function requireValidId(req, res, next) {
   next();
 }
 async function loadProfile(sub, client = pool) {
-  const result = await client.query('SELECT sub,handle,display_name,bio,avatar_url,cover_url,channel_type,is_verified,created_at,updated_at FROM profiles WHERE sub=$1', [sub]);
+  const result = await client.query('SELECT sub,handle,display_name,bio,avatar_url,cover_url,channel_type,creator_type,is_verified,created_at,updated_at FROM profiles WHERE sub=$1', [sub]);
   return result.rows[0] || null;
 }
 async function loadSession(req) {
   const raw = verifyValue(parseCookies(req).vh_session);
   if (!raw || raw.length < 32) return null;
   const result = await pool.query(`
-    SELECT s.sub, s.expires_at, u.email, u.google_name, u.google_picture, u.account_status,
-           p.handle, p.display_name, p.bio, p.avatar_url, p.cover_url, p.channel_type, p.is_verified
+    SELECT s.sub, s.expires_at, u.email, u.google_name, u.google_picture, u.account_status, u.viewer_type,
+           p.handle, p.display_name, p.bio, p.avatar_url, p.cover_url, p.channel_type, p.creator_type, p.is_verified
     FROM sessions s JOIN app_users u ON u.google_sub=s.sub
     LEFT JOIN profiles p ON p.sub=s.sub
     WHERE s.token_hash=$1 AND s.expires_at>NOW()
   `, [sha(raw)]);
   if (!result.rowCount) return null;
   const row = result.rows[0];
-  const session = { sub: row.sub, email: row.email, name: row.google_name || '', picture: row.google_picture || null, accountStatus: row.account_status || 'active', emailVerified: true, expiresAt: toISO(row.expires_at) };
-  const profile = row.handle ? { sub: row.sub, handle: row.handle, display_name: row.display_name, bio: row.bio, avatar_url: row.avatar_url, cover_url: row.cover_url, channel_type: row.channel_type, is_verified: row.is_verified } : null;
+  const session = { sub: row.sub, email: row.email, name: row.google_name || '', picture: row.google_picture || null, accountStatus: row.account_status || 'active', viewerType: row.viewer_type || 'normal', emailVerified: true, expiresAt: toISO(row.expires_at) };
+  const profile = row.handle ? { sub: row.sub, handle: row.handle, display_name: row.display_name, bio: row.bio, avatar_url: row.avatar_url, cover_url: row.cover_url, channel_type: row.channel_type, creator_type: row.creator_type || 'normal', is_verified: row.is_verified } : null;
   return { token: raw, session, profile };
 }
 async function requireAuth(req, res, next) {
@@ -223,7 +226,7 @@ async function saveSession(req, res, user) {
   });
   setCookie(res, req, 'vh_session', signValue(token), { maxAge: SESSION_TTL_SECONDS });
 }
-function sessionUser(session) { return { email: session.email, name: session.name, picture: session.picture || null, accountStatus: session.accountStatus || 'active', emailVerified: true }; }
+function sessionUser(session) { return { email: session.email, name: session.name, picture: session.picture || null, accountStatus: session.accountStatus || 'active', viewerType: session.viewerType || 'normal', emailVerified: true }; }
 async function ensureWatchLater(sub, client = pool) {
   const found = await client.query('SELECT id FROM playlists WHERE owner_sub=$1 AND is_watch_later=TRUE', [sub]);
   if (found.rowCount) return found.rows[0].id;
@@ -237,18 +240,20 @@ async function getVideo(id) {
   const result = await pool.query(VIDEO_SELECT + ' WHERE v.id=$1', [id]);
   return result.rows[0] || null;
 }
-async function canView(video, sub) {
+async function canView(video, sub, viewerType = 'normal') {
   if (video.moderation_status && video.moderation_status !== 'active') return false;
   if (video.owner_status && video.owner_status !== 'active') return false;
+  if (!isIslamicEligible(video, viewerType)) return false;
   if (video.scheduled_at && new Date(video.scheduled_at).getTime() > Date.now() && video.owner_sub !== sub) return false;
   return video.visibility !== 'Private' || Boolean(sub && video.owner_sub === sub);
 }
-async function loadCards({ category = '', query = '', limit = 24, offset = 0, userSub = null, ownerSub = null, subscriptions = false, playlistId = null, history = false, classLevel = '', subject = '', syllabusTag = '', durationMin = 0, durationMax = 0, captionsOnly = false, sort = '' } = {}) {
+async function loadCards({ category = '', query = '', limit = 24, offset = 0, userSub = null, viewerType = 'normal', ownerSub = null, subscriptions = false, playlistId = null, history = false, classLevel = '', subject = '', syllabusTag = '', durationMin = 0, durationMax = 0, captionsOnly = false, sort = '' } = {}) {
   const safeLimit = Math.min(MAX_LIST, Math.max(1, Number.parseInt(limit, 10) || 24));
   const safeOffset = Math.min(100000, Math.max(0, Number.parseInt(offset, 10) || 0));
   const params = [];
   let from = `${VIDEO_SELECT}`;
   let where = ["COALESCE(v.moderation_status,'active')='active'", "COALESCE(u.account_status,'active')='active'"];
+  if (viewerType === 'islamic') where.push("v.is_islamic=TRUE", "v.islamic_certification_status='approved'");
   if(userSub){params.push(userSub);where.push(`(v.scheduled_at IS NULL OR v.scheduled_at<=NOW() OR v.owner_sub=$${params.length})`);}
   else where.push('(v.scheduled_at IS NULL OR v.scheduled_at<=NOW())');
   if (subscriptions) {
@@ -345,7 +350,7 @@ async function accessVideo(req, res, next) {
     if (!video) return jsonError(res, 404, 'Video not found / ভিডিও পাওয়া যায়নি।');
     req.video = video;
     req.auth = req.auth || await loadSession(req);
-    if (!await canView(video, req.auth?.session.sub)) return jsonError(res, 403, 'This video is private / ভিডিওটি private।');
+    if (!await canView(video, req.auth?.session.sub, req.auth?.session.viewerType || 'normal')) return jsonError(res, 403, 'This video is private / ভিডিওটি private।');
     next();
   } catch (error) { next(error); }
 }
@@ -390,6 +395,15 @@ app.get('/auth/me', async (req, res, next) => {
     res.json(auth ? { user: sessionUser(auth.session), profile: publicProfile(auth.profile) } : { user: null, profile: null });
   } catch (error) { next(error); }
 });
+app.patch('/api/me/preferences', requireAuth, requireActive, async (req, res, next) => {
+  try {
+    const viewerType = normalizeViewerType(req.body?.viewerType);
+    if (!viewerType) return jsonError(res, 400, 'Choose Islamic or Normal viewer mode.');
+    await pool.query('UPDATE app_users SET viewer_type=$2,updated_at=NOW() WHERE google_sub=$1', [req.auth.session.sub, viewerType]);
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ ok: true, viewerType });
+  } catch (error) { next(error); }
+});
 app.post('/auth/logout', async (req, res, next) => {
   try {
     const raw = verifyValue(parseCookies(req).vh_session);
@@ -403,8 +417,8 @@ app.get('/api/me/channel-application', requireAuth, async (req,res,next)=>{
   try {
     const sub=req.auth.session.sub;
     const [profile,appRow]=await Promise.all([
-      pool.query('SELECT handle,display_name,channel_type,is_verified FROM profiles WHERE sub=$1',[sub]),
-      pool.query(`SELECT id,channel_name,channel_type,other_platform_name,other_platform_url,status,decision_note,created_at,reviewed_at FROM channel_applications WHERE user_sub=$1 ORDER BY created_at DESC LIMIT 1`,[sub])
+      pool.query('SELECT handle,display_name,channel_type,creator_type,is_verified FROM profiles WHERE sub=$1',[sub]),
+      pool.query(`SELECT id,channel_name,channel_type,creator_type,other_platform_name,other_platform_url,status,decision_note,created_at,reviewed_at FROM channel_applications WHERE user_sub=$1 ORDER BY created_at DESC LIMIT 1`,[sub])
     ]);
     res.set('Cache-Control','private, no-store');
     res.json({channel:profile.rows[0]||null,application:appRow.rows[0]||null});
@@ -412,9 +426,10 @@ app.get('/api/me/channel-application', requireAuth, async (req,res,next)=>{
 });
 app.post('/api/me/channel-application', requireAuth, requireActive, async (req,res,next)=>{
   try {
-    const sub=req.auth.session.sub,name=safeText(req.body?.channelName,120),type=String(req.body?.channelType||''),platform=safeText(req.body?.otherPlatformName,80),rawUrl=safeText(req.body?.otherPlatformUrl,2048),hasOther=Boolean(req.body?.hasOtherPlatform);
+    const sub=req.auth.session.sub,name=safeText(req.body?.channelName,120),type=String(req.body?.channelType||''),creatorType=normalizeCreatorType(String(req.body?.creatorType||'normal')),platform=safeText(req.body?.otherPlatformName,80),rawUrl=safeText(req.body?.otherPlatformUrl,2048),hasOther=Boolean(req.body?.hasOtherPlatform);
     if(name.length<2)return jsonError(res,400,'Channel name must contain at least 2 characters.');
     if(!['personal','education','business','organization','other'].includes(type))return jsonError(res,400,'Choose a valid channel type.');
+    if(!creatorType)return jsonError(res,400,'Choose Islamic, Normal, or Mixed creator type.');
     let platformUrl=null;
     if(hasOther){if(!platform||!rawUrl)return jsonError(res,400,'Provide both the platform name and channel link.');try{const parsed=new URL(rawUrl);if(parsed.protocol!=='https:'||parsed.username||parsed.password)return jsonError(res,400,'Other platform link must be a valid HTTPS URL.');platformUrl=parsed.toString().slice(0,2048);}catch(_){return jsonError(res,400,'Add a valid HTTPS link for the other platform.');}}
     else if(platform||rawUrl)return jsonError(res,400,'Uncheck other-platform presence or provide both its name and link.');
@@ -422,7 +437,7 @@ app.post('/api/me/channel-application', requireAuth, requireActive, async (req,r
     const existing=await pool.query(`SELECT id,status,decision_note,created_at FROM channel_applications WHERE user_sub=$1 ORDER BY created_at DESC LIMIT 1`,[sub]);
     if(existing.rows[0]?.status==='pending')return jsonError(res,409,'You already have a pending channel application.',{application:existing.rows[0]});
     const id=crypto.randomUUID();
-    const saved=await pool.query(`INSERT INTO channel_applications(id,user_sub,channel_name,channel_type,other_platform_name,other_platform_url) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,channel_name,channel_type,other_platform_name,other_platform_url,status,decision_note,created_at`,[id,sub,name,type,platform,platformUrl]);
+    const saved=await pool.query(`INSERT INTO channel_applications(id,user_sub,channel_name,channel_type,creator_type,other_platform_name,other_platform_url) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,channel_name,channel_type,creator_type,other_platform_name,other_platform_url,status,decision_note,created_at`,[id,sub,name,type,creatorType,platform,platformUrl]);
     res.status(201).json({application:saved.rows[0]});
   } catch(error){if(error.code==='23505')return jsonError(res,409,'You already have a pending channel application.');next(error);}
 });
@@ -442,7 +457,7 @@ app.post('/api/me/profile', requireAuth, requireActive, requireChannel, async (r
     if (conflict.rowCount) return jsonError(res, 409, 'That handle is already taken / এই handle নেওয়া আছে।', { suggestedHandle: `${requestedHandle.slice(0, 24)}-${crypto.randomBytes(2).toString('hex')}` });
     if (!existing) return jsonError(res,403,'Channel approval is required before creating a channel profile.',{code:'channel_required'});
     const profile = await withTransaction(async client => {
-      const result = await client.query(`UPDATE profiles SET handle=$2,display_name=$3,bio=$4,avatar_url=COALESCE($5,avatar_url),cover_url=COALESCE($6,cover_url),updated_at=NOW() WHERE sub=$1 RETURNING sub,handle,display_name,bio,avatar_url,cover_url,channel_type,is_verified`,
+      const result = await client.query(`UPDATE profiles SET handle=$2,display_name=$3,bio=$4,avatar_url=COALESCE($5,avatar_url),cover_url=COALESCE($6,cover_url),updated_at=NOW() WHERE sub=$1 RETURNING sub,handle,display_name,bio,avatar_url,cover_url,channel_type,creator_type,is_verified`,
         [req.auth.session.sub, requestedHandle, displayName, bio, avatarUrl, coverUrl]);
       return result.rows[0];
     });
@@ -453,27 +468,27 @@ app.post('/api/me/profile', requireAuth, requireActive, requireChannel, async (r
 app.get('/api/channels', async (req, res, next) => {
   try {
     const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit || '50', 10) || 50));
-    const result = await pool.query(`SELECT p.handle,p.display_name,p.bio,p.avatar_url,p.cover_url,p.is_verified,p.channel_type,
+    const result = await pool.query(`SELECT p.handle,p.display_name,p.bio,p.avatar_url,p.cover_url,p.is_verified,p.channel_type,p.creator_type,
       (SELECT COUNT(*) FROM videos v WHERE v.owner_sub=p.sub AND v.visibility='Public' AND v.moderation_status='active')::bigint AS videos_count,
       (SELECT COALESCE(SUM(v.views_count),0) FROM videos v WHERE v.owner_sub=p.sub AND v.visibility='Public' AND v.moderation_status='active')::bigint AS views_count,
       (SELECT COUNT(*) FROM subscriptions s WHERE s.channel_sub=p.sub)::bigint AS subscribers_count,
       (SELECT MAX(v.created_at) FROM videos v WHERE v.owner_sub=p.sub AND v.visibility='Public' AND v.moderation_status='active') AS latest_video
       FROM profiles p JOIN app_users u ON u.google_sub=p.sub WHERE u.account_status='active' AND EXISTS(SELECT 1 FROM videos v WHERE v.owner_sub=p.sub AND v.visibility='Public' AND v.moderation_status='active')
       ORDER BY latest_video DESC LIMIT $1`, [limit]);
-    res.json({ channels: result.rows.map(row => ({ handle: row.handle, displayName: row.display_name, bio: row.bio, avatarUrl: row.avatar_url, isVerified:Boolean(row.is_verified), channelType:row.channel_type, videosCount: Number(row.videos_count), viewsCount: Number(row.views_count), subscribersCount: Number(row.subscribers_count) })) });
+    res.json({ channels: result.rows.map(row => ({ handle: row.handle, displayName: row.display_name, bio: row.bio, avatarUrl: row.avatar_url, isVerified:Boolean(row.is_verified), channelType:row.channel_type, creatorType:row.creator_type||'normal', videosCount: Number(row.videos_count), viewsCount: Number(row.views_count), subscribersCount: Number(row.subscribers_count) })) });
   } catch (error) { next(error); }
 });
 app.get('/api/channels/:handle', async (req, res, next) => {
   try {
     const handle = safeHandle(decodeURIComponent(req.params.handle || ''));
     if (!handle || handle !== req.params.handle.toLowerCase()) return jsonError(res, 400, 'Invalid handle.');
-    const found = await pool.query(`SELECT p.sub,p.handle,p.display_name,p.bio,p.avatar_url,p.cover_url,p.channel_type,p.is_verified,p.created_at,COUNT(DISTINCT s.subscriber_sub)::bigint AS subscribers_count
+    const found = await pool.query(`SELECT p.sub,p.handle,p.display_name,p.bio,p.avatar_url,p.cover_url,p.channel_type,p.creator_type,p.is_verified,p.created_at,COUNT(DISTINCT s.subscriber_sub)::bigint AS subscribers_count
       FROM profiles p JOIN app_users u ON u.google_sub=p.sub LEFT JOIN subscriptions s ON s.channel_sub=p.sub WHERE p.handle=$1 AND u.account_status='active' GROUP BY p.sub`, [handle]);
     if (!found.rowCount) return jsonError(res, 404, 'Channel not found / চ্যানেল পাওয়া যায়নি।');
     const row = found.rows[0];
     const auth = await loadSession(req);
     const [feed, subResult, playlistResult] = await Promise.all([
-      loadCards({ ownerSub: row.sub, userSub: auth?.session.sub, limit: MAX_LIST }),
+      loadCards({ ownerSub: row.sub, userSub: auth?.session.sub, viewerType: auth?.session.viewerType || 'normal', limit: MAX_LIST }),
       auth ? pool.query('SELECT 1 FROM subscriptions WHERE subscriber_sub=$1 AND channel_sub=$2', [auth.session.sub, row.sub]) : Promise.resolve({ rowCount: 0 }),
       pool.query(`SELECT p.id,p.name,p.description,COUNT(i.video_id)::bigint AS videos_count FROM playlists p LEFT JOIN playlist_items i ON i.playlist_id=p.id WHERE p.owner_sub=$1 AND p.is_creator_playlist=TRUE AND p.is_public=TRUE GROUP BY p.id ORDER BY p.updated_at DESC`,[row.sub])
     ]);
@@ -518,14 +533,14 @@ app.get('/api/videos', async (req, res, next) => {
     const sort = ['newest','views','popular','duration'].includes(String(req.query.sort || '')) ? String(req.query.sort) : '';
     if (durationMin > 604800 || durationMax > 604800 || (durationMin && durationMax && durationMin > durationMax)) return jsonError(res, 400, 'ভিডিওর সময়সীমা সঠিক নয়।');
     const auth = await loadSession(req);
-    const data = await loadCards({ query, category, classLevel, subject, syllabusTag, durationMin, durationMax, captionsOnly, sort, limit, offset, userSub: auth?.session.sub });
+    const data = await loadCards({ query, category, classLevel, subject, syllabusTag, durationMin, durationMax, captionsOnly, sort, limit, offset, userSub: auth?.session.sub, viewerType: auth?.session.viewerType || 'normal' });
     res.json(data);
   } catch (error) { next(error); }
 });
 app.get('/api/videos/subscriptions', requireAuth, async (req, res, next) => {
   try {
     const limit = Math.min(MAX_LIST, Math.max(1, Number.parseInt(req.query.limit || '48', 10) || 48));
-    res.json(await loadCards({ subscriptions: true, userSub: req.auth.session.sub, limit }));
+    res.json(await loadCards({ subscriptions: true, userSub: req.auth.session.sub, viewerType: req.auth.session.viewerType, limit }));
   } catch (error) { next(error); }
 });
 app.get('/api/videos/:id', requireAuth, requireActive, requireValidId, async (req, res, next) => {
@@ -533,7 +548,7 @@ app.get('/api/videos/:id', requireAuth, requireActive, requireValidId, async (re
     const video = await getVideo(req.params.id);
     if (!video) return jsonError(res, 404, 'Video not found / ভিডিও পাওয়া যায়নি।');
     const auth = req.auth;
-    if (!await canView(video, auth.session.sub)) return jsonError(res, 403, 'This video is private / ভিডিওটি private।');
+    if (!await canView(video, auth.session.sub, auth.session.viewerType || 'normal')) return jsonError(res, 403, 'This video is private / ভিডিওটি private।');
     // Sign the R2 URL directly; do not make a serial R2 HEAD request before playback starts.
     const state = await pool.query(`SELECT
       EXISTS(SELECT 1 FROM video_likes WHERE video_id=$1 AND user_sub=$2) AS liked,
@@ -577,7 +592,7 @@ app.post('/api/videos/:id/like', requireAuth, requireActive, requireValidId, asy
   try {
     const video = await getVideo(req.params.id);
     if (!video) return jsonError(res, 404, 'Video not found.');
-    if (!await canView(video, req.auth.session.sub)) return jsonError(res, 403, 'This video is private.');
+    if (!await canView(video, req.auth.session.sub, req.auth.session.viewerType || 'normal')) return jsonError(res, 403, 'This video is private.');
     const result = await withTransaction(async client => {
       await client.query('SELECT id FROM videos WHERE id=$1 FOR UPDATE', [video.id]);
       const existing = await client.query('SELECT 1 FROM video_likes WHERE video_id=$1 AND user_sub=$2', [video.id, req.auth.session.sub]);
@@ -595,7 +610,7 @@ app.post('/api/videos/:id/like', requireAuth, requireActive, requireValidId, asy
 app.post('/api/videos/:id/feedback', requireAuth, requireActive, requireValidId, async(req,res,next)=>{
   try{
     const video=await getVideo(req.params.id);
-    if(!video||!await canView(video,req.auth.session.sub))return jsonError(res,404,'Video not found.');
+    if(!video||!await canView(video,req.auth.session.sub,req.auth.session.viewerType||'normal'))return jsonError(res,404,'Video not found.');
     const feedback=String(req.body?.feedback||'');
     if(!['interested','not_interested','clear'].includes(feedback))return jsonError(res,400,'Choose interested, not interested, or clear.');
     if(feedback==='clear')await pool.query('DELETE FROM video_feedback WHERE video_id=$1 AND user_sub=$2',[video.id,req.auth.session.sub]);
@@ -659,8 +674,8 @@ app.post('/api/notifications/read-all', requireAuth, requireActive, async(req,re
   try{await pool.query('UPDATE user_notifications SET read_at=NOW() WHERE recipient_sub=$1 AND read_at IS NULL',[req.auth.session.sub]);res.json({ok:true});}catch(error){next(error);}
 });
 
-app.get('/api/me/history', requireAuth, async (req, res, next) => {
-  try { res.json(await loadCards({ history: true, userSub: req.auth.session.sub, limit: Math.min(MAX_LIST, Number(req.query.limit) || 48) })); }
+app.get('/api/history', requireAuth, async (req, res, next) => {
+  try { res.json(await loadCards({ history: true, userSub: req.auth.session.sub, viewerType: req.auth.session.viewerType, limit: Math.min(MAX_LIST, Number(req.query.limit) || 48) })); }
   catch (error) { next(error); }
 });
 app.delete('/api/me/history', requireAuth, requireActive, async (req, res, next) => {
@@ -715,7 +730,7 @@ app.get('/api/playlists/:id', async (req, res, next) => {
     const result = await pool.query('SELECT * FROM playlists WHERE id=$1', [req.params.id]);
     const playlist = result.rows[0];
     if (!playlist || (!playlist.is_public && playlist.owner_sub !== auth?.session.sub)) return jsonError(res, 404, 'Playlist not found.');
-    const videos = await loadCards({ playlistId: playlist.id, ownerSub: playlist.owner_sub === auth?.session.sub ? playlist.owner_sub : null, userSub: auth?.session.sub, limit: MAX_LIST });
+    const videos = await loadCards({ playlistId: playlist.id, ownerSub: playlist.owner_sub === auth?.session.sub ? playlist.owner_sub : null, userSub: auth?.session.sub, viewerType: auth?.session.viewerType || 'normal', limit: MAX_LIST });
     res.json({ playlist: { id: playlist.id, name: playlist.name, description: playlist.description, isPublic: playlist.is_public, isWatchLater: playlist.is_watch_later, isCreatorPlaylist:Boolean(playlist.is_creator_playlist) }, videos: videos.videos });
   } catch (error) { next(error); }
 });
@@ -723,7 +738,7 @@ app.post('/api/me/watch-later/:id', requireAuth, requireActive, requireValidId, 
   try {
     const video = await getVideo(req.params.id);
     if (!video) return jsonError(res, 404, 'Video not found.');
-    if (!await canView(video, req.auth.session.sub)) return jsonError(res, 403, 'This video is private.');
+    if (!await canView(video, req.auth.session.sub, req.auth.session.viewerType || 'normal')) return jsonError(res, 403, 'This video is private.');
     const result = await withTransaction(async client => {
       const playlistId = await ensureWatchLater(req.auth.session.sub, client);
       await client.query('SELECT id FROM playlists WHERE id=$1 FOR UPDATE', [playlistId]);
@@ -744,7 +759,7 @@ app.post('/api/playlists/:id/videos', requireAuth, requireActive, requireValidId
     const actualVideo = await getVideo(req.body?.videoId);
     if (!playlist || playlist.owner_sub !== req.auth.session.sub) return jsonError(res, 404, 'Playlist not found.');
     if (!actualVideo) return jsonError(res, 404, 'Video not found.');
-    if (!await canView(actualVideo, req.auth.session.sub)) return jsonError(res, 403, 'This video is private.');
+    if (!await canView(actualVideo, req.auth.session.sub, req.auth.session.viewerType || 'normal')) return jsonError(res, 403, 'This video is private.');
     await pool.query('INSERT INTO playlist_items (playlist_id,video_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [playlist.id, actualVideo.id]);
     await pool.query('UPDATE playlists SET updated_at=NOW() WHERE id=$1', [playlist.id]);
     res.json({ ok: true });
@@ -802,6 +817,8 @@ app.post('/api/upload-url', requireAuth, requireActive, requireChannel, async (r
     const syllabusTags = normalizeSyllabusTags(body.syllabusTags);
     const creatorPlaylistId=body.creatorPlaylistId?String(body.creatorPlaylistId):null;
     if(creatorPlaylistId){if(!validUuid(creatorPlaylistId))return jsonError(res,400,'Invalid creator playlist.');const owned=await pool.query('SELECT id FROM playlists WHERE id=$1 AND owner_sub=$2 AND is_creator_playlist=TRUE',[creatorPlaylistId,req.auth.session.sub]);if(!owned.rowCount)return jsonError(res,404,'Creator playlist not found.');}
+    const isIslamic = resolveIslamicFlag(req.auth.profile?.creator_type || 'normal', body.isIslamic);
+    if (isIslamic === null) return jsonError(res, 400, 'Choose whether this video is Islamic for a Mixed creator channel.');
     const durationSeconds = body.durationSeconds === undefined || body.durationSeconds === '' ? 0 : Number(body.durationSeconds);
     if (!title) return jsonError(res, 400, 'A video title is required.');
     if (!category) return jsonError(res, 400, 'ভিডিওর বিভাগ নির্বাচন করুন।');
@@ -811,8 +828,8 @@ app.post('/api/upload-url', requireAuth, requireActive, requireChannel, async (r
     const id = crypto.randomUUID();
     const objectName = `videos/${id}-${filename}`;
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-    await pool.query(`INSERT INTO upload_intents (id,owner_sub,object_name,content_type,expected_size,title,description,category,visibility,class_level,subject,syllabus_tags,duration_seconds,expires_at,creator_playlist_id)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, [id, req.auth.session.sub, objectName, contentType, size, title, safeText(body.description, 5000), category, visibility, classLevel, subject, syllabusTags, Math.round(durationSeconds), expiresAt, creatorPlaylistId]);
+    await pool.query(`INSERT INTO upload_intents (id,owner_sub,object_name,content_type,expected_size,title,description,category,visibility,class_level,subject,syllabus_tags,duration_seconds,is_islamic,expires_at,creator_playlist_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`, [id, req.auth.session.sub, objectName, contentType, size, title, safeText(body.description, 5000), category, visibility, classLevel, subject, syllabusTags, Math.round(durationSeconds), isIslamic, expiresAt, creatorPlaylistId]);
     const uploadUrl = await getSignedUrl(s3, new PutObjectCommand({ Bucket: R2_BUCKET, Key: objectName, ContentType: contentType }), { expiresIn: 30 * 60 });
     res.json({ uploadUrl, objectName, id, expiresAt: expiresAt.toISOString() });
   } catch (error) { next(error); }
@@ -846,9 +863,9 @@ app.post('/api/finish', requireAuth, requireActive, requireChannel, async (req, 
     if (head.ContentType && head.ContentType !== intent.content_type) return jsonError(res, 400, 'Uploaded file type does not match the intent.');
     const profile = await loadProfile(req.auth.session.sub);
     const inserted = await withTransaction(async client => {
-      const result = await client.query(`INSERT INTO videos (id,object_name,owner_sub,title,description,category,visibility,size,class_level,subject,syllabus_tags,duration_seconds,created_at,legacy)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),FALSE) RETURNING *`,
-        [intent.id, intent.object_name, req.auth.session.sub, title, description, category, visibility, Number(head.ContentLength), classLevel, subject, syllabusTags, Math.round(durationSeconds)]);
+      const result = await client.query(`INSERT INTO videos (id,object_name,owner_sub,title,description,category,visibility,size,class_level,subject,syllabus_tags,duration_seconds,is_islamic,islamic_certification_status,created_at,legacy)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW(),FALSE) RETURNING *`,
+        [intent.id, intent.object_name, req.auth.session.sub, title, description, category, visibility, Number(head.ContentLength), classLevel, subject, syllabusTags, Math.round(durationSeconds), Boolean(intent.is_islamic), intent.is_islamic ? 'pending' : 'not_applicable']);
       if(intent.creator_playlist_id) await client.query(`INSERT INTO playlist_items(playlist_id,video_id) SELECT id,$2 FROM playlists WHERE id=$1 AND owner_sub=$3 AND is_creator_playlist=TRUE ON CONFLICT DO NOTHING`,[intent.creator_playlist_id,intent.id,req.auth.session.sub]);
       await client.query('DELETE FROM upload_intents WHERE id=$1', [intent.id]);
       return result.rows[0];
@@ -865,23 +882,33 @@ app.delete('/api/videos/:id', requireAuth, requireActive, requireValidId, async 
     const video = await getVideo(req.params.id);
     if (!video) return jsonError(res, 404, 'Video not found.');
     if (!video.owner_sub || video.owner_sub !== req.auth.session.sub) return jsonError(res, 403, 'Only the owner can delete this video.');
-    if (!video.object_name || !/^videos\/[0-9a-f-]+-[a-zA-Z0-9._-]+$/i.test(video.object_name)) return jsonError(res, 409, 'Video object is invalid; not deleted.');
-    await pool.query('DELETE FROM videos WHERE id=$1 AND owner_sub=$2', [video.id, req.auth.session.sub]);
-    await Promise.all([video.object_name, video.thumbnail_object_name].filter(Boolean).map(key => s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: key })).catch(error => console.error('Deleted Neon metadata but could not remove R2 object:', error.message))));
-    res.json({ ok: true });
+    if (!video.object_name || !video.object_name.startsWith(`videos/${video.id}-`) || !/^videos\/[0-9a-f-]+-[a-zA-Z0-9._-]+$/i.test(video.object_name)) return jsonError(res, 409, 'Video object is invalid; not deleted.');
+    if (video.thumbnail_object_name && !new RegExp(`^thumbnails/${video.id}-[a-f0-9]{24}\\.(?:jpg|png|webp)$`).test(video.thumbnail_object_name)) return jsonError(res, 409, 'Thumbnail object is invalid; not deleted.');
+    try {
+      const deletions = await Promise.allSettled([video.object_name, video.thumbnail_object_name].filter(Boolean).map(key => s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: key }))));
+      const failed = deletions.find(result => result.status === 'rejected');
+      if (failed) throw failed.reason;
+    } catch (error) {
+      console.error('Could not permanently delete all R2 objects:', error.message);
+      return jsonError(res, 502, 'R2 deletion failed. Video metadata was retained; retry permanent delete.');
+    }
+    const deleted = await pool.query('DELETE FROM videos WHERE id=$1 AND owner_sub=$2 RETURNING id', [video.id, req.auth.session.sub]);
+    if (!deleted.rowCount) return jsonError(res, 404, 'Video not found.');
+    res.json({ ok: true, permanentlyDeleted: true });
   } catch (error) { next(error); }
 });
 
 require('./learning')({ app, pool, withTransaction, s3, bucket: R2_BUCKET, requireAuth, requireActive, requireValidId, getVideo, canView, loadSession, safeText, sha, objectHead });
-require('./admin')({ app, requireAuth, requireActive, loadSession, notifyUser:sendNotification });
+require('./admin')({ app, requireAuth, requireActive, loadSession, notifyUser:sendNotification, getVideo, signedVideoUrl });
 require('./creator-studio')({ app, pool, requireAuth, requireActive, requireChannel, requireValidId, validUuid, safeText, normalizeCategory, normalizeVisibility });
 
 io.use(async (socket, next) => {
   try {
     const raw = verifyValue(parseCookieHeader(socket.handshake.headers.cookie || '').vh_session);
     if (!raw) { socket.data.sub = null; return next(); }
-    const result = await pool.query('SELECT sub FROM sessions WHERE token_hash=$1 AND expires_at>NOW()', [sha(raw)]);
+    const result = await pool.query('SELECT s.sub,u.viewer_type FROM sessions s JOIN app_users u ON u.google_sub=s.sub WHERE s.token_hash=$1 AND s.expires_at>NOW()', [sha(raw)]);
     socket.data.sub = result.rows[0]?.sub || null;
+    socket.data.viewerType = result.rows[0]?.viewer_type || 'normal';
     next();
   } catch (error) { next(error); }
 });
@@ -891,7 +918,7 @@ io.on('connection', socket => {
     try {
       if (!socket.data.sub || !validVideoId(id)) return;
       const video = await getVideo(id);
-      if (!video || !await canView(video, socket.data.sub)) return;
+      if (!video || !await canView(video, socket.data.sub, socket.data.viewerType || 'normal')) return;
       if (socket.data.videoRoom) socket.leave(socket.data.videoRoom);
       socket.data.videoRoom = `video:${id}`;
       socket.join(socket.data.videoRoom);

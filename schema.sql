@@ -6,6 +6,12 @@ CREATE TABLE IF NOT EXISTS app_users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS viewer_type TEXT NOT NULL DEFAULT 'normal';
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'app_users_viewer_type_check') THEN
+    ALTER TABLE app_users ADD CONSTRAINT app_users_viewer_type_check CHECK (viewer_type IN ('islamic','normal'));
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS profiles (
   sub TEXT PRIMARY KEY REFERENCES app_users(google_sub) ON DELETE CASCADE,
@@ -44,6 +50,20 @@ CREATE TABLE IF NOT EXISTS videos (
 );
 ALTER TABLE videos ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ;
 ALTER TABLE videos ADD COLUMN IF NOT EXISTS comments_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE videos
+  ADD COLUMN IF NOT EXISTS is_islamic BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS islamic_certification_status TEXT NOT NULL DEFAULT 'not_applicable',
+  ADD COLUMN IF NOT EXISTS islamic_reviewed_by_email TEXT,
+  ADD COLUMN IF NOT EXISTS islamic_review_note TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS islamic_reviewed_at TIMESTAMPTZ;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'videos_islamic_certification_status_check') THEN
+    ALTER TABLE videos ADD CONSTRAINT videos_islamic_certification_status_check
+      CHECK (islamic_certification_status IN ('not_applicable','pending','approved','rejected'));
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS videos_islamic_review_idx
+  ON videos (created_at ASC) WHERE is_islamic=TRUE AND islamic_certification_status='pending';
 CREATE INDEX IF NOT EXISTS videos_public_feed_idx ON videos (created_at DESC) WHERE visibility = 'Public';
 CREATE INDEX IF NOT EXISTS videos_owner_created_idx ON videos (owner_sub, created_at DESC);
 CREATE INDEX IF NOT EXISTS videos_category_created_idx ON videos (category, created_at DESC) WHERE visibility = 'Public';
@@ -310,7 +330,8 @@ ALTER TABLE upload_intents
   ADD COLUMN IF NOT EXISTS class_level TEXT NOT NULL DEFAULT '',
   ADD COLUMN IF NOT EXISTS subject TEXT NOT NULL DEFAULT '',
   ADD COLUMN IF NOT EXISTS syllabus_tags TEXT[] NOT NULL DEFAULT '{}',
-  ADD COLUMN IF NOT EXISTS duration_seconds INTEGER NOT NULL DEFAULT 0;
+  ADD COLUMN IF NOT EXISTS duration_seconds INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS is_islamic BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS videos_public_education_idx
   ON videos (class_level, subject, duration_seconds, created_at DESC)
   WHERE visibility='Public' AND moderation_status='active';
@@ -414,10 +435,16 @@ CREATE INDEX IF NOT EXISTS moderation_appeals_status_created_idx ON moderation_a
 -- Approved creator channels, creator playlists, verification, viewer feedback, and realtime notifications.
 ALTER TABLE profiles
   ADD COLUMN IF NOT EXISTS channel_type TEXT NOT NULL DEFAULT 'general',
+  ADD COLUMN IF NOT EXISTS creator_type TEXT NOT NULL DEFAULT 'normal',
   ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT FALSE;
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'profiles_channel_type_check') THEN
     ALTER TABLE profiles ADD CONSTRAINT profiles_channel_type_check CHECK (channel_type IN ('general','personal','education','business','organization','other'));
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'profiles_creator_type_check') THEN
+    ALTER TABLE profiles ADD CONSTRAINT profiles_creator_type_check CHECK (creator_type IN ('islamic','normal','mixed'));
   END IF;
 END $$;
 
@@ -429,6 +456,7 @@ CREATE TABLE IF NOT EXISTS channel_applications (
   user_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE CASCADE,
   channel_name TEXT NOT NULL CHECK (char_length(channel_name) BETWEEN 2 AND 120),
   channel_type TEXT NOT NULL CHECK (channel_type IN ('personal','education','business','organization','other')),
+  creator_type TEXT NOT NULL DEFAULT 'normal' CHECK (creator_type IN ('islamic','normal','mixed')),
   other_platform_name TEXT NOT NULL DEFAULT '',
   other_platform_url TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
@@ -437,6 +465,12 @@ CREATE TABLE IF NOT EXISTS channel_applications (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   reviewed_at TIMESTAMPTZ
 );
+ALTER TABLE channel_applications ADD COLUMN IF NOT EXISTS creator_type TEXT NOT NULL DEFAULT 'normal';
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'channel_applications_creator_type_check') THEN
+    ALTER TABLE channel_applications ADD CONSTRAINT channel_applications_creator_type_check CHECK (creator_type IN ('islamic','normal','mixed'));
+  END IF;
+END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS channel_applications_one_pending_per_user_idx
   ON channel_applications (user_sub) WHERE status='pending';
 CREATE INDEX IF NOT EXISTS channel_applications_review_idx ON channel_applications (status,created_at ASC);

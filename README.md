@@ -5,12 +5,16 @@ Node.js/Express-ভিত্তিক বাংলা-first video sharing site�
 ## Feature set
 
 - Google OAuth sign-in, Neon-এ user/profile/session data এবং public creator channel
+- Viewer mode: **Normal** viewers সব visibility/moderation-eligible public video দেখতে পারেন; **Islamic** viewers কেবল Islamic হিসেবে creator-marked এবং Admin/Moderator-approved public video feed, search, channel, playlist ও playback-এ পান। নতুন/পুরনো account-এর default Normal; account menu থেকে mode বদলানো যায়।
+- Creator channel type: **Islamic**, **Normal** বা **Mixed**। Islamic creator-এর সব upload certification review-তে যায়; Normal creator Islamic হিসেবে mark করতে পারে না; Mixed creator প্রতি video-তে Islamic flag বেছে নেয়। Flag মানেই certification নয়—approval না হওয়া পর্যন্ত Islamic viewers-এর কাছে ভিডিওটি থাকবে না।
 - Direct-to-Cloudflare R2 video upload with progress and signed URLs; uploaders must explicitly select Private/Unlisted/Public visibility (no default), and Education videos require class/level, subject and at least one syllabus tag
 - Neon-এ video metadata, likes, unique visitor views, comments/replies, creator subscriptions, playlists, Watch Later, watch history ও upload intents
 - Socket.IO দিয়ে video page-এ live like/view/comment counts এবং channel-এ live subscriber count
 - Home/discovery feed, category/search, subscription feed, recommendations, channel pages, history ও playlists
 - **Creator Studio** (`/studio`, account menu থেকে নতুন tab-এ খোলে): content library ও metadata/thumbnail/visibility/scheduled publish/comments controls; upload intents; comments reply/pin/hide; views, subscriber growth, CTR, watch time ও sampled retention analytics; audience activity; playlist/series ordering; channel avatar/cover/profile customization; creator notifications/resources; estimated creator earnings ও copyright appeals
+- Creator Studio video editor থেকে video ও thumbnail-এর permanent delete; R2 deletion ব্যর্থ হলে database record রাখা হয় এবং retry করা যায়।
 - **Role-based fullscreen Admin Panel** (`/admin`, account menu থেকে নতুন tab): unified reports/video appeals/copyright-strike appeal queue, searchable and paginated content/user/campaign/audit views, atomic report-to-moderation actions, creator approval, reversible channel/video moderation, campaign preview/editing and time-range CTR analytics, staff roles, platform settings ও audit log
+- Admin/Moderator panel-এ Islamic certification review queue; approve/reject সিদ্ধান্ত note-সহ audit log-এ যায়। এটি Atharo-র অভ্যন্তরীণ moderation decision—কোনো ধর্মীয় কর্তৃপক্ষের endorsement নয়।
 - Admin-controlled sponsored cards in feed/watch page. Ads global default-এ বন্ধ এবং নতুন campaigns Paused থাকে
 - Responsive Bengali UI, mobile navigation, share link ও owner-only video deletion
 - Education-first P0 tools: class/subject/syllabus metadata, indexed advanced search filters, Bengali/English WebVTT captions with searchable transcript, creator thumbnails, duration badges, timestamp chapters, playback-speed control, signed direct-to-R2 playback, continue-watching, sampled watch-time/retention, content reports and moderation appeals

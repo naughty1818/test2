@@ -224,6 +224,10 @@
     mobileLanguageSelect.value=languageSelect?.value||'bn';
     mobileLanguageSelect.addEventListener('change',()=>{if(!languageSelect)return;languageSelect.value=mobileLanguageSelect.value;languageSelect.dispatchEvent(new Event('change'));});
     menu.append($('label',{class:'account-language-control'},[$('span',{text:'Language'}),mobileLanguageSelect]));
+    const viewerTypeControl=$('select',{class:'language-control-select','aria-label':'Viewer type'},[$('option',{value:'normal',text:'Normal · সব ভিডিও'}),$('option',{value:'islamic',text:'Islamic · certified ভিডিও'})]);
+    viewerTypeControl.value=state.session.user.viewerType||'normal';
+    viewerTypeControl.addEventListener('change',async()=>{const previous=state.session.user.viewerType||'normal';viewerTypeControl.disabled=true;try{const saved=await jsonFetch('/api/me/preferences',{method:'PATCH',body:{viewerType:viewerTypeControl.value}});state.session.user.viewerType=saved.viewerType;notify(saved.viewerType==='islamic'?'Islamic mode চালু হয়েছে।':'Normal mode চালু হয়েছে।');safeRenderRoute();}catch(error){viewerTypeControl.value=state.session.user.viewerType||previous;notify(error.message,'error');}finally{viewerTypeControl.disabled=false;}});
+    menu.append($('label',{class:'account-language-control'},[$('span',{text:'ভিডিও preference · Viewer type'}),viewerTypeControl]));
     (state.session.profile ? [['আমার চ্যানেল', '/channel/me'], ['Creator Studio', '/studio'], ['সাবস্ক্রিপশন', '/subscriptions'], ['প্লেলিস্ট', '/playlists'], ['ভিডিও আপলোড', '/upload']] : [['চ্যানেল তৈরি করুন', '/studio'], ['ভিডিও দেখুন', '/'], ['প্লেলিস্ট', '/playlists']]).forEach(([label, href]) => menu.append($('a', href === '/studio' ? { href, target: '_blank', rel: 'noopener noreferrer', text: label } : { href, 'data-route': '', text: label })));
     if (state.admin?.role) menu.append($('a', { href: '/admin', target: '_blank', rel: 'noopener noreferrer', text: 'Admin control panel' }));
     menu.append($('button', { type: 'button', class: 'logout-item', text: 'লগআউট', onClick: async () => {
@@ -293,6 +297,7 @@
     const copy = $('div', { class: 'video-copy' });
     copy.append($('a', { href: watchPath, 'data-route': '', class: 'video-title', text: text(video.title, 'শিরোনামহীন ভিডিও') }));
     const creatorName=$('a',{href:creatorLink,'data-route':'',class:'creator-name',text:ownerName});const creatorNameRow=$('div',{class:'creator-name-row'},[creatorName]);if(video.ownerVerified)creatorNameRow.append(verifiedMark());copy.append(creatorNameRow);
+    if(video.isIslamic&&video.islamicCertificationStatus==='approved')copy.append($('span',{class:'console-badge good',text:'Islamic certified'}));
     const meta = $('div', { class: 'video-meta' });
     meta.append($('span', { text: number(video.viewsCount) + ' ভিউ' }), $('span', { class: 'meta-dot' }), $('span', { text: fmtDate(video.created) }));
     copy.append(meta);
@@ -903,6 +908,11 @@
     title.addEventListener('input', () => { titleCount.textContent = number(title.value.length) + '/১০০ অক্ষর'; });
     const description = $('textarea', { maxlength: '5000', placeholder: 'ভিডিওটি নিয়ে কয়েকটি কথা লিখো', rows: '4' });
     const category = $('select', { required: '', 'aria-label': 'ভিডিওর বিভাগ বেছে নাও' }); category.append($('option', { value: '', text: 'বিভাগ বেছে নাও', selected: '' })); categories.slice(1).forEach(item => category.append($('option', { value: item.value, text: item.label })));
+    const creatorType=state.session.profile?.creatorType||'normal';
+    const islamicVideo=$('input',{type:'checkbox',checked:creatorType==='islamic'});islamicVideo.disabled=creatorType!=='mixed';
+    const islamicHelp=creatorType==='mixed'?'ভিডিওটি Islamic হলে চিহ্নিত করো; Islamic-only দর্শকের জন্য Admin/Moderator approval লাগবে.':creatorType==='islamic'?'Islamic creator channel-এর ভিডিওগুলো review-এর জন্য যাবে.':'Normal creator channel-এ ভিডিওগুলো Islamic হিসেবে চিহ্নিত করা যাবে না.';
+    const islamicField=$('label',{class:'form-field'},[$('span',{text:'ভিডিওটি Islamic?'}),$('span',{class:'console-toggle'},[islamicVideo,$('span',{text:islamicVideo.checked?'হ্যাঁ':'না'})]),$('small',{text:islamicHelp})]);
+    islamicVideo.addEventListener('change',()=>{const label=islamicField.querySelector('.console-toggle span');if(label)label.textContent=islamicVideo.checked?'হ্যাঁ':'না';});
     const visibility = $('select', { required: '', 'aria-label': 'কে ভিডিওটি দেখতে পাবে' }); visibility.append($('option', { value: '', text: 'নির্বাচন করুন', selected: '' })); [['Private','শুধু তুমি — Private'],['Unlisted','লিংক থাকলে — Unlisted'],['Public','সবার জন্য — Public']].forEach(([value,label]) => visibility.append($('option', { value, text: label })));
     const creatorPlaylist=$('select');creatorPlaylist.append($('option',{value:'',text:'No channel playlist'}));jsonFetch('/api/creator/playlists').then(data=>(data.playlists||[]).forEach(pl=>creatorPlaylist.append($('option',{value:pl.id,text:pl.name})))).catch(()=>{});
     const classLevel = $('input', { type: 'text', maxlength: '40', placeholder: 'যেমন: SSC, HSC, Class 8, University' });
@@ -920,7 +930,7 @@
     const progressWrap = $('div', { class: 'upload-progress', hidden: true }); const progressHead = $('div', {}, [$('span', { text: 'ভিডিও Cloudflare R2-তে যাচ্ছে' }), $('strong', { text: '০%' })]);
     const progressTrack = $('div', { class: 'progress-track' }, [$('span', { style: { width: '0%' } })]); progressWrap.append(progressHead, progressTrack);
     const notice = $('div', { class: 'notice', hidden: true }); const footer = $('div', { class: 'upload-footer' }, [$('span', { text: 'Upload করতে visibility বেছে নাও—কোনো default নেই।' }), $('button', { type: 'submit', class: 'primary-cta', text: '↑  ভিডিও আপলোড করো' })]);
-    const submit = footer.querySelector('button'); form.append(drop, titleField, field('বিবরণ · ঐচ্ছিক', description, 'সর্বোচ্চ ৫,০০০ অক্ষর'), field('বিভাগ *', category), educationFields, field('কে ভিডিওটি দেখতে পাবে? *', visibility), field('Channel playlist · optional',creatorPlaylist), field('Custom thumbnail · ঐচ্ছিক', thumbnailInput, 'JPG, PNG বা WebP · সর্বোচ্চ ৫ MB'), field('Captions · ঐচ্ছিক', captionInput, 'WEBVTT subtitle ফাইল'), field('Caption language', captionLanguage), progressWrap, notice, footer);
+    const submit = footer.querySelector('button'); form.append(drop, titleField, field('বিবরণ · ঐচ্ছিক', description, 'সর্বোচ্চ ৫,০০০ অক্ষর'), field('বিভাগ *', category), educationFields, islamicField, field('কে ভিডিওটি দেখতে পাবে? *', visibility), field('Channel playlist · optional',creatorPlaylist), field('Custom thumbnail · ঐচ্ছিক', thumbnailInput, 'JPG, PNG বা WebP · সর্বোচ্চ ৫ MB'), field('Captions · ঐচ্ছিক', captionInput, 'WEBVTT subtitle ফাইল'), field('Caption language', captionLanguage), progressWrap, notice, footer);
     const supported = file => file && (file.type.startsWith('video/') || ['mp4','mov','m4v','webm','mkv','avi','wmv','mpeg','mpg','3gp','flv'].includes(file.name.toLowerCase().split('.').pop()));
     const chooseFile = file => { if (!file) return; if (!supported(file)) { notify('সমর্থিত video format-এর একটি file বেছে নাও।', 'error'); return; } if (file.size > state.config.maxFileMb * 1024 * 1024) { notify('ফাইলটি ' + number(state.config.maxFileMb) + ' MB-এর চেয়ে বড়।', 'error'); return; } fileState.file = file; dropTitle.textContent = file.name; dropHelp.textContent = fmtSize(file.size) + ' · Cloudflare R2-তে upload হবে'; const objectUrl=URL.createObjectURL(file),probe=document.createElement('video'); probe.preload='metadata'; probe.src=objectUrl; probe.addEventListener('loadedmetadata',()=>{if(Number.isFinite(probe.duration))fileState.durationSeconds=Math.min(604800,Math.round(probe.duration));URL.revokeObjectURL(objectUrl);},{once:true}); probe.addEventListener('error',()=>URL.revokeObjectURL(objectUrl),{once:true}); if (!title.value) { title.value = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ').slice(0, 100); title.dispatchEvent(new Event('input')); } notice.hidden = true; };
     fileInput.addEventListener('change', () => chooseFile(fileInput.files?.[0]));
@@ -935,7 +945,7 @@
       if (!title.value.trim()) { title.focus(); return; }
       submit.disabled = true; fileInput.disabled = true; progressWrap.hidden = false; notice.hidden = false; notice.className = 'notice notice-warn'; notice.textContent = 'নিরাপদ upload link নেওয়া হচ্ছে…';
       try {
-        const metadata={filename:file.name,contentType:file.type||'video/mp4',size:file.size,title:title.value.trim(),description:description.value.trim(),category:category.value,visibility:visibility.value,classLevel:classLevel.value,subject:subject.value,syllabusTags:syllabusTags.value.split(',').map(x=>x.trim()).filter(Boolean),durationSeconds:fileState.durationSeconds,creatorPlaylistId:creatorPlaylist.value||null};
+        const metadata={filename:file.name,contentType:file.type||'video/mp4',size:file.size,title:title.value.trim(),description:description.value.trim(),category:category.value,visibility:visibility.value,classLevel:classLevel.value,subject:subject.value,syllabusTags:syllabusTags.value.split(',').map(x=>x.trim()).filter(Boolean),durationSeconds:fileState.durationSeconds,creatorPlaylistId:creatorPlaylist.value||null,isIslamic:islamicVideo.checked};
         const preflight = await jsonFetch('/api/upload-url', { method: 'POST', body: metadata });
         await putFile(preflight.uploadUrl, file, percent => { progressHead.lastElementChild.textContent = number(percent) + '%'; progressTrack.firstElementChild.style.width = percent + '%'; }, file.type || 'video/mp4');
         notice.className = 'notice notice-success'; notice.textContent = 'ভিডিও সংরক্ষণ হচ্ছে…';
