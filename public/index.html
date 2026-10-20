@@ -41,6 +41,7 @@
           <a href="/search" data-route data-nav="search" class="nav-item"><span aria-hidden="true">⌕</span><span>খুঁজে দেখো</span></a>
           <a href="/subscriptions" data-route data-nav="subscriptions" class="nav-item"><span aria-hidden="true">▤</span><span>সাবস্ক্রিপশন</span></a>
           <a href="/channels" data-route data-nav="channels" class="nav-item"><span aria-hidden="true">◉</span><span>চ্যানেল</span></a>
+          <a href="/premium" data-route data-nav="premium" class="nav-item"><span aria-hidden="true">◇</span><span>Premium সিরিজ</span></a>
         </nav>
         <div class="sidebar-divider"></div>
         <div class="sidebar-label">তোমার লাইব্রেরি</div>
@@ -63,7 +64,7 @@
       <a href="/" data-route data-mobile-nav="home"><span>⌂</span><span>হোম</span></a>
       <a href="/subscriptions" data-route data-mobile-nav="subscriptions"><span>▤</span><span>সাবস্ক্রিপশন</span></a>
       <a href="/upload" data-route data-mobile-nav="upload"><span class="mobile-upload">↑</span><span>আপলোড</span></a>
-      <a href="/playlists" data-route data-mobile-nav="playlists"><span>▣</span><span>লাইব্রেরি</span></a>
+          <a href="/playlists" data-route data-mobile-nav="playlists"><span>▣</span><span>লাইব্রেরি</span></a>
     </nav>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -186,7 +187,7 @@
   function updateNav(path) {
     document.querySelectorAll('[data-nav]').forEach(link => {
       const target = link.dataset.nav;
-      const active = target === 'home' ? path === '/' : target === 'search' ? path.startsWith('/search') : target === 'upload' ? path === '/upload' : target === 'subscriptions' ? path.startsWith('/subscriptions') : target === 'history' ? path.startsWith('/history') : target === 'playlists' ? path.startsWith('/playlists') || path.startsWith('/playlist/') : target === 'channels' ? path.startsWith('/channels') || (path.startsWith('/channel/') && path !== '/channel/me') : target === 'my-channel' ? path === '/channel/me' : false;
+      const active = target === 'home' ? path === '/' : target === 'search' ? path.startsWith('/search') : target === 'upload' ? path === '/upload' : target === 'subscriptions' ? path.startsWith('/subscriptions') : target === 'history' ? path.startsWith('/history') : target === 'playlists' ? path.startsWith('/playlists') || path.startsWith('/playlist/') : target === 'premium' ? path.startsWith('/premium') : target === 'channels' ? path.startsWith('/channels') || (path.startsWith('/channel/') && path !== '/channel/me') : target === 'my-channel' ? path === '/channel/me' : false;
       link.classList.toggle('nav-item-active', active);
     });
     document.querySelectorAll('[data-mobile-nav]').forEach(link => {
@@ -973,6 +974,15 @@
     return new Promise((resolve, reject) => { const xhr = new XMLHttpRequest(); xhr.open('PUT', url); xhr.setRequestHeader('Content-Type', contentType); xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress(Math.round(event.loaded / event.total * 100)); }; xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error('R2 upload failed (HTTP ' + xhr.status + '). CORS policy পরীক্ষা করো।')); xhr.onerror = () => reject(new Error('Network/CORS সমস্যায় upload থেমে গেছে।')); xhr.send(file); });
   }
   function renderNotFound() { setPage([emptyState('এই পেজটি পাওয়া যায়নি', 'লিংকটি পরীক্ষা করে আবার চেষ্টা করো।', 'Atharo | আঠারো হোম', '/')]); }
+  async function renderPremium(token) {
+    updateNav('/premium');
+    const page=$('section',{class:'premium-page'}), hero=$('header',{class:'premium-hero'},[$('div',{},[$('span',{class:'section-kicker premium-kicker',text:'ATHARO · PREMIUM'}),$('h1',{text:'Creator-এর সেরা সিরিজ, একবার কিনে পুরোটা দেখো'}),$('p',{text:'স্বতন্ত্র creator playlist কিনে নিজের library-তে রাখো।'}),$('div',{class:'premium-trust-row'},[$('span',{text:'◇ একবারের purchase'}),$('span',{text:'▣ পুরো playlist access'}),$('span',{text:'↗ creator-কে সরাসরি support'})])])]);
+    page.append(hero); const shelf=$('div',{class:'premium-catalog'}); page.append(shelf); setPage([page]);
+    try { const data=await jsonFetch('/api/premium/playlists'); if(token!==state.routeToken)return; shelf.replaceChildren(); const lists=data.playlists||[]; if(!lists.length){shelf.append(emptyState('এখনো কোনো premium series প্রকাশিত হয়নি','Creator Studio থেকে premium playlist প্রকাশ হলে এখানে দেখা যাবে।','Creator Studio','/studio'));return;} lists.forEach(p=>{const card=$('article',{class:'premium-card'},[$('div',{class:'premium-card-top'},[$('span',{class:'premium-badge',text:'PREMIUM'}),$('span',{class:'premium-price',text:'৳ '+number(p.priceBdt)})]),$('div',{class:'premium-art',text:'◇'}),$('div',{class:'premium-card-copy'},[$('span',{class:'section-kicker',text:'@'+p.handle}),$('h2',{text:p.name}),$('p',{text:p.description||'Creator-এর curated video series'}),$('div',{class:'premium-card-meta'},[$('span',{text:number(p.videosCount)+'টি ভিডিও'}),$('span',{text:p.creatorName})])]),$('a',{href:'/premium/'+encodeURIComponent(p.id),class:'primary-cta', 'data-route':'',text:p.owned?'দেখো ↗':'Details & buy ↗'})]); shelf.append(card);}); } catch(error){shelf.replaceChildren(emptyState('Premium catalog লোড হয়নি',error.message));}
+  }
+  async function renderPremiumDetail(id,token) {
+    const page=$('section',{class:'premium-page'}); setPage([page]); try { const data=await jsonFetch('/api/premium/playlists/'+encodeURIComponent(id)); if(token!==state.routeToken)return; const p=data.playlist; const hero=$('header',{class:'premium-detail-hero'},[$('div',{},[$('span',{class:'premium-badge',text:'PREMIUM SERIES'}),$('h1',{text:p.name}),$('p',{text:p.description||'Creator-এর premium video collection'}),$('div',{class:'premium-detail-meta'},[$('span',{text:'@'+p.handle}),$('span',{text:number(p.videosCount)+'টি ভিডিও'}),$('strong',{text:'৳ '+number(p.priceBdt)})])])]); const panel=$('section',{class:'premium-purchase-panel'}); if(data.canAccess){panel.append($('strong',{text:'তোমার access আছে'}),$('p',{text:'এই series-এর সব ভিডিও এখন দেখা যাবে।'}));}else{panel.append($('strong',{text:'এই series unlock করো'}),$('p',{text:'একবার ৳ '+number(p.priceBdt)+' দিয়ে পুরো playlist access পাবে।'})); const buy=$('button',{class:'primary-cta',text:'এখনই কিনুন · ৳ '+number(p.priceBdt)}); buy.addEventListener('click',async()=>{if(!state.session.user){return navigate('/login');} buy.disabled=true;try{await jsonFetch('/api/premium/playlists/'+encodeURIComponent(id)+'/purchase',{method:'POST',body:{}});notify('Purchase complete — পুরো series unlock হয়েছে।');return renderPremiumDetail(id,state.routeToken);}catch(error){notify(error.message,'error');buy.disabled=false;}});panel.append(buy);}
+      const list=$('div',{class:'premium-video-list'}); (data.videos||[]).forEach((v,i)=>{ const row=$('a',{href:data.canAccess?'/watch/'+encodeURIComponent(v.id):'#',class:'premium-video-row'+(data.canAccess?'':' locked'),'data-route':data.canAccess?'':''},[$('span',{class:'premium-video-index',text:String(i+1).padStart(2,'0')}),$('span',{class:'premium-video-title',text:v.title}),$('span',{class:'premium-video-state',text:data.canAccess?'দেখো ↗':'LOCKED'})]); list.append(row); }); page.replaceChildren(hero,panel,$('section',{class:'console-panel premium-outline'},[$('h2',{text:data.canAccess?'Unlocked videos':'Preview'}),$('p',{text:data.canAccess?'কেনা playlist-এর প্রতিটি video এখানে থাকবে।':'কেনার আগে একটি preview title দেখা যায়; purchase ছাড়া full series দেখা যাবে না。'}),list])); } catch(error){page.replaceChildren(emptyState('Premium series পাওয়া যায়নি',error.message,'Premium catalog','/premium'));}}
   async function renderRoute() {
     leaveRealtimeRooms(); const token = ++state.routeToken; const path = location.pathname;
     if (path !== '/admin') app.classList.remove('admin-shell', 'console-page');
@@ -992,9 +1002,11 @@
     if (path === '/subscriptions') { document.title=window.AtharoI18n?.t('সাবস্ক্রিপশন · Atharo | আঠারো')??'সাবস্ক্রিপশন · Atharo | আঠারো'; return renderSubscriptions(token); }
     if (path === '/history') { document.title=window.AtharoI18n?.t('দেখার ইতিহাস · Atharo | আঠারো')??'দেখার ইতিহাস · Atharo | আঠারো'; return renderHistory(token); }
     if (path === '/playlists') { document.title=window.AtharoI18n?.t('প্লেলিস্ট · Atharo | আঠারো')??'প্লেলিস্ট · Atharo | আঠারো'; return renderPlaylists(token); }
+    if (path === '/premium') { document.title='Premium creator playlists · Atharo'; return renderPremium(token); }
     if (path.startsWith('/watch/')) { const id = decodeURIComponent(path.slice('/watch/'.length)); document.title=window.AtharoI18n?.t('ভিডিও · Atharo | আঠারো')??'ভিডিও · Atharo | আঠারো'; return renderWatch(id, token); }
     if (path.startsWith('/channel/')) { const handle = decodeURIComponent(path.slice('/channel/'.length)); document.title=window.AtharoI18n?.t('চ্যানেল · Atharo | আঠারো')??'চ্যানেল · Atharo | আঠারো'; return renderChannel(handle, token); }
     if (path.startsWith('/playlist/')) { const id = decodeURIComponent(path.slice('/playlist/'.length)); document.title=window.AtharoI18n?.t('প্লেলিস্ট · Atharo | আঠারো')??'প্লেলিস্ট · Atharo | আঠারো'; return renderPlaylist(id, token); }
+    if (path.startsWith('/premium/')) { const id = decodeURIComponent(path.slice('/premium/'.length)); document.title='Premium series · Atharo'; return renderPremiumDetail(id, token); }
     renderNotFound();
   }
   function safeRenderRoute() {

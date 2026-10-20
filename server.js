@@ -779,6 +779,10 @@ app.get('/api/playlists/:id', async (req, res, next) => {
     const result = await pool.query('SELECT * FROM playlists WHERE id=$1', [req.params.id]);
     const playlist = result.rows[0];
     if (!playlist || (!playlist.is_public && playlist.owner_sub !== auth?.session.sub)) return jsonError(res, 404, 'Playlist not found.');
+    if (playlist.is_premium && playlist.owner_sub !== auth?.session.sub) {
+      const entitlement = auth ? await pool.query("SELECT 1 FROM premium_playlist_entitlements WHERE playlist_id=$1 AND buyer_sub=$2", [playlist.id, auth.session.sub]) : { rowCount: 0 };
+      if (!entitlement.rowCount) return jsonError(res, 403, 'এই premium playlist দেখতে আগে purchase করুন।');
+    }
     const videos = await loadCards({ playlistId: playlist.id, ownerSub: playlist.owner_sub === auth?.session.sub ? playlist.owner_sub : null, userSub: auth?.session.sub, viewerType: auth?.session.viewerType || 'normal', limit: MAX_LIST });
     res.json({ playlist: { id: playlist.id, name: playlist.name, description: playlist.description, isPublic: playlist.is_public, isWatchLater: playlist.is_watch_later, isCreatorPlaylist:Boolean(playlist.is_creator_playlist) }, videos: videos.videos });
   } catch (error) { next(error); }
@@ -950,6 +954,7 @@ app.delete('/api/videos/:id', requireAuth, requireActive, requireValidId, async 
 require('./learning')({ app, pool, withTransaction, s3, bucket: R2_BUCKET, requireAuth, requireActive, requireValidId, getVideo, canView, loadSession, safeText, sha, objectHead });
 require('./admin')({ app, requireAuth, requireActive, loadSession, notifyUser:sendNotification, getVideo, signedVideoUrl });
 require('./creator-studio')({ app, pool, requireAuth, requireActive, requireChannel, requireValidId, validUuid, safeText, normalizeCategory, normalizeVisibility });
+require('./premium-marketplace')({ app, pool, requireAuth, requireActive, requireChannel, loadSession, validUuid, safeText });
 
 io.use(async (socket, next) => {
   try {

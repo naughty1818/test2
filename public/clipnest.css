@@ -1431,3 +1431,40 @@ body.admin-fullscreen .main-content { width:100%; max-width:none; min-height:100
   .mobile-bottom-nav > a.mobile-nav-active, .mobile-bottom-nav > a.mobile-nav-active > span:first-child { color: #b0f5d1; }
   .mobile-bottom-nav > a:has(.mobile-upload) > span:first-child { width: 30px; height: 29px; border-radius: 0; color: #78cda5; background: transparent; font-size: 23px; box-shadow: none; }
 }
+
+/* Premium creator marketplace */
+.premium-page { max-width: 1180px; margin: 0 auto; }
+.premium-hero,.premium-detail-hero { position:relative; overflow:hidden; padding:42px; border:1px solid #294b3d; border-radius:22px; color:#e8f5ed; background:radial-gradient(circle at 85% 10%,#d4a94f2a,transparent 32%),linear-gradient(125deg,#0d241a,#132c22 58%,#0a1711); box-shadow:0 18px 45px #06130c33; }
+.premium-hero h1,.premium-detail-hero h1 { max-width:700px; margin:13px 0 11px; color:#f1f7f2; font-size:clamp(30px,4vw,54px); line-height:1.08; letter-spacing:-.045em; }
+.premium-hero p,.premium-detail-hero p { max-width:580px; margin:0; color:#b7ccbf; font-size:13px; line-height:1.8; }
+.premium-kicker,.premium-badge { color:#e7c878; }
+.premium-trust-row,.premium-detail-meta { display:flex; flex-wrap:wrap; gap:18px; margin-top:25px; color:#bdd4c6; font-size:11px; }
+.premium-catalog { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; padding:27px 0; }
+.premium-card { display:flex; flex-direction:column; min-height:355px; overflow:hidden; border:1px solid #294536; border-radius:18px; background:#0e1d16; box-shadow:0 10px 28px #06130c20; transition:transform .18s,border-color .18s; }
+.premium-card:hover { transform:translateY(-3px); border-color:#d4a94f88; }
+.premium-card-top { display:flex; justify-content:space-between; align-items:center; padding:14px 16px 0; }
+.premium-badge { display:inline-flex; align-items:center; width:fit-content; padding:5px 8px; border:1px solid #d4a94f66; border-radius:999px; color:#e7c878; background:#d4a94f14; font:700 9px Inter,system-ui,sans-serif; letter-spacing:.1em; }
+.premium-price { color:#f2d98c; font-size:14px; font-weight:800; }
+.premium-art { display:grid; place-items:center; height:128px; margin:14px; border-radius:13px; color:#e7c878; font-size:53px; background:radial-gradient(circle at 50% 42%,#d4a94f44,transparent 30%),linear-gradient(140deg,#203f31,#0d1a14); }
+.premium-card-copy { flex:1; padding:0 16px 16px; }
+.premium-card-copy .section-kicker { font-size:9px; }
+.premium-card-copy h2 { margin:7px 0 7px; color:#ecf5ef; font-size:17px; }
+.premium-card-copy p { min-height:37px; margin:0; color:#9bb3a5; font-size:11px; line-height:1.6; }
+.premium-card-meta { display:flex; justify-content:space-between; gap:8px; margin-top:14px; color:#829b8d; font-size:10px; }
+.premium-card>.primary-cta { align-self:flex-start; margin:0 16px 17px; }
+.premium-detail-hero { margin-bottom:17px; }
+.premium-purchase-panel { display:flex; align-items:center; gap:18px; padding:20px; border:1px solid #d4a94f55; border-radius:16px; background:#18251b; color:#e9f5ec; }
+.premium-purchase-panel strong { font-size:18px; }
+.premium-purchase-panel p { flex:1; margin:0; color:#a9beaf; font-size:12px; line-height:1.6; }
+.premium-outline { border-color:#294536; }
+.premium-video-list { display:grid; gap:7px; }
+.premium-video-row { display:flex; align-items:center; gap:14px; padding:13px; border:1px solid #294536; border-radius:10px; color:#dcece2; background:#101f17; }
+.premium-video-row:hover { border-color:#d4a94f88; }
+.premium-video-row.locked { color:#7f988a; cursor:default; }
+.premium-video-index { color:#d4a94f; font:700 11px Inter,system-ui,sans-serif; }
+.premium-video-title { flex:1; font-size:12px; }
+.premium-video-state { color:#d4a94f; font:700 10px Inter,system-ui,sans-serif; }
+.premium-toggle.premium-on { color:#e8ca79; border-color:#7c6329; }
+.premium-disclaimer { margin-top:14px; border-color:#6a5627; color:#d8bd72; }
+@media(max-width:900px){.premium-catalog{grid-template-columns:repeat(2,minmax(0,1fr));}.premium-hero,.premium-detail-hero{padding:28px}.premium-purchase-panel{align-items:flex-start;flex-direction:column;}}
+@media(max-width:560px){.premium-catalog{grid-template-columns:1fr}.premium-hero h1,.premium-detail-hero h1{font-size:32px}.premium-hero,.premium-detail-hero{padding:23px}.premium-purchase-panel{padding:15px}.premium-card{min-height:0}}

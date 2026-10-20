@@ -470,7 +470,34 @@ DO $$ BEGIN
 END $$;
 
 ALTER TABLE playlists ADD COLUMN IF NOT EXISTS is_creator_playlist BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE playlists ADD COLUMN IF NOT EXISTS is_premium BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE playlists ADD COLUMN IF NOT EXISTS price_bdt NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (price_bdt >= 0);
 ALTER TABLE upload_intents ADD COLUMN IF NOT EXISTS creator_playlist_id UUID REFERENCES playlists(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS playlists_premium_catalog_idx ON playlists (is_premium, is_public, updated_at DESC) WHERE is_creator_playlist=TRUE;
+
+CREATE TABLE IF NOT EXISTS premium_playlist_orders (
+  id UUID PRIMARY KEY,
+  playlist_id UUID NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+  buyer_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  amount_bdt NUMERIC(12,2) NOT NULL CHECK (amount_bdt > 0),
+  status TEXT NOT NULL DEFAULT 'paid' CHECK (status IN ('pending','paid','refunded','failed')),
+  payment_provider TEXT NOT NULL DEFAULT 'demo',
+  provider_reference TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  paid_at TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS premium_orders_one_paid_idx ON premium_playlist_orders (playlist_id,buyer_sub) WHERE status='paid';
+CREATE INDEX IF NOT EXISTS premium_orders_playlist_idx ON premium_playlist_orders (playlist_id,status,created_at DESC);
+CREATE INDEX IF NOT EXISTS premium_orders_buyer_idx ON premium_playlist_orders (buyer_sub,status,created_at DESC);
+
+CREATE TABLE IF NOT EXISTS premium_playlist_entitlements (
+  playlist_id UUID NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+  buyer_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  order_id UUID NOT NULL REFERENCES premium_playlist_orders(id) ON DELETE CASCADE,
+  granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (playlist_id,buyer_sub)
+);
+CREATE INDEX IF NOT EXISTS premium_entitlements_buyer_idx ON premium_playlist_entitlements (buyer_sub,granted_at DESC);
 
 CREATE TABLE IF NOT EXISTS channel_applications (
   id UUID PRIMARY KEY,

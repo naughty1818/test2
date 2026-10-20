@@ -103,8 +103,8 @@ module.exports = function attachCreatorStudio({ app, pool, requireAuth, requireA
 
   app.get('/api/creator/playlists', requireAuth, requireChannel, async(req,res,next)=>{
     try{
-      const result=await pool.query(`SELECT p.id,p.name,p.description,p.is_public,p.updated_at,COUNT(i.video_id)::bigint AS videos_count FROM playlists p LEFT JOIN playlist_items i ON i.playlist_id=p.id WHERE p.owner_sub=$1 AND p.is_creator_playlist=TRUE GROUP BY p.id ORDER BY p.updated_at DESC`,[req.auth.session.sub]);
-      res.set('Cache-Control','private, no-store');res.json({playlists:result.rows.map(p=>({id:p.id,name:p.name,description:p.description,isPublic:Boolean(p.is_public),videosCount:Number(p.videos_count)}))});
+      const result=await pool.query(`SELECT p.id,p.name,p.description,p.is_public,p.is_premium,p.price_bdt,p.updated_at,COUNT(i.video_id)::bigint AS videos_count FROM playlists p LEFT JOIN playlist_items i ON i.playlist_id=p.id WHERE p.owner_sub=$1 AND p.is_creator_playlist=TRUE GROUP BY p.id ORDER BY p.updated_at DESC`,[req.auth.session.sub]);
+      res.set('Cache-Control','private, no-store');res.json({playlists:result.rows.map(p=>({id:p.id,name:p.name,description:p.description,isPublic:Boolean(p.is_public),isPremium:Boolean(p.is_premium),priceBdt:Number(p.price_bdt)||0,videosCount:Number(p.videos_count)}))});
     }catch(error){next(error);}
   });
   app.post('/api/creator/playlists', requireAuth, requireActive, requireChannel, async(req,res,next)=>{

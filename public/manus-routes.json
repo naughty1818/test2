@@ -6,6 +6,8 @@
     { "path": "/channels", "title": "Channels" },
     { "path": "/history", "title": "Watch history" },
     { "path": "/playlists", "title": "Playlists" },
+    { "path": "/premium", "title": "Premium creator playlists" },
+    { "path": "/premium/:id", "title": "Premium playlist" },
     { "path": "/channel/me", "title": "My channel" },
     { "path": "/upload", "title": "Upload video" },
     { "path": "/login", "title": "Sign in" },
