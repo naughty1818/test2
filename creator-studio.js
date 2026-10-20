@@ -8,13 +8,13 @@ module.exports = function attachCreatorStudio({ app, pool, requireAuth, requireA
     try {
       const sub = req.auth.session.sub;
       const [videos, uploads] = await Promise.all([
-        pool.query(`SELECT v.id,v.title,v.description,v.category,v.visibility,v.moderation_status,v.scheduled_at,v.comments_enabled,v.created_at,v.views_count,v.likes_count,v.comments_count,v.class_level,v.subject,v.syllabus_tags,v.duration_seconds,v.thumbnail_object_name,v.is_islamic,v.islamic_certification_status,
+        pool.query(`SELECT v.id,v.title,v.description,v.category,v.visibility,v.is_premium,v.price_bdt,v.moderation_status,v.scheduled_at,v.comments_enabled,v.created_at,v.views_count,v.likes_count,v.comments_count,v.class_level,v.subject,v.syllabus_tags,v.duration_seconds,v.thumbnail_object_name,v.is_islamic,v.islamic_certification_status,
           (SELECT COUNT(*)::bigint FROM video_captions c WHERE c.video_id=v.id) AS captions_count
           FROM videos v WHERE v.owner_sub=$1 ORDER BY v.created_at DESC LIMIT 200`, [sub]),
         pool.query(`SELECT id,title,category,visibility,expected_size,created_at,expires_at FROM upload_intents WHERE owner_sub=$1 AND expires_at>NOW() ORDER BY created_at DESC LIMIT 20`, [sub])
       ]);
       res.set('Cache-Control', 'private, no-store');
-      res.json({ videos: videos.rows.map(v => ({ id:v.id,title:v.title,description:v.description,category:v.category,visibility:v.visibility,status:v.moderation_status,scheduledAt:v.scheduled_at,commentsEnabled:v.comments_enabled!==false,createdAt:v.created_at,views:Number(v.views_count)||0,likes:Number(v.likes_count)||0,comments:Number(v.comments_count)||0,classLevel:v.class_level||'',subject:v.subject||'',syllabusTags:v.syllabus_tags||[],durationSeconds:Number(v.duration_seconds)||0,isIslamic:Boolean(v.is_islamic),islamicCertificationStatus:v.islamic_certification_status||'not_applicable',hasThumbnail:Boolean(v.thumbnail_object_name),captions:Number(v.captions_count)||0 })), uploads: uploads.rows.map(u=>({id:u.id,title:u.title,category:u.category,visibility:u.visibility,size:Number(u.expected_size)||0,createdAt:u.created_at,expiresAt:u.expires_at})) });
+      res.json({ videos: videos.rows.map(v => ({ id:v.id,title:v.title,description:v.description,category:v.category,visibility:v.visibility,isPremium:Boolean(v.is_premium),priceBdt:Number(v.price_bdt)||0,status:v.moderation_status,scheduledAt:v.scheduled_at,commentsEnabled:v.comments_enabled!==false,createdAt:v.created_at,views:Number(v.views_count)||0,likes:Number(v.likes_count)||0,comments:Number(v.comments_count)||0,classLevel:v.class_level||'',subject:v.subject||'',syllabusTags:v.syllabus_tags||[],durationSeconds:Number(v.duration_seconds)||0,isIslamic:Boolean(v.is_islamic),islamicCertificationStatus:v.islamic_certification_status||'not_applicable',hasThumbnail:Boolean(v.thumbnail_object_name),captions:Number(v.captions_count)||0 })), uploads: uploads.rows.map(u=>({id:u.id,title:u.title,category:u.category,visibility:u.visibility,size:Number(u.expected_size)||0,createdAt:u.created_at,expiresAt:u.expires_at})) });
     } catch (error) { next(error); }
   });
 
@@ -129,6 +129,8 @@ module.exports = function attachCreatorStudio({ app, pool, requireAuth, requireA
   app.delete('/api/creator/playlists/:id', requireAuth, requireActive, requireChannel, async(req,res,next)=>{
     try{
       if(!validUuid(req.params.id))return res.status(400).json({error:'Invalid playlist id.'});
+      const paid=await pool.query("SELECT 1 FROM premium_playlist_orders WHERE playlist_id=$1 AND status IN('pending','paid') LIMIT 1",[req.params.id]);
+      if(paid.rowCount)return res.status(409).json({error:'This playlist has premium orders or purchases; archive it by making it private instead of deleting it.'});
       const result=await pool.query('DELETE FROM playlists WHERE id=$1 AND owner_sub=$2 AND is_creator_playlist=TRUE RETURNING id',[req.params.id,req.auth.session.sub]);
       if(!result.rowCount)return res.status(404).json({error:'Creator playlist not found.'});
       res.json({ok:true});

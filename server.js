@@ -81,6 +81,7 @@ const VIDEO_SELECT = `
   SELECT v.id, v.object_name, v.owner_sub, v.title, v.description, v.category,
          v.visibility, v.size, v.created_at, v.legacy, v.likes_count,
          v.views_count, v.comments_count, v.moderation_status,v.scheduled_at,v.comments_enabled,
+         v.is_premium,v.price_bdt,
          v.thumbnail_object_name, v.class_level, v.subject, v.syllabus_tags, v.duration_seconds,
          v.is_islamic, v.islamic_certification_status,
          EXISTS(SELECT 1 FROM video_captions vc WHERE vc.video_id=v.id) AS has_captions,
@@ -161,6 +162,7 @@ function videoCard(row) {
   return {
     id: row.id, title: row.title, description: row.description, category: row.category,
     visibility: row.visibility, size: Number(row.size) || 0, created: toISO(row.created_at),
+    isPremium: Boolean(row.is_premium), priceBdt: Number(row.price_bdt) || 0,
     ownerHandle: row.owner_handle || null, ownerName: row.owner_name || 'Atharo নির্মাতা',
     ownerAvatar: row.owner_avatar || null, ownerVerified: Boolean(row.owner_verified), likesCount: Number(row.likes_count) || 0,
     viewsCount: Number(row.views_count) || 0, commentsCount: Number(row.comments_count) || 0,
@@ -240,12 +242,12 @@ async function getVideo(id) {
   const result = await pool.query(VIDEO_SELECT + ' WHERE v.id=$1', [id]);
   return result.rows[0] || null;
 }
-async function canView(video, sub, viewerType = 'normal') {
+async function canView(video, sub, viewerType = 'normal', allowPrivatePurchase = false) {
   if (video.moderation_status && video.moderation_status !== 'active') return false;
   if (video.owner_status && video.owner_status !== 'active') return false;
   if (!isIslamicEligible(video, viewerType)) return false;
   if (video.scheduled_at && new Date(video.scheduled_at).getTime() > Date.now() && video.owner_sub !== sub) return false;
-  return video.visibility !== 'Private' || Boolean(sub && video.owner_sub === sub);
+  return video.visibility !== 'Private' || Boolean(allowPrivatePurchase || (sub && video.owner_sub === sub));
 }
 async function loadCards({ category = '', query = '', limit = 24, offset = 0, userSub = null, viewerType = 'normal', ownerSub = null, subscriptions = false, playlistId = null, history = false, classLevel = '', subject = '', syllabusTag = '', durationMin = 0, durationMax = 0, captionsOnly = false, sort = '' } = {}) {
   const safeLimit = Math.min(MAX_LIST, Math.max(1, Number.parseInt(limit, 10) || 24));
@@ -349,6 +351,18 @@ async function deleteStorageObjects(keys) {
   }
   return failures;
 }
+async function premiumVideoAccess(video, userSub) {
+  if (!video) return { allowed:false, paid:false };
+  if (!userSub) return { allowed:!video.is_premium, paid:false };
+  if (video.owner_sub === userSub) return { allowed:true, paid:true };
+  const result = await pool.query(`SELECT
+    (EXISTS(SELECT 1 FROM premium_video_entitlements WHERE video_id=$1 AND buyer_sub=$2)
+      OR EXISTS(SELECT 1 FROM premium_playlist_entitlements e JOIN playlist_items i ON i.playlist_id=e.playlist_id WHERE i.video_id=$1 AND e.buyer_sub=$2)) AS paid,
+    EXISTS(SELECT 1 FROM playlist_items i JOIN playlists p ON p.id=i.playlist_id JOIN videos pv ON pv.id=i.video_id
+      WHERE i.video_id=$1 AND i.is_preview=TRUE AND p.is_premium=TRUE AND p.is_public=TRUE AND pv.visibility='Public') AS preview`, [video.id, userSub]);
+  const paid=Boolean(result.rows[0]?.paid),preview=Boolean(result.rows[0]?.preview);
+  return { allowed:!video.is_premium||paid||preview, paid };
+}
 async function accessVideo(req, res, next) {
   try {
     req.auth = req.auth || await loadSession(req);
@@ -358,7 +372,9 @@ async function accessVideo(req, res, next) {
     if (!video) return jsonError(res, 404, 'Video not found / ভিডিও পাওয়া যায়নি।');
     req.video = video;
     req.auth = req.auth || await loadSession(req);
-    if (!await canView(video, req.auth?.session.sub, req.auth?.session.viewerType || 'normal')) return jsonError(res, 403, 'This video is private / ভিডিওটি private।');
+    const access=await premiumVideoAccess(video,req.auth?.session.sub);
+    if (!await canView(video, req.auth?.session.sub, req.auth?.session.viewerType || 'normal',access.paid)) return jsonError(res, 403, 'This video is private / ভিডিওটি private or unavailable in this viewing mode.');
+    if (!access.allowed) return jsonError(res, 403, 'এই premium video দেখতে আগে purchase করুন।', { code: 'premium_required', itemType: 'video', itemId: video.id, priceBdt: Number(video.price_bdt) || 0 });
     next();
   } catch (error) { next(error); }
 }
@@ -409,6 +425,8 @@ app.delete('/api/me/creator', requireAuth, async (req, res, next) => {
     const result = await withTransaction(async client => {
       const profile = await client.query('SELECT sub,handle FROM profiles WHERE sub=$1 FOR UPDATE', [sub]);
       if (!profile.rowCount) return null;
+      const financial=await client.query(`SELECT EXISTS(SELECT 1 FROM premium_playlist_orders WHERE buyer_sub=$1 OR playlist_id IN(SELECT id FROM playlists WHERE owner_sub=$1) OR video_id IN(SELECT id FROM videos WHERE owner_sub=$1)) OR EXISTS(SELECT 1 FROM creator_wallet_ledger WHERE creator_sub=$1) OR EXISTS(SELECT 1 FROM creator_withdrawal_requests WHERE creator_sub=$1) AS protected`,[sub]);
+      if(financial.rows[0]?.protected)throw Object.assign(new Error('This creator has premium sales, purchases, or wallet records. Resolve financial records before deleting the channel.'),{status:409});
       const media = await client.query('SELECT object_name,thumbnail_object_name FROM videos WHERE owner_sub=$1', [sub]);
       const uploads = await client.query('SELECT object_name FROM upload_intents WHERE owner_sub=$1', [sub]);
       await client.query('DELETE FROM videos WHERE owner_sub=$1', [sub]);
@@ -431,6 +449,8 @@ app.delete('/api/me/account', requireAuth, async (req, res, next) => {
     const result = await withTransaction(async client => {
       const user = await client.query('SELECT google_sub FROM app_users WHERE google_sub=$1 FOR UPDATE', [sub]);
       if (!user.rowCount) return null;
+      const financial=await client.query(`SELECT EXISTS(SELECT 1 FROM premium_playlist_orders WHERE buyer_sub=$1 OR playlist_id IN(SELECT id FROM playlists WHERE owner_sub=$1) OR video_id IN(SELECT id FROM videos WHERE owner_sub=$1)) OR EXISTS(SELECT 1 FROM creator_wallet_ledger WHERE creator_sub=$1) OR EXISTS(SELECT 1 FROM creator_withdrawal_requests WHERE creator_sub=$1) AS protected`,[sub]);
+      if(financial.rows[0]?.protected)throw Object.assign(new Error('This account has premium sales, purchases, or wallet records. Resolve financial records before deleting the account.'),{status:409});
       const media = await client.query('SELECT object_name,thumbnail_object_name FROM videos WHERE owner_sub=$1', [sub]);
       const uploads = await client.query('SELECT object_name FROM upload_intents WHERE owner_sub=$1', [sub]);
       await client.query('DELETE FROM videos WHERE owner_sub=$1', [sub]);
@@ -597,7 +617,9 @@ app.get('/api/videos/:id', requireAuth, requireActive, requireValidId, async (re
     const video = await getVideo(req.params.id);
     if (!video) return jsonError(res, 404, 'Video not found / ভিডিও পাওয়া যায়নি।');
     const auth = req.auth;
-    if (!await canView(video, auth.session.sub, auth.session.viewerType || 'normal')) return jsonError(res, 403, 'This video is private / ভিডিওটি private।');
+    const access=await premiumVideoAccess(video,auth.session.sub);
+    if (!await canView(video, auth.session.sub, auth.session.viewerType || 'normal',access.paid)) return jsonError(res, 403, 'This video is private / ভিডিওটি private or unavailable in this viewing mode.');
+    if (!access.allowed) return jsonError(res, 403, 'এই premium video দেখতে আগে purchase করুন।', { code: 'premium_required', itemType: 'video', itemId: video.id, priceBdt: Number(video.price_bdt) || 0 });
     // Sign the R2 URL directly; do not make a serial R2 HEAD request before playback starts.
     const state = await pool.query(`SELECT
       EXISTS(SELECT 1 FROM video_likes WHERE video_id=$1 AND user_sub=$2) AS liked,
@@ -935,6 +957,8 @@ app.delete('/api/videos/:id', requireAuth, requireActive, requireValidId, async 
     const video = await getVideo(req.params.id);
     if (!video) return jsonError(res, 404, 'Video not found.');
     if (!video.owner_sub || video.owner_sub !== req.auth.session.sub) return jsonError(res, 403, 'Only the owner can delete this video.');
+    const orders=await pool.query("SELECT 1 FROM premium_playlist_orders WHERE video_id=$1 AND status IN('pending','paid') LIMIT 1",[video.id]);
+    if(orders.rowCount)return jsonError(res,409,'This video has a pending premium order or purchase; disable premium or change visibility instead of deleting the purchased media.');
     if (!video.object_name || !video.object_name.startsWith(`videos/${video.id}-`) || !/^videos\/[0-9a-f-]+-[a-zA-Z0-9._-]+$/i.test(video.object_name)) return jsonError(res, 409, 'Video object is invalid; not deleted.');
     if (video.thumbnail_object_name && !new RegExp(`^thumbnails/${video.id}-[a-f0-9]{24}\\.(?:jpg|png|webp)$`).test(video.thumbnail_object_name)) return jsonError(res, 409, 'Thumbnail object is invalid; not deleted.');
     try {

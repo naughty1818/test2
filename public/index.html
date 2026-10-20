@@ -11,7 +11,7 @@
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/atharo-favicon.png?v=atharo-icon-2">
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/atharo-apple-touch-icon.png?v=atharo-icon-2">
   <link rel="manifest" href="/manifest.webmanifest?v=atharo-icon-2">
-  <link rel="stylesheet" href="/clipnest.css?v=profile-nav-polish-v3">
+  <link rel="stylesheet" href="/clipnest.css?v=premium-commerce-1">
 </head>
 <body>
   <div class="app-frame">
@@ -70,8 +70,8 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/i18n.js?v=login-startup-fix-1"></script>
-  <script src="/console.js?v=ad-feed-display-v2"></script>
-  <script src="/studio.js?v=creator-ui-fix-3"></script>
+  <script src="/console.js?v=premium-withdrawals-1"></script>
+  <script src="/studio.js?v=premium-commerce-1"></script>
   <script>
   'use strict';
   const app = document.getElementById('app');
@@ -292,12 +292,13 @@
   }
   function videoCard(video, options = {}) {
     const card = $('article', { class: 'video-card' + (options.featured ? ' video-card-featured' : '') });
-    const watchPath = '/watch/' + escapePath(video.id);
+    const watchPath = video.isPremium ? '/premium/video/' + escapePath(video.id) : '/watch/' + escapePath(video.id);
     const thumbLink = $('a', { href: watchPath, 'data-route': '', class: 'video-thumb-link', 'aria-label': text(video.title, 'ভিডিও দেখো') });
     const thumb = $('div', { class: 'video-thumb', style: { '--thumb-accent': avatarColors[Math.abs(text(video.category).length) % avatarColors.length] } });
     const img = $('img', { src: video.thumbnailUrl || thumbFor(video.category), alt: '', loading: 'lazy' });
     img.addEventListener('error', () => img.remove());
     thumb.append(img, $('span', { class: 'thumb-overlay' }), $('span', { class: 'thumb-play' }, [$('span', { class: 'play-glyph' })]), $('span', { class: 'video-duration', text: formatDuration(video.durationSeconds) || categoryLabel(video.category) }));
+    if(video.isPremium)thumb.append($('span',{class:'premium-feed-price',text:'PREMIUM · ৳ '+number(video.priceBdt)}));
     if(Number(video.currentSeconds)>0&&Number(video.durationSeconds)>0){const progress=$('span',{class:'resume-progress'});progress.style.width=Math.min(100,Math.max(0,Number(video.currentSeconds)/Number(video.durationSeconds)*100))+'%';thumb.append(progress);}
     thumbLink.append(thumb);
     const body = $('div', { class: 'video-card-body' });
@@ -974,15 +975,62 @@
     return new Promise((resolve, reject) => { const xhr = new XMLHttpRequest(); xhr.open('PUT', url); xhr.setRequestHeader('Content-Type', contentType); xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress(Math.round(event.loaded / event.total * 100)); }; xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error('R2 upload failed (HTTP ' + xhr.status + '). CORS policy পরীক্ষা করো।')); xhr.onerror = () => reject(new Error('Network/CORS সমস্যায় upload থেমে গেছে।')); xhr.send(file); });
   }
   function renderNotFound() { setPage([emptyState('এই পেজটি পাওয়া যায়নি', 'লিংকটি পরীক্ষা করে আবার চেষ্টা করো।', 'Atharo | আঠারো হোম', '/')]); }
+  async function startPremiumCheckout(kind,id,buttonNode) {
+    if(!state.session.user){navigate('/login');return;}
+    const phone=window.prompt('NogorPay checkout-এর জন্য আপনার mobile number দিন');
+    if(!phone)return;
+    buttonNode.disabled=true;
+    try{
+      const endpoint=kind==='video'?`/api/premium/videos/${encodeURIComponent(id)}/purchase`:`/api/premium/playlists/${encodeURIComponent(id)}/purchase`;
+      const checkout=await jsonFetch(endpoint,{method:'POST',body:{customerPhone:phone}});
+      if(checkout.paymentUrl)location.assign(checkout.paymentUrl);
+      else if(checkout.owned){notify('এই premium content-এ তোমার access আছে।');navigate(kind==='video'?'/watch/'+encodeURIComponent(id):'/premium/'+encodeURIComponent(id));}
+      else{notify('Checkout তৈরি হয়েছে। আবার চেষ্টা করো।','error');buttonNode.disabled=false;}
+    }catch(error){notify(error.message,'error');buttonNode.disabled=false;}
+  }
+  async function confirmPremiumReturn(){
+    const params=new URLSearchParams(location.search),orderId=params.get('order_id');
+    if(params.get('payment')!=='return'||!orderId||!state.session.user)return null;
+    try{const result=await jsonFetch('/api/premium/orders/'+encodeURIComponent(orderId)+'/status');if(result.owned)history.replaceState({},'',location.pathname);return result;}
+    catch(error){return {status:'pending',error:error.message};}
+  }
   async function renderPremium(token) {
     updateNav('/premium');
-    const page=$('section',{class:'premium-page'}), hero=$('header',{class:'premium-hero'},[$('div',{},[$('span',{class:'section-kicker premium-kicker',text:'ATHARO · PREMIUM'}),$('h1',{text:'Creator-এর সেরা সিরিজ, একবার কিনে পুরোটা দেখো'}),$('p',{text:'স্বতন্ত্র creator playlist কিনে নিজের library-তে রাখো।'}),$('div',{class:'premium-trust-row'},[$('span',{text:'◇ একবারের purchase'}),$('span',{text:'▣ পুরো playlist access'}),$('span',{text:'↗ creator-কে সরাসরি support'})])])]);
-    page.append(hero); const shelf=$('div',{class:'premium-catalog'}); page.append(shelf); setPage([page]);
-    try { const data=await jsonFetch('/api/premium/playlists'); if(token!==state.routeToken)return; shelf.replaceChildren(); const lists=data.playlists||[]; if(!lists.length){shelf.append(emptyState('এখনো কোনো premium series প্রকাশিত হয়নি','Creator Studio থেকে premium playlist প্রকাশ হলে এখানে দেখা যাবে।','Creator Studio','/studio'));return;} lists.forEach(p=>{const card=$('article',{class:'premium-card'},[$('div',{class:'premium-card-top'},[$('span',{class:'premium-badge',text:'PREMIUM'}),$('span',{class:'premium-price',text:'৳ '+number(p.priceBdt)})]),$('div',{class:'premium-art',text:'◇'}),$('div',{class:'premium-card-copy'},[$('span',{class:'section-kicker',text:'@'+p.handle}),$('h2',{text:p.name}),$('p',{text:p.description||'Creator-এর curated video series'}),$('div',{class:'premium-card-meta'},[$('span',{text:number(p.videosCount)+'টি ভিডিও'}),$('span',{text:p.creatorName})])]),$('a',{href:'/premium/'+encodeURIComponent(p.id),class:'primary-cta', 'data-route':'',text:p.owned?'দেখো ↗':'Details & buy ↗'})]); shelf.append(card);}); } catch(error){shelf.replaceChildren(emptyState('Premium catalog লোড হয়নি',error.message));}
+    const page=$('section',{class:'premium-page'}),hero=$('header',{class:'premium-hero'},[$('div',{},[$('span',{class:'section-kicker premium-kicker',text:'ATHARO · PREMIUM'}),$('h1',{text:'Creator-এর সেরা ভিডিও ও সিরিজ, একবার কিনে নিজের করো'}),$('p',{text:'একক ভিডিও আলাদা করে কিনো, অথবা পুরো সিরিজ unlock করো। Playlist-এর creator চাইলে কিছু episode বিনামূল্যে preview দিতে পারেন।'}),$('div',{class:'premium-trust-row'},[$('span',{text:'◇ নিরাপদ one-time checkout'}),$('span',{text:'▣ আজীবন access'}),$('span',{text:'↗ creator-কে সরাসরি support'})])])]);
+    page.append(hero);const videoSection=$('section',{class:'premium-section'},[$('div',{class:'page-heading'},[$('div',{},[$('span',{class:'section-kicker',text:'SINGLE VIDEOS'}),$('h2',{text:'Premium video'})])])]),playlistSection=$('section',{class:'premium-section'},[$('div',{class:'page-heading'},[$('div',{},[$('span',{class:'section-kicker',text:'CREATOR COLLECTIONS'}),$('h2',{text:'Premium playlists'})])])]),videoShelf=$('div',{class:'premium-catalog'}),playlistShelf=$('div',{class:'premium-catalog'});videoSection.append(videoShelf);playlistSection.append(playlistShelf);page.append(videoSection,playlistSection);setPage([page]);
+    try{
+      const [playlistData,videoData]=await Promise.all([jsonFetch('/api/premium/playlists'),jsonFetch('/api/premium/videos')]);if(token!==state.routeToken)return;
+      const videos=videoData.videos||[],lists=playlistData.playlists||[];
+      if(!videos.length)videoShelf.append(emptyState('এখনো premium video নেই','Creator Studio থেকে একটি public video premium হিসেবে প্রকাশ হলে এখানে দেখা যাবে।'));
+      videos.forEach(v=>videoShelf.append($('article',{class:'premium-card premium-video-card'},[$('div',{class:'premium-card-top'},[$('span',{class:'premium-badge',text:'SINGLE VIDEO'}),$('span',{class:'premium-price',text:'৳ '+number(v.priceBdt)})]),$('div',{class:'premium-art premium-video-art'},[v.thumbnailUrl?$('img',{src:v.thumbnailUrl,alt:'',loading:'lazy'}):null,$('span',{text:'▶'})]),$('div',{class:'premium-card-copy'},[$('span',{class:'section-kicker',text:'@'+v.handle}),$('h2',{text:v.title}),$('p',{text:v.description||'Creator-এর premium video'}),$('div',{class:'premium-card-meta'},[$('span',{text:v.creatorName}),$('span',{text:number(v.sold)+'টি sale'})])]),$('a',{href:'/premium/video/'+encodeURIComponent(v.id),class:'primary-cta','data-route':'',text:v.owned?'দেখো ↗':'বিস্তারিত ও কিনুন ↗'})])));
+      if(!lists.length)playlistShelf.append(emptyState('এখনো premium series প্রকাশিত হয়নি','Creator Studio থেকে premium playlist প্রকাশ হলে এখানে দেখা যাবে।','Creator Studio','/studio'));
+      lists.forEach(p=>playlistShelf.append($('article',{class:'premium-card'},[$('div',{class:'premium-card-top'},[$('span',{class:'premium-badge',text:'PREMIUM SERIES'}),$('span',{class:'premium-price',text:'৳ '+number(p.priceBdt)})]),$('div',{class:'premium-art',text:'◇'}),$('div',{class:'premium-card-copy'},[$('span',{class:'section-kicker',text:'@'+p.handle}),$('h2',{text:p.name}),$('p',{text:p.description||'Creator-এর curated video series'}),$('div',{class:'premium-card-meta'},[$('span',{text:number(p.videosCount)+'টি ভিডিও · '+number(p.previewCount||0)+'টি free preview'}),$('span',{text:p.creatorName})])]),$('a',{href:'/premium/'+encodeURIComponent(p.id),class:'primary-cta','data-route':'',text:p.owned?'দেখো ↗':'Details & buy ↗'})])));
+    }catch(error){videoShelf.replaceChildren(emptyState('Premium catalog লোড হয়নি',error.message));}
   }
   async function renderPremiumDetail(id,token) {
-    const page=$('section',{class:'premium-page'}); setPage([page]); try { const data=await jsonFetch('/api/premium/playlists/'+encodeURIComponent(id)); if(token!==state.routeToken)return; const p=data.playlist; const hero=$('header',{class:'premium-detail-hero'},[$('div',{},[$('span',{class:'premium-badge',text:'PREMIUM SERIES'}),$('h1',{text:p.name}),$('p',{text:p.description||'Creator-এর premium video collection'}),$('div',{class:'premium-detail-meta'},[$('span',{text:'@'+p.handle}),$('span',{text:number(p.videosCount)+'টি ভিডিও'}),$('strong',{text:'৳ '+number(p.priceBdt)})])])]); const panel=$('section',{class:'premium-purchase-panel'}); if(data.canAccess){panel.append($('strong',{text:'তোমার access আছে'}),$('p',{text:'এই series-এর সব ভিডিও এখন দেখা যাবে।'}));}else{panel.append($('strong',{text:'এই series unlock করো'}),$('p',{text:'একবার ৳ '+number(p.priceBdt)+' দিয়ে পুরো playlist access পাবে।'})); const buy=$('button',{class:'primary-cta',text:'NogorPay checkout · ৳ '+number(p.priceBdt)}); buy.addEventListener('click',async()=>{if(!state.session.user){return navigate('/login');} const phone=window.prompt('NogorPay checkout-এর জন্য আপনার mobile number দিন'); if(!phone)return; buy.disabled=true;try{const checkout=await jsonFetch('/api/premium/playlists/'+encodeURIComponent(id)+'/purchase',{method:'POST',body:{customerPhone:phone}}); if(checkout.paymentUrl){location.assign(checkout.paymentUrl);}else{notify('Checkout তৈরি হয়েছে। আবার চেষ্টা করো।','error');buy.disabled=false;}}catch(error){notify(error.message,'error');buy.disabled=false;}});panel.append(buy);}
-      const list=$('div',{class:'premium-video-list'}); (data.videos||[]).forEach((v,i)=>{ const row=$('a',{href:data.canAccess?'/watch/'+encodeURIComponent(v.id):'#',class:'premium-video-row'+(data.canAccess?'':' locked'),'data-route':data.canAccess?'':''},[$('span',{class:'premium-video-index',text:String(i+1).padStart(2,'0')}),$('span',{class:'premium-video-title',text:v.title}),$('span',{class:'premium-video-state',text:data.canAccess?'দেখো ↗':'LOCKED'})]); list.append(row); }); page.replaceChildren(hero,panel,$('section',{class:'console-panel premium-outline'},[$('h2',{text:data.canAccess?'Unlocked videos':'Preview'}),$('p',{text:data.canAccess?'কেনা playlist-এর প্রতিটি video এখানে থাকবে।':'কেনার আগে একটি preview title দেখা যায়; purchase ছাড়া full series দেখা যাবে না。'}),list])); } catch(error){page.replaceChildren(emptyState('Premium series পাওয়া যায়নি',error.message,'Premium catalog','/premium'));}}
+    const page=$('section',{class:'premium-page'});setPage([page]);
+    try{
+      const returned=await confirmPremiumReturn();let data=await jsonFetch('/api/premium/playlists/'+encodeURIComponent(id));if(token!==state.routeToken)return;
+      if(returned?.owned)data=await jsonFetch('/api/premium/playlists/'+encodeURIComponent(id));
+      const p=data.playlist,hero=$('header',{class:'premium-detail-hero'},[$('div',{},[$('span',{class:'premium-badge',text:'PREMIUM SERIES'}),$('h1',{text:p.name}),$('p',{text:p.description||'Creator-এর premium video collection'}),$('div',{class:'premium-detail-meta'},[$('span',{text:'@'+p.handle}),$('span',{text:number(p.videosCount)+'টি ভিডিও'}),$('strong',{text:'৳ '+number(p.priceBdt)})])])]),panel=$('section',{class:'premium-purchase-panel'});
+      if(data.canAccess)panel.append($('strong',{text:'তোমার access আছে'}),$('p',{text:'এই series-এর সব ভিডিও এখন দেখা যাবে।'}));
+      else{panel.append($('strong',{text:'এই series unlock করো'}),$('p',{text:'একবার ৳ '+number(p.priceBdt)+' দিয়ে পুরো playlist access পাবে।'}));const buy=$('button',{class:'primary-cta',text:'NogorPay checkout · ৳ '+number(p.priceBdt)});buy.addEventListener('click',()=>startPremiumCheckout('playlist',id,buy));panel.append(buy);}
+      if(returned&&!returned.owned)panel.append($('div',{class:'console-notice premium-disclaimer',text:'Payment confirmation pending. সফল payment verify হলেই access চালু হবে।'}));
+      const list=$('div',{class:'premium-video-list'});(data.videos||[]).forEach((v,i)=>{const playable=data.canAccess||v.preview,row=$('a',{href:playable?'/watch/'+encodeURIComponent(v.id):'#',class:'premium-video-row'+(playable?'':' locked'),'data-route':playable?'':''},[$('span',{class:'premium-video-index',text:String(i+1).padStart(2,'0')}),$('span',{class:'premium-video-title',text:v.title}),$('span',{class:'premium-video-state',text:data.canAccess?'দেখো ↗':'FREE PREVIEW · দেখো ↗'})]);list.append(row);});
+      const lockedCount=Math.max(0,Number(p.videosCount||0)-(data.videos||[]).length);page.replaceChildren(hero,panel,$('section',{class:'console-panel premium-outline'},[$('h2',{text:data.canAccess?'Unlocked videos':'Free preview'}),$('p',{text:data.canAccess?'কেনা playlist-এর প্রতিটি video এখানে থাকবে।':`${number((data.videos||[]).length)}টি free preview video; ${number(lockedCount)}টি video purchase-এর পর unlock হবে।`}),list]));
+    }catch(error){if(token===state.routeToken)page.replaceChildren(emptyState('Premium series পাওয়া যায়নি',error.message,'Premium catalog','/premium'));}
+  }
+  async function renderPremiumVideoDetail(id,token){
+    const page=$('section',{class:'premium-page'});setPage([page]);
+    try{
+      const returned=await confirmPremiumReturn(),data=await jsonFetch('/api/premium/videos/'+encodeURIComponent(id));if(token!==state.routeToken)return;
+      const v=data.video,hero=$('header',{class:'premium-detail-hero premium-video-detail-hero'},[$('div',{},[$('span',{class:'premium-badge',text:'SINGLE PREMIUM VIDEO'}),$('h1',{text:v.title}),$('p',{text:v.description||'Creator-এর premium video'}),$('div',{class:'premium-detail-meta'},[$('span',{text:'@'+v.handle}),$('span',{text:v.creatorName}),$('strong',{text:'৳ '+number(v.priceBdt)})])])]),purchase=$('section',{class:'premium-purchase-panel'});
+      if(data.canAccess)purchase.append($('strong',{text:'তোমার access আছে'}),$('p',{text:'এই ভিডিওটি এখনই চালু করো।'}),$('a',{href:'/watch/'+encodeURIComponent(id),class:'primary-cta','data-route':'',text:'ভিডিও দেখো ↗'}));
+      else{purchase.append($('strong',{text:'একবার কিনে স্থায়ী access'}),$('p',{text:'Secure NogorPay checkout দিয়ে একবার ৳ '+number(v.priceBdt)+' পরিশোধ করলে এই ভিডিও তোমার library-তে থাকবে।'}));const buy=$('button',{class:'primary-cta',text:'NogorPay checkout · ৳ '+number(v.priceBdt)});buy.addEventListener('click',()=>startPremiumCheckout('video',id,buy));purchase.append(buy);}
+      if(returned&&!returned.owned)purchase.append($('div',{class:'console-notice premium-disclaimer',text:'Payment confirmation pending. সফল payment verify হলেই access চালু হবে।'}));
+      page.replaceChildren(hero,purchase);
+    }catch(error){if(token===state.routeToken)page.replaceChildren(emptyState('Premium video পাওয়া যায়নি',error.message,'Premium catalog','/premium'));}
+  }
   async function renderRoute() {
     leaveRealtimeRooms(); const token = ++state.routeToken; const path = location.pathname;
     if (path !== '/admin') app.classList.remove('admin-shell', 'console-page');
@@ -1006,6 +1054,7 @@
     if (path.startsWith('/watch/')) { const id = decodeURIComponent(path.slice('/watch/'.length)); document.title=window.AtharoI18n?.t('ভিডিও · Atharo | আঠারো')??'ভিডিও · Atharo | আঠারো'; return renderWatch(id, token); }
     if (path.startsWith('/channel/')) { const handle = decodeURIComponent(path.slice('/channel/'.length)); document.title=window.AtharoI18n?.t('চ্যানেল · Atharo | আঠারো')??'চ্যানেল · Atharo | আঠারো'; return renderChannel(handle, token); }
     if (path.startsWith('/playlist/')) { const id = decodeURIComponent(path.slice('/playlist/'.length)); document.title=window.AtharoI18n?.t('প্লেলিস্ট · Atharo | আঠারো')??'প্লেলিস্ট · Atharo | আঠারো'; return renderPlaylist(id, token); }
+    if (path.startsWith('/premium/video/')) { const id=decodeURIComponent(path.slice('/premium/video/'.length));document.title='Premium video · Atharo';return renderPremiumVideoDetail(id,token); }
     if (path.startsWith('/premium/')) { const id = decodeURIComponent(path.slice('/premium/'.length)); document.title='Premium series · Atharo'; return renderPremiumDetail(id, token); }
     renderNotFound();
   }

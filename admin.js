@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const { pool, withTransaction } = require('./db');
+const { decryptPayoutDetails } = require('./payout-security');
 const {
   DEFAULT_AD_LAYOUTS,
   normalizeAdLayouts,
@@ -685,10 +686,42 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
 
   app.get('/api/admin/settings', adminAuth(), async (req, res, next) => {
     try {
-      const result = await pool.query('SELECT ads_enabled,monetization_enabled,creator_share_percent,monetization_min_subscribers,monetization_min_watch_hours,ad_feed_enabled,ad_watch_sidebar_enabled,ad_channel_enabled,ad_sticky_enabled,ad_postroll_enabled,ad_l_banner_enabled,l_banner_duration_seconds,l_banner_skippable,feed_ad_every_rows,ad_layout_settings,updated_at FROM platform_settings WHERE id=1');
+      const result = await pool.query('SELECT ads_enabled,monetization_enabled,creator_share_percent,video_commission_percent,playlist_commission_percent,monetization_min_subscribers,monetization_min_watch_hours,ad_feed_enabled,ad_watch_sidebar_enabled,ad_channel_enabled,ad_sticky_enabled,ad_postroll_enabled,ad_l_banner_enabled,l_banner_duration_seconds,l_banner_skippable,feed_ad_every_rows,ad_layout_settings,updated_at FROM platform_settings WHERE id=1');
       const row = result.rows[0] || {};
-      res.json({adsEnabled:Boolean(row.ads_enabled),monetizationEnabled:Boolean(row.monetization_enabled),creatorSharePercent:row.creator_share_percent===null||row.creator_share_percent===undefined?null:Number(row.creator_share_percent),monetizationMilestones:{requiredSubscribers:Number(row.monetization_min_subscribers)||1000,requiredWatchHours:Number(row.monetization_min_watch_hours)||4000},adToggles:{feed:Boolean(row.ad_feed_enabled),watchSidebar:Boolean(row.ad_watch_sidebar_enabled),channel:Boolean(row.ad_channel_enabled),sticky:Boolean(row.ad_sticky_enabled),postroll:Boolean(row.ad_postroll_enabled),lBanner:Boolean(row.ad_l_banner_enabled)},...adSettingsPayload(row),updatedAt:row.updated_at});
+      res.json({adsEnabled:Boolean(row.ads_enabled),monetizationEnabled:Boolean(row.monetization_enabled),creatorSharePercent:row.creator_share_percent===null||row.creator_share_percent===undefined?null:Number(row.creator_share_percent),videoCommissionPercent:Number(row.video_commission_percent??20),playlistCommissionPercent:Number(row.playlist_commission_percent??20),monetizationMilestones:{requiredSubscribers:Number(row.monetization_min_subscribers)||1000,requiredWatchHours:Number(row.monetization_min_watch_hours)||4000},adToggles:{feed:Boolean(row.ad_feed_enabled),watchSidebar:Boolean(row.ad_watch_sidebar_enabled),channel:Boolean(row.ad_channel_enabled),sticky:Boolean(row.ad_sticky_enabled),postroll:Boolean(row.ad_postroll_enabled),lBanner:Boolean(row.ad_l_banner_enabled)},...adSettingsPayload(row),updatedAt:row.updated_at});
     } catch (error) { next(error); }
+  });
+
+  app.get('/api/admin/creator-withdrawals', adminAuth('admin'), async(req,res,next)=>{
+    try{
+      const status=['pending','approved','rejected','paid','all'].includes(String(req.query.status||''))?String(req.query.status):'pending';
+      const result=await pool.query(`SELECT w.id,w.creator_sub,w.amount_bdt,w.payout_method,w.payout_details_ciphertext,w.status,w.decision_note,w.created_at,w.reviewed_at,w.paid_at,p.handle,p.display_name,u.email
+        FROM creator_withdrawal_requests w JOIN profiles p ON p.sub=w.creator_sub JOIN app_users u ON u.google_sub=w.creator_sub
+        WHERE ($1='all' OR w.status=$1) ORDER BY CASE w.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,w.created_at ASC LIMIT 200`,[status]);
+      res.set('Cache-Control','private, no-store');
+      res.json({withdrawals:result.rows.map(w=>({id:w.id,creatorSub:w.creator_sub,creatorName:w.display_name,handle:w.handle,email:w.email,amountBdt:Number(w.amount_bdt),payoutMethod:w.payout_method,payoutDetails:decryptPayoutDetails(w.payout_details_ciphertext),status:w.status,decisionNote:w.decision_note,createdAt:w.created_at,reviewedAt:w.reviewed_at,paidAt:w.paid_at}))});
+    }catch(error){next(error);}
+  });
+  app.post('/api/admin/creator-withdrawals/:id/decision',adminAuth('admin'),async(req,res,next)=>{
+    try{
+      if(!validUuid(req.params.id))return jsonError(res,400,'Invalid withdrawal request id.');
+      const action=String(req.body?.action||''),note=clean(req.body?.note,2000);
+      if(!['approve','reject','paid'].includes(action)||note.length<5)return jsonError(res,400,'Choose an action and provide a decision note of at least 5 characters.');
+      const result=await withTransaction(async client=>{
+        const found=await client.query('SELECT id,status,amount_bdt,creator_sub,payout_method FROM creator_withdrawal_requests WHERE id=$1 FOR UPDATE',[req.params.id]);
+        if(!found.rowCount)return null;
+        const r=found.rows[0];
+        if(action==='approve'&&r.status!=='pending')throw Object.assign(new Error('Only pending withdrawal requests can be approved.'),{status:409});
+        if(action==='reject'&&!['pending','approved'].includes(r.status))throw Object.assign(new Error('Only pending or approved requests can be rejected.'),{status:409});
+        if(action==='paid'&&r.status!=='approved')throw Object.assign(new Error('Only approved withdrawal requests can be marked paid.'),{status:409});
+        const status=action==='approve'?'approved':action==='reject'?'rejected':'paid';
+        await client.query(`UPDATE creator_withdrawal_requests SET status=$2,decision_note=$3,reviewed_by_email=$4,reviewed_at=NOW(),paid_at=CASE WHEN $2='paid' THEN NOW() ELSE paid_at END WHERE id=$1`,[r.id,status,note,req.admin.email]);
+        await writeAudit(client,req.admin,'creator_withdrawal_'+action,'creator_withdrawal',r.id,note,{creatorSub:r.creator_sub,amountBdt:Number(r.amount_bdt),payoutMethod:r.payout_method});
+        return {id:r.id,status};
+      });
+      if(!result)return jsonError(res,404,'Withdrawal request not found.');
+      res.json({withdrawal:result});
+    }catch(error){next(error);}
   });
 
   app.put('/api/admin/settings', adminAuth(), async (req, res, next) => {
@@ -696,6 +729,8 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const adsEnabled = req.body?.adsEnabled;
       const monetizationEnabled = req.body?.monetizationEnabled;
       const shareRaw = req.body?.creatorSharePercent;
+      const videoFee = req.body?.videoCommissionPercent===undefined?null:Number(req.body.videoCommissionPercent);
+      const playlistFee = req.body?.playlistCommissionPercent===undefined?null:Number(req.body.playlistCommissionPercent);
       const milestones = req.body?.monetizationMilestones || {};
       const requiredSubscribers = Number(milestones.requiredSubscribers);
       const requiredWatchHours = Number(milestones.requiredWatchHours);
@@ -716,14 +751,15 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       }
       const adFeed = toggles.feed !== false, adWatchSidebar = toggles.watchSidebar !== false, adChannel = toggles.channel !== false, adSticky = toggles.sticky === true, adPostroll = toggles.postroll === true, adLBanner = toggles.lBanner === true;
       const share = shareRaw === null || shareRaw === '' || shareRaw === undefined ? null : Number(shareRaw);
-      if (typeof adsEnabled !== 'boolean' || typeof monetizationEnabled !== 'boolean' || !Number.isInteger(lBannerDurationSeconds) || lBannerDurationSeconds < 3 || lBannerDurationSeconds > 60 || !Number.isSafeInteger(requiredSubscribers) || requiredSubscribers < 1 || requiredSubscribers > 1000000000 || !Number.isFinite(requiredWatchHours) || requiredWatchHours <= 0 || requiredWatchHours > 1000000000 || (share !== null && (!Number.isFinite(share) || share < 0 || share > 100))) return fail(res,'Settings values invalid.');
+      if (typeof adsEnabled !== 'boolean' || typeof monetizationEnabled !== 'boolean' || !Number.isInteger(lBannerDurationSeconds) || lBannerDurationSeconds < 3 || lBannerDurationSeconds > 60 || !Number.isSafeInteger(requiredSubscribers) || requiredSubscribers < 1 || requiredSubscribers > 1000000000 || !Number.isFinite(requiredWatchHours) || requiredWatchHours <= 0 || requiredWatchHours > 1000000000 || (share !== null && (!Number.isFinite(share) || share < 0 || share > 100)) || (videoFee!==null&&(!Number.isFinite(videoFee)||videoFee<0||videoFee>100)) || (playlistFee!==null&&(!Number.isFinite(playlistFee)||playlistFee<0||playlistFee>100))) return fail(res,'Settings values invalid.');
       if (monetizationEnabled && (share === null || share <= 0)) return fail(res,'Monetization চালু করতে 0-এর বেশি creator share percentage সেট করুন।');
       await withTransaction(async client => {
-        await client.query(`UPDATE platform_settings SET ads_enabled=$1,monetization_enabled=$2,creator_share_percent=$3,monetization_min_subscribers=$4,monetization_min_watch_hours=$5,ad_feed_enabled=$6,ad_watch_sidebar_enabled=$7,ad_channel_enabled=$8,ad_sticky_enabled=$9,ad_postroll_enabled=$10,ad_l_banner_enabled=$11,l_banner_duration_seconds=$12,l_banner_skippable=COALESCE($13,l_banner_skippable),feed_ad_every_rows=COALESCE($14,feed_ad_every_rows),ad_layout_settings=COALESCE($15::jsonb,ad_layout_settings),updated_by_email=$16,updated_at=NOW() WHERE id=1`, [adsEnabled,monetizationEnabled,share,requiredSubscribers,requiredWatchHours,adFeed,adWatchSidebar,adChannel,adSticky,adPostroll,adLBanner,lBannerDurationSeconds,lBannerSkippable,feedAdEveryRows,adLayoutSettings===null?null:JSON.stringify(adLayoutSettings),req.admin.email]);
-        await writeAudit(client,req.admin,'platform_settings','settings','1','', {adsEnabled,monetizationEnabled,creatorSharePercent:share,requiredSubscribers,requiredWatchHours,adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll,lBanner:adLBanner},lBannerDurationSeconds,lBannerSkippable,feedAdEveryRows,adLayoutSettings});
+        await client.query(`UPDATE platform_settings SET ads_enabled=$1,monetization_enabled=$2,creator_share_percent=$3,video_commission_percent=COALESCE($4,video_commission_percent),playlist_commission_percent=COALESCE($5,playlist_commission_percent),monetization_min_subscribers=$6,monetization_min_watch_hours=$7,ad_feed_enabled=$8,ad_watch_sidebar_enabled=$9,ad_channel_enabled=$10,ad_sticky_enabled=$11,ad_postroll_enabled=$12,ad_l_banner_enabled=$13,l_banner_duration_seconds=$14,l_banner_skippable=COALESCE($15,l_banner_skippable),feed_ad_every_rows=COALESCE($16,feed_ad_every_rows),ad_layout_settings=COALESCE($17::jsonb,ad_layout_settings),updated_by_email=$18,updated_at=NOW() WHERE id=1`, [adsEnabled,monetizationEnabled,share,videoFee,playlistFee,requiredSubscribers,requiredWatchHours,adFeed,adWatchSidebar,adChannel,adSticky,adPostroll,adLBanner,lBannerDurationSeconds,lBannerSkippable,feedAdEveryRows,adLayoutSettings===null?null:JSON.stringify(adLayoutSettings),req.admin.email]);
+        await writeAudit(client,req.admin,'platform_settings','settings','1','', {adsEnabled,monetizationEnabled,creatorSharePercent:share,videoCommissionPercent:videoFee,playlistCommissionPercent:playlistFee,requiredSubscribers,requiredWatchHours,adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll,lBanner:adLBanner},lBannerDurationSeconds,lBannerSkippable,feedAdEveryRows,adLayoutSettings});
       });
       const saved=await pool.query('SELECT l_banner_skippable,feed_ad_every_rows,ad_layout_settings,l_banner_duration_seconds FROM platform_settings WHERE id=1');
-      res.json({ok:true,adsEnabled,monetizationEnabled,creatorSharePercent:share,monetizationMilestones:{requiredSubscribers,requiredWatchHours},adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll,lBanner:adLBanner},...adSettingsPayload(saved.rows[0]||{})});
+      const commissions=await pool.query('SELECT video_commission_percent,playlist_commission_percent FROM platform_settings WHERE id=1');
+      res.json({ok:true,adsEnabled,monetizationEnabled,creatorSharePercent:share,videoCommissionPercent:Number(commissions.rows[0]?.video_commission_percent??20),playlistCommissionPercent:Number(commissions.rows[0]?.playlist_commission_percent??20),monetizationMilestones:{requiredSubscribers,requiredWatchHours},adToggles:{feed:adFeed,watchSidebar:adWatchSidebar,channel:adChannel,sticky:adSticky,postroll:adPostroll,lBanner:adLBanner},...adSettingsPayload(saved.rows[0]||{})});
     } catch (error) { next(error); }
   });
 

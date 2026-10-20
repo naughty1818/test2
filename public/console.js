@@ -182,15 +182,15 @@
   async function renderAdmin(app,ctx,chosenTab) {
     const queryTab=new URLSearchParams(location.search).get('tab'),role=ctx.adminRole;
     if(!role){app.replaceChildren(heading('ATHARO ADMIN','অনুমতি নেই','এই panel শুধু অনুমোদিত Admin/Moderator-এর জন্য।'));return;}
-    const tabs=[['queue','Review queue'],['islamic-review','Islamic certification'],['applications','Channel applications'],['verification','Creator verification'],['overview','Overview'],['moderation','Content & users'],['ads','Campaigns'],['audit','Audit log'],['staff','Staff & roles'],['settings','Platform settings']];
+    const tabs=[['queue','Review queue'],['islamic-review','Islamic certification'],['applications','Channel applications'],['verification','Creator verification'],['overview','Overview'],['moderation','Content & users'],['withdrawals','Creator withdrawals'],['ads','Campaigns'],['audit','Audit log'],['staff','Staff & roles'],['settings','Platform settings']];
     let activeTab=chosenTab||queryTab||'queue';
-    if((['ads','audit','applications','verification'].includes(activeTab)&&!['owner','admin'].includes(role))||(['staff','settings'].includes(activeTab)&&role!=='owner'))activeTab='queue';
+    if((['ads','audit','applications','verification','withdrawals'].includes(activeTab)&&!['owner','admin'].includes(role))||(['staff','settings'].includes(activeTab)&&role!=='owner'))activeTab='queue';
     app.replaceChildren();app.classList.add('console-page','admin-shell');
     const toolbar=el('div',{class:'admin-toolbar'},[el('div',{class:'admin-brand'},[el('a',{href:'/', 'data-route':'',class:'brand-lockup', 'aria-label':'Atharo | আঠারো হোম'},[el('span',{class:'brand-latin',text:'Atharo |'}),el('img',{class:'brand-logo',src:'/assets/atharo-logo.png',alt:'Atharo | আঠারো'})]),el('div',{class:'admin-workspace-label'},[el('strong',{text:'Admin panel'}),el('span',{text:'Trust & Safety workspace'})])]),el('div',{class:'admin-toolbar-actions'},[window.AtharoI18n?.createSelector(),badge(role==='owner'?'Owner':role==='admin'?'Admin':'Moderator','good'),el('a',{href:'/', 'data-route':'',class:'admin-return-link',text:'← Return to Atharo'}),button('Sign out',async()=>{try{await ctx.jsonFetch('/auth/logout',{method:'POST',body:{}});location.assign('/');}catch(error){ctx.notify(error.message,'error');}},'console-small-button')])]);
     const roleText=role==='moderator'?'You can triage reports, take moderation actions, and review Islamic video certification. Staff, platform settings, campaigns, audit logs and appeals are reserved for Admin/Owner.':role==='admin'?'You can manage campaigns, review reports and appeals, moderate content, and inspect the audit log. Owner controls staff access and platform-wide settings.':'Owner access: all admin, moderation, campaign and platform controls.';
     app.append(toolbar,heading('TRUST & SAFETY',role==='moderator'?'Moderator workspace':'Admin workspace',roleText));
     const nav=el('nav',{class:'console-tabs admin-tabs','aria-label':'Admin sections'});
-    tabs.forEach(([id,label])=>{if(['ads','audit','applications','verification'].includes(id)&&!['owner','admin'].includes(role))return;if(['staff','settings'].includes(id)&&role!=='owner')return;nav.append(el('button',{type:'button',class:'console-tab'+(activeTab===id?' active':''),text:label,onClick:()=>ctx.navigate('/admin?tab='+id)}));});
+    tabs.forEach(([id,label])=>{if(['ads','audit','applications','verification','withdrawals'].includes(id)&&!['owner','admin'].includes(role))return;if(['staff','settings'].includes(id)&&role!=='owner')return;nav.append(el('button',{type:'button',class:'console-tab'+(activeTab===id?' active':''),text:label,onClick:()=>ctx.navigate('/admin?tab='+id)}));});
     app.append(nav);
     const content=el('div',{class:'admin-tab-content'});app.append(content);
     try{
@@ -202,6 +202,7 @@
       else if(activeTab==='ads')await renderAds(content,ctx,role);
       else if(activeTab==='staff'&&role==='owner')await renderStaff(content,ctx);
       else if(activeTab==='settings'&&role==='owner')await renderSettings(content,ctx);
+      else if(activeTab==='withdrawals'&&['owner','admin'].includes(role))await renderWithdrawals(content,ctx);
       else if(activeTab==='overview'){
         const [overview,audit]=await Promise.all([ctx.jsonFetch('/api/admin/overview'),ctx.jsonFetch('/api/admin/audit?limit=8&page=1').catch(()=>({events:[]}))]);
         const c=overview.counts||{},a=overview.ads||{},s=overview.settings||{};
@@ -214,7 +215,7 @@
           const analyticsPanel=panel('Campaign performance','Recorded impressions/clicks by day. This is analytics only, not advertiser billing or creator payout.',el('div',{},[field('Date range',range),summary,chart]));content.append(analyticsPanel);
           const loadAnalytics=async()=>{try{const stats=await ctx.jsonFetch('/api/admin/ad-analytics?days='+range.value),t=stats.totals||{},n=Number(t.impressions)||0;summary.replaceChildren(stat('Ad impressions',num(t.impressions)),stat('Ad clicks',num(t.clicks)),stat('CTR',(n?(Number(t.clicks)||0)/n*100:0).toFixed(2)+'%'),stat('Estimated creator revenue',money(t.estimatedCreatorEarningsBdt),'Estimate only'));chart.replaceChildren();const points=(stats.daily||[]).slice(-14),max=Math.max(1,...points.map(x=>Number(x.impressions)||0));points.forEach(point=>{const bar=el('div',{class:'console-chart-bar'});bar.style.height=Math.max(3,Math.round((Number(point.impressions)||0)/max*88))+'px';bar.title=num(point.impressions)+' impressions · '+point.day;bar.append(el('span',{text:String(point.day).slice(5)}));chart.append(bar);});if(!points.length)chart.append(empty('No ad events in this date range.'));}catch(error){chart.replaceChildren(el('div',{class:'console-notice',text:error.message}));}};
           range.addEventListener('change',loadAnalytics);await loadAnalytics();
-          content.append(panel('Platform controls','Advertising is off by default. Monetization metrics remain estimates; this repository has no payment or payout system.',el('div',{class:'console-grid'},[stat('Ad delivery',s.adsEnabled?'Enabled':'Off'),stat('Creator monetization',s.monetizationEnabled?'Enabled':'Off'),stat('Creator share',s.creatorSharePercent==null?'Not set':num(s.creatorSharePercent)+'%')])));
+          content.append(panel('Platform controls','Advertising is off by default. Premium checkout and creator withdrawal requests use the configured payment workflow.',el('div',{class:'console-grid'},[stat('Ad delivery',s.adsEnabled?'Enabled':'Off'),stat('Creator monetization',s.monetizationEnabled?'Enabled':'Off'),stat('Video sale fee',num(s.videoCommissionPercent??20)+'%'),stat('Playlist sale fee',num(s.playlistCommissionPercent??20)+'%')])));
         }
         const rows=(audit.events||[]).map(x=>tr(cell(el('strong',{text:x.action}),el('div',{class:'console-muted',text:x.reason||'—'})),cell(x.actorEmail),cell(dateText(x.createdAt)),cell(x.targetType+': '+text(x.targetId))));
         content.append(panel('Recent admin actions','Every sensitive moderation and platform change is attributed and reasoned.',rows.length?table(['Action','Admin','Date','Target'],rows):empty('No admin actions recorded yet.')));
@@ -379,6 +380,14 @@
     }};
   }
 
+  async function renderWithdrawals(root,ctx){
+    const status=select([['pending','Pending'],['approved','Approved'],['rejected','Rejected'],['paid','Paid'],['all','All requests']],'pending'),list=el('div');
+    async function load(){list.replaceChildren(empty('Loading withdrawal requests…'));try{const data=await ctx.jsonFetch('/api/admin/creator-withdrawals?status='+encodeURIComponent(status.value)),items=data.withdrawals||[];list.replaceChildren();if(!items.length){list.append(empty('No withdrawal requests in this view.'));return;}for(const item of items){const destination=item.payoutDetails||{},method=String(item.payoutMethod||'').toUpperCase(),copy=el('div',{class:'review-card-copy'},[el('div',{class:'review-card-meta'},[badge('@'+(item.handle||'creator'),'warn'),statusBadge(item.status),el('span',{text:dateText(item.createdAt)})]),el('h3',{text:item.creatorName+' · '+money(item.amountBdt)}),el('div',{class:'console-muted',text:item.email+' · '+method}),el('div',{class:'payout-destination'},[el('strong',{text:destination.accountName||'Account holder'}),el('span',{text:destination.accountNumber||'Destination unavailable'})]),item.decisionNote?el('p',{class:'console-notice',text:'Decision: '+item.decisionNote}):null,item.paidAt?el('div',{class:'console-muted',text:'Marked paid '+dateText(item.paidAt)}):null]),card=el('article',{class:'review-card withdrawal-review-card'},[copy]);
+      if(['pending','approved'].includes(item.status)){const note=el('textarea',{rows:'2',maxlength:'2000',placeholder:'Decision note / payout reference (at least 5 characters)'}),actions=el('div',{class:'console-form-actions'});const decide=async action=>{if(note.value.trim().length<5){ctx.notify('Write a note of at least 5 characters.','error');note.focus();return;}try{await ctx.jsonFetch('/api/admin/creator-withdrawals/'+encodeURIComponent(item.id)+'/decision',{method:'POST',body:{action,note:note.value.trim()}});ctx.notify(action==='paid'?'Withdrawal marked paid.':'Withdrawal decision saved.');await load();}catch(error){ctx.notify(error.message,'error');}};if(item.status==='pending')actions.append(button('Approve',()=>decide('approve'),'primary-cta'),button('Reject',()=>decide('reject'),'console-small-button'));else actions.append(button('Mark as paid',()=>decide('paid'),'primary-cta'),button('Reject',()=>decide('reject'),'console-small-button'));card.append(el('div',{class:'review-card-actions'},[field('Admin note',note),actions]));}
+      list.append(card);}}catch(error){list.replaceChildren(el('div',{class:'console-notice',text:error.message}));}}
+    status.addEventListener('change',load);root.replaceChildren(panel('Creator withdrawals','Review encrypted payout destinations, approve requests, then mark them paid after an external/manual transfer. No money is moved automatically.',el('div',{},[el('div',{class:'studio-toolbar'},[field('Status',status)]),list])));await load();
+  }
+
   async function renderSettings(root,ctx) {
     root.replaceChildren();
     const data=await ctx.jsonFetch('/api/admin/settings');
@@ -396,6 +405,8 @@
     const adLayoutEditor=buildAdLayoutEditor(data.adLayoutSettings||{});
     const monet=el('input',{type:'checkbox',checked:data.monetizationEnabled});
     const share=el('input',{type:'number',min:'0',max:'100',step:'0.01',value:data.creatorSharePercent==null?'':data.creatorSharePercent,placeholder:'0–100'});
+    const videoFee=el('input',{type:'number',min:'0',max:'100',step:'0.01',required:'',value:data.videoCommissionPercent??20});
+    const playlistFee=el('input',{type:'number',min:'0',max:'100',step:'0.01',required:'',value:data.playlistCommissionPercent??20});
     const milestones=data.monetizationMilestones||{};
     const requiredSubscribers=el('input',{type:'number',min:'1',step:'1',required:'',value:milestones.requiredSubscribers||1000});
     const requiredWatchHours=el('input',{type:'number',min:'0.01',step:'0.01',required:'',value:milestones.requiredWatchHours||4000});
@@ -414,12 +425,14 @@
       el('div',{class:'span-2'},[el('h3',{class:'ad-layout-heading',text:'Placement অনুযায়ী PC / phone pixel মাপ ও ratio'}),adLayoutEditor.node]),
       field('Creator monetization',el('span',{class:'console-toggle'},[monet,el('span',{text:'Eligible channel-গুলোর estimated revenue হিসাব করো'})]),'span-2'),
       field('Creator share (%)',share),
+      field('Single video sale fee (%)',videoFee),
+      field('Playlist sale fee (%)',playlistFee),
       field('Required subscribers',requiredSubscribers),
       field('Required watch hours',requiredWatchHours),
-      el('div',{class:'console-notice span-2',text:'এই দুইটি milestone পূরণ হলে creator panel-এ eligibility দেখাবে। Creator share এবং CPM কেবল estimate গণনা করে; advertiser payment বা payout নিশ্চিত করে না। 0% share দিয়ে monetization enable করা যাবে না.'}),
+      el('div',{class:'console-notice span-2',text:'এই দুইটি milestone পূরণ হলে creator panel-এ eligibility দেখাবে। Video ও playlist sale fee সফল premium checkout-এর সময় snapshot হয়; বিদ্যমান sale/withdrawal balance-এ পরে পরিবর্তন প্রভাব ফেলে না। Ad creator share এবং CPM কেবল estimate গণনা করে.'}),
       el('div',{class:'console-form-actions'},[el('button',{type:'submit',class:'primary-cta',text:'Settings save'})])
     ]);
-    form.addEventListener('submit',async event=>{event.preventDefault();try{await ctx.jsonFetch('/api/admin/settings',{method:'PUT',body:{adsEnabled:ads.checked,monetizationEnabled:monet.checked,creatorSharePercent:share.value===''?null:Number(share.value),monetizationMilestones:{requiredSubscribers:Number(requiredSubscribers.value),requiredWatchHours:Number(requiredWatchHours.value)},adToggles:{feed:adFeed.checked,watchSidebar:adWatch.checked,channel:adChannel.checked,sticky:adSticky.checked,postroll:adPostroll.checked,lBanner:adLBanner.checked},lBannerDurationSeconds:Number(lBannerDuration.value),lBannerSkippable:lBannerSkippable.checked,feedAdEveryRows:Number(feedAdEveryRows.value),adLayoutSettings:adLayoutEditor.serialize()}});ctx.notify('Platform settings save হয়েছে।');await renderSettings(root,ctx);}catch(error){ctx.notify(error.message,'error');}});
+    form.addEventListener('submit',async event=>{event.preventDefault();try{await ctx.jsonFetch('/api/admin/settings',{method:'PUT',body:{adsEnabled:ads.checked,monetizationEnabled:monet.checked,creatorSharePercent:share.value===''?null:Number(share.value),videoCommissionPercent:Number(videoFee.value),playlistCommissionPercent:Number(playlistFee.value),monetizationMilestones:{requiredSubscribers:Number(requiredSubscribers.value),requiredWatchHours:Number(requiredWatchHours.value)},adToggles:{feed:adFeed.checked,watchSidebar:adWatch.checked,channel:adChannel.checked,sticky:adSticky.checked,postroll:adPostroll.checked,lBanner:adLBanner.checked},lBannerDurationSeconds:Number(lBannerDuration.value),lBannerSkippable:lBannerSkippable.checked,feedAdEveryRows:Number(feedAdEveryRows.value),adLayoutSettings:adLayoutEditor.serialize()}});ctx.notify('Platform settings save হয়েছে।');await renderSettings(root,ctx);}catch(error){ctx.notify(error.message,'error');}});
     root.append(panel('Platform monetization settings','Ads default-off থাকে। Campaign cap হলো campaign ID-প্রতি UTC calendar month-এ সর্বোচ্চ delivery; ফাঁকা cap মানে unlimited। Share percentage নিজের commercial policy অনুযায়ী নির্ধারণ করুন—এখানে কোনো default ভাগ ধরে নেওয়া হয়নি.',form));
   }
 

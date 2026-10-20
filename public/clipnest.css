@@ -1468,3 +1468,40 @@ body.admin-fullscreen .main-content { width:100%; max-width:none; min-height:100
 .premium-disclaimer { margin-top:14px; border-color:#6a5627; color:#d8bd72; }
 @media(max-width:900px){.premium-catalog{grid-template-columns:repeat(2,minmax(0,1fr));}.premium-hero,.premium-detail-hero{padding:28px}.premium-purchase-panel{align-items:flex-start;flex-direction:column;}}
 @media(max-width:560px){.premium-catalog{grid-template-columns:1fr}.premium-hero h1,.premium-detail-hero h1{font-size:32px}.premium-hero,.premium-detail-hero{padding:23px}.premium-purchase-panel{padding:15px}.premium-card{min-height:0}}
+
+/* Premium marketplace and creator payout workspace */
+.premium-section { margin-top: 26px; }
+.premium-section .page-heading { margin-bottom: 14px; }
+.premium-section .page-heading h2 { margin: 6px 0 0; color:#e9f4ed; font-size:24px; letter-spacing:-.03em; }
+.premium-card { border-color:#315341; background:linear-gradient(155deg,#12281d,#0c1912 72%); }
+.premium-card-top { min-height:43px; }
+.premium-art { position:relative; display:grid; place-items:center; min-height:132px; margin:13px 14px 9px; overflow:hidden; border:1px solid #d1aa5540; border-radius:13px; color:#e8cd82; background:radial-gradient(ellipse at 50% 20%,#d1aa5526,transparent 62%),linear-gradient(135deg,#13271d,#18261a); font-size:38px; }
+.premium-video-art img { position:absolute; width:100%; height:100%; inset:0; object-fit:cover; opacity:.78; }
+.premium-video-art>span { z-index:1; display:grid; place-items:center; width:54px; height:54px; border:1px solid #e7cc8b90; border-radius:50%; color:#f1d993; background:#09150db5; }
+.premium-video-card { min-height:390px; }
+.premium-feed-price { position:absolute; z-index:2; top:10px; left:10px; padding:6px 9px; border:1px solid #ddbc6a88; border-radius:999px; color:#f6df9e; background:#111d17ef; font:800 9px/1 Inter,system-ui,sans-serif; letter-spacing:.06em; box-shadow:0 4px 15px #0006; }
+.premium-manage-list { display:grid; gap:12px; }
+.premium-manage-card { overflow:hidden; border:1px solid #2b4939; border-radius:14px; background:linear-gradient(145deg,#11241a,#0c1912); }
+.premium-manage-summary { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:16px 18px; cursor:pointer; list-style:none; }
+.premium-manage-summary::-webkit-details-marker { display:none; }
+.premium-manage-summary>div:first-child { display:grid; gap:5px; }
+.premium-manage-summary strong { color:#e5f3ea; font-size:15px; }
+.premium-manage-summary small,.premium-manage-metrics { color:#91aa9a; font-size:11px; }
+.premium-manage-metrics { display:flex; align-items:center; gap:12px; }
+.premium-manage-metrics strong { color:#e8cd82; }
+.premium-playlist-form,.premium-video-pricing-form,.withdrawal-request-form { margin:0; padding:17px; border-top:1px solid #294536; }
+.premium-preview-picker { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; max-height:270px; overflow:auto; padding:7px; border:1px solid #2a4336; border-radius:11px; background:#0a1711; }
+.premium-preview-option { display:flex; align-items:center; gap:9px; min-height:38px; padding:7px 9px; border:1px solid #223b2e; border-radius:8px; color:#c9dbd0; background:#102019; font-size:11px; }
+.premium-preview-option input,.console-toggle input { accent-color:#42cba6; }
+.premium-preview-option>span:nth-child(2) { flex:1; }
+.premium-video-pricing-form .console-form-actions,.premium-playlist-form .console-form-actions,.withdrawal-request-form .console-form-actions { grid-column:1/-1; }
+.payout-destination { display:flex; flex-wrap:wrap; gap:8px 16px; padding:11px 13px; border:1px solid #33513f; border-radius:10px; color:#dcebe2; background:#0a1711; }
+.payout-destination span { overflow-wrap:anywhere; font-family:ui-monospace,SFMono-Regular,monospace; }
+.withdrawal-review-card { border-color:#3c5947; }
+.admin-tabs .console-tab { white-space:nowrap; }
+@media(max-width:760px){
+  .premium-preview-picker{grid-template-columns:1fr}
+  .premium-manage-summary{align-items:flex-start;flex-direction:column}
+  .premium-manage-metrics{width:100%;justify-content:space-between}
+  .premium-video-card{min-height:0}
+}

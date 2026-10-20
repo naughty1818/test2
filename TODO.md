@@ -1,10 +1,12 @@
 # TODO
 
-## Premium playlist marketplace
-- [ ] Creator Studio থেকে creator playlist-কে premium হিসেবে প্রকাশ করা এবং positive BDT price সেট করা যাবে।
-- [ ] Viewer premium playlist catalog-এ title, creator, price ও preview দেখে purchase action ব্যবহার করতে পারবে।
-- [ ] Successful purchase-এর পর authenticated viewer premium playlist-এর ভিডিও দেখতে পারবে; non-entitled viewer locked state দেখবে।
-- [ ] Creator Studio-তে sold count, gross sales, creator estimate এবং recent premium orders দেখা যাবে।
-- [ ] Purchase/access authorization server-side account ownership ও entitlement দিয়ে enforce হবে।
-- [ ] `/premium` route, responsive catalog/detail/purchase UI এবং route manifest synchronized থাকবে।
+## Premium commerce and creator payouts
+- [x] Creator single Public video অথবা Public creator playlist-কে positive BDT price-এ Premium করতে পারেন।
+- [x] Playlist creator একাধিক Public episode-কে free promotion preview হিসেবে বেছে নিতে পারেন।
+- [x] Responsive catalog ও detail views video/series price, preview, purchase CTA এবং provider-return state দেখায়।
+- [x] Successful verified NogorPay order entitlement দেয়; direct playback server-side entitlement check করে।
+- [x] Admin/Owner Settings থেকে single-video ও playlist sale fee আলাদা ভাবে নির্ধারণ হয়; completed order-এ platform fee ও creator net share snapshot থাকে।
+- [x] Creator wallet ledger, encrypted bKash/Nagad/bank destination এবং withdrawal request history আছে।
+- [x] Admin/Owner payout destination দেখে withdrawal approve/reject বা manual payment-এর পর Paid mark করেন; সব decision audit log-এ যায়।
+- [ ] Actual payout-provider API, fraud/refund/chargeback workflow এবং compliance review আলাদা production follow-up।
 - [ ] Existing automated tests pass এবং changed server/frontend files syntax-check হবে।

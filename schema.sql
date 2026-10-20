@@ -570,3 +570,78 @@ CREATE TABLE IF NOT EXISTS user_notifications (
 );
 CREATE INDEX IF NOT EXISTS user_notifications_recipient_created_idx ON user_notifications (recipient_sub,created_at DESC);
 CREATE INDEX IF NOT EXISTS user_notifications_unread_idx ON user_notifications (recipient_sub,created_at DESC) WHERE read_at IS NULL;
+
+
+-- Premium single-video sales, playlist previews, configurable sales fees and creator payouts.
+ALTER TABLE videos
+  ADD COLUMN IF NOT EXISTS is_premium BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS price_bdt NUMERIC(12,2) NOT NULL DEFAULT 0;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='videos_price_bdt_check') THEN
+    ALTER TABLE videos ADD CONSTRAINT videos_price_bdt_check CHECK (price_bdt >= 0);
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS videos_premium_catalog_idx ON videos (created_at DESC) WHERE is_premium=TRUE AND visibility='Public';
+
+ALTER TABLE playlist_items ADD COLUMN IF NOT EXISTS is_preview BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE platform_settings
+  ADD COLUMN IF NOT EXISTS video_commission_percent NUMERIC(5,2) NOT NULL DEFAULT 20,
+  ADD COLUMN IF NOT EXISTS playlist_commission_percent NUMERIC(5,2) NOT NULL DEFAULT 20;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='platform_settings_video_commission_check') THEN
+    ALTER TABLE platform_settings ADD CONSTRAINT platform_settings_video_commission_check CHECK(video_commission_percent BETWEEN 0 AND 100);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='platform_settings_playlist_commission_check') THEN
+    ALTER TABLE platform_settings ADD CONSTRAINT platform_settings_playlist_commission_check CHECK(playlist_commission_percent BETWEEN 0 AND 100);
+  END IF;
+END $$;
+
+ALTER TABLE premium_playlist_orders ALTER COLUMN playlist_id DROP NOT NULL;
+ALTER TABLE premium_playlist_orders ADD COLUMN IF NOT EXISTS video_id TEXT REFERENCES videos(id) ON DELETE RESTRICT;
+ALTER TABLE premium_playlist_orders ADD COLUMN IF NOT EXISTS platform_fee_percent NUMERIC(5,2);
+ALTER TABLE premium_playlist_orders ADD COLUMN IF NOT EXISTS platform_fee_bdt NUMERIC(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE premium_playlist_orders ADD COLUMN IF NOT EXISTS creator_earning_bdt NUMERIC(12,2) NOT NULL DEFAULT 0;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='premium_order_exactly_one_content_check') THEN
+    ALTER TABLE premium_playlist_orders ADD CONSTRAINT premium_order_exactly_one_content_check
+      CHECK ((playlist_id IS NOT NULL) <> (video_id IS NOT NULL));
+  END IF;
+END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS premium_orders_one_paid_video_idx
+  ON premium_playlist_orders(video_id,buyer_sub) WHERE video_id IS NOT NULL AND status='paid';
+
+CREATE TABLE IF NOT EXISTS premium_video_entitlements (
+  video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  buyer_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  order_id UUID NOT NULL REFERENCES premium_playlist_orders(id) ON DELETE RESTRICT,
+  granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY(video_id,buyer_sub)
+);
+CREATE INDEX IF NOT EXISTS premium_video_entitlements_buyer_idx ON premium_video_entitlements(buyer_sub,granted_at DESC);
+
+CREATE TABLE IF NOT EXISTS creator_wallet_ledger (
+  id UUID PRIMARY KEY,
+  creator_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE RESTRICT,
+  order_id UUID NOT NULL UNIQUE REFERENCES premium_playlist_orders(id) ON DELETE RESTRICT,
+  amount_bdt NUMERIC(12,2) NOT NULL CHECK(amount_bdt >= 0),
+  entry_type TEXT NOT NULL DEFAULT 'sale' CHECK(entry_type IN('sale','adjustment')),
+  description TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS creator_wallet_ledger_creator_idx ON creator_wallet_ledger(creator_sub,created_at DESC);
+
+CREATE TABLE IF NOT EXISTS creator_withdrawal_requests (
+  id UUID PRIMARY KEY,
+  creator_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE RESTRICT,
+  amount_bdt NUMERIC(12,2) NOT NULL CHECK(amount_bdt > 0),
+  payout_method TEXT NOT NULL CHECK(payout_method IN('bkash','nagad','bank')),
+  payout_details_ciphertext TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN('pending','approved','rejected','paid')),
+  decision_note TEXT NOT NULL DEFAULT '',
+  reviewed_by_email TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  reviewed_at TIMESTAMPTZ,
+  paid_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS creator_withdrawals_creator_created_idx ON creator_withdrawal_requests(creator_sub,created_at DESC);
+CREATE INDEX IF NOT EXISTS creator_withdrawals_review_idx ON creator_withdrawal_requests(status,created_at ASC);
