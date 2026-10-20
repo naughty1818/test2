@@ -4,7 +4,7 @@ const crypto = require('crypto');
 
 const NOGORPAY_BASE = String(process.env.NOGORPAY_API_BASE || 'https://api.nogorpay.com/api/v1').replace(/\/$/, '');
 const NOGORPAY_KEY = process.env.NOGORPAY_API_KEY || '';
-const NOGORPAY_BRAND = process.env.NOGORPAY_BRAND_ID || '';
+const NOGORPAY_BRAND = process.env.NOGORPAY_BRAND_ID || '8ETVNX';
 const NOGORPAY_WEBHOOK = process.env.NOGORPAY_WEBHOOK_URL || '';
 
 function publicOrderId(id) { return `ATH-${id.replace(/-/g, '').slice(0, 20).toUpperCase()}`; }
@@ -104,7 +104,7 @@ module.exports = function attachPremiumMarketplace({ app, pool, withTransaction,
       if (existing.rows[0]?.checkout_url) return res.json({ pending: true, orderId: existing.rows[0].id, paymentUrl: existing.rows[0].checkout_url });
       const orderId = crypto.randomUUID(), externalOrderId = publicOrderId(orderId);
       await pool.query(`INSERT INTO premium_playlist_orders(id,playlist_id,buyer_sub,amount_bdt,status,payment_provider,provider_reference,payment_method) VALUES($1,$2,$3,$4,'pending','nogorpay',$5,$6)`, [orderId, req.params.id, buyer, item.price_bdt, externalOrderId, String(req.body?.paymentMethod || '').slice(0, 40) || null]);
-      const origin = String(process.env.APP_ORIGIN || '').replace(/\/$/, '');
+      const origin = String(process.env.APP_ORIGIN || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
       const webhookUrl = NOGORPAY_WEBHOOK || (origin ? `${origin}/api/nogorpay/webhook` : '');
       if (!webhookUrl) return res.status(503).json({ error: 'Set APP_ORIGIN or NOGORPAY_WEBHOOK_URL before starting NogorPay checkout.' });
       const body = await nogorRequest('/charge/create', { method: 'POST', body: JSON.stringify({ order_id: externalOrderId, amount: Number(item.price_bdt), customer_phone: phone, customer_email: req.auth.session.email, customer_name: req.auth.session.name || 'Atharo viewer', brand_id: NOGORPAY_BRAND, payment_method: req.body?.paymentMethod || undefined, webhook_url: webhookUrl, redirect_url: `${origin}/premium/${encodeURIComponent(req.params.id)}?payment=return&order_id=${encodeURIComponent(orderId)}`, cancel_url: `${origin}/premium/${encodeURIComponent(req.params.id)}?payment=cancelled` }) });
