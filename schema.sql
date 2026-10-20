@@ -483,9 +483,18 @@ CREATE TABLE IF NOT EXISTS premium_playlist_orders (
   status TEXT NOT NULL DEFAULT 'paid' CHECK (status IN ('pending','paid','refunded','failed')),
   payment_provider TEXT NOT NULL DEFAULT 'demo',
   provider_reference TEXT,
+  provider_invoice_id TEXT,
+  payment_method TEXT,
+  checkout_url TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  paid_at TIMESTAMPTZ
+  paid_at TIMESTAMPTZ,
+  verified_at TIMESTAMPTZ
 );
+ALTER TABLE premium_playlist_orders ADD COLUMN IF NOT EXISTS provider_invoice_id TEXT;
+ALTER TABLE premium_playlist_orders ADD COLUMN IF NOT EXISTS payment_method TEXT;
+ALTER TABLE premium_playlist_orders ADD COLUMN IF NOT EXISTS checkout_url TEXT;
+ALTER TABLE premium_playlist_orders ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
+CREATE UNIQUE INDEX IF NOT EXISTS premium_orders_provider_invoice_idx ON premium_playlist_orders (provider_invoice_id) WHERE provider_invoice_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS premium_orders_one_paid_idx ON premium_playlist_orders (playlist_id,buyer_sub) WHERE status='paid';
 CREATE INDEX IF NOT EXISTS premium_orders_playlist_idx ON premium_playlist_orders (playlist_id,status,created_at DESC);
 CREATE INDEX IF NOT EXISTS premium_orders_buyer_idx ON premium_playlist_orders (buyer_sub,status,created_at DESC);

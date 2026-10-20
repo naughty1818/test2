@@ -954,7 +954,7 @@ app.delete('/api/videos/:id', requireAuth, requireActive, requireValidId, async 
 require('./learning')({ app, pool, withTransaction, s3, bucket: R2_BUCKET, requireAuth, requireActive, requireValidId, getVideo, canView, loadSession, safeText, sha, objectHead });
 require('./admin')({ app, requireAuth, requireActive, loadSession, notifyUser:sendNotification, getVideo, signedVideoUrl });
 require('./creator-studio')({ app, pool, requireAuth, requireActive, requireChannel, requireValidId, validUuid, safeText, normalizeCategory, normalizeVisibility });
-require('./premium-marketplace')({ app, pool, requireAuth, requireActive, requireChannel, loadSession, validUuid, safeText });
+require('./premium-marketplace')({ app, pool, withTransaction, requireAuth, requireActive, requireChannel, loadSession, validUuid, safeText });
 
 io.use(async (socket, next) => {
   try {
