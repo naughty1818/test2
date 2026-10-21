@@ -50,6 +50,9 @@ CREATE TABLE IF NOT EXISTS videos (
 );
 ALTER TABLE videos ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ;
 ALTER TABLE videos ADD COLUMN IF NOT EXISTS comments_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS is_premium BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS premium_price_bdt NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (premium_price_bdt >= 0);
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS premium_free_preview BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE videos
   ADD COLUMN IF NOT EXISTS is_islamic BOOLEAN NOT NULL DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS islamic_certification_status TEXT NOT NULL DEFAULT 'not_applicable',
@@ -129,6 +132,7 @@ CREATE TABLE IF NOT EXISTS playlist_items (
   added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (playlist_id, video_id)
 );
+ALTER TABLE playlist_items ADD COLUMN IF NOT EXISTS is_free_preview BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS playlist_items_order_idx ON playlist_items (playlist_id, position, added_at DESC);
 
 CREATE TABLE IF NOT EXISTS watch_history (
@@ -231,12 +235,16 @@ ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS feed_ad_every_rows SMALLI
 ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS ad_layout_settings JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS monetization_min_subscribers INTEGER NOT NULL DEFAULT 1000;
 ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS monetization_min_watch_hours NUMERIC(12,2) NOT NULL DEFAULT 4000;
+ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS premium_platform_fee_percent NUMERIC(5,2) NOT NULL DEFAULT 20;
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='platform_settings_monetization_min_subscribers_check') THEN
     ALTER TABLE platform_settings ADD CONSTRAINT platform_settings_monetization_min_subscribers_check CHECK (monetization_min_subscribers BETWEEN 1 AND 1000000000);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='platform_settings_monetization_min_watch_hours_check') THEN
     ALTER TABLE platform_settings ADD CONSTRAINT platform_settings_monetization_min_watch_hours_check CHECK (monetization_min_watch_hours > 0 AND monetization_min_watch_hours <= 1000000000);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='platform_settings_premium_platform_fee_check') THEN
+    ALTER TABLE platform_settings ADD CONSTRAINT platform_settings_premium_platform_fee_check CHECK (premium_platform_fee_percent >= 0 AND premium_platform_fee_percent <= 100);
   END IF;
 END $$;
 DO $$ BEGIN
@@ -507,6 +515,48 @@ CREATE TABLE IF NOT EXISTS premium_playlist_entitlements (
   PRIMARY KEY (playlist_id,buyer_sub)
 );
 CREATE INDEX IF NOT EXISTS premium_entitlements_buyer_idx ON premium_playlist_entitlements (buyer_sub,granted_at DESC);
+
+CREATE TABLE IF NOT EXISTS premium_video_orders (
+  id UUID PRIMARY KEY,
+  video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  buyer_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  amount_bdt NUMERIC(12,2) NOT NULL CHECK (amount_bdt > 0),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','refunded','failed')),
+  payment_provider TEXT NOT NULL DEFAULT 'nogorpay',
+  provider_reference TEXT,
+  provider_invoice_id TEXT,
+  payment_method TEXT,
+  checkout_url TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  paid_at TIMESTAMPTZ,
+  verified_at TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS premium_video_orders_one_paid_idx ON premium_video_orders (video_id,buyer_sub) WHERE status='paid';
+CREATE UNIQUE INDEX IF NOT EXISTS premium_video_orders_invoice_idx ON premium_video_orders (provider_invoice_id) WHERE provider_invoice_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS premium_video_entitlements (
+  video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  buyer_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  order_id UUID NOT NULL REFERENCES premium_video_orders(id) ON DELETE CASCADE,
+  granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (video_id,buyer_sub)
+);
+
+CREATE TABLE IF NOT EXISTS creator_withdrawal_requests (
+  id UUID PRIMARY KEY,
+  creator_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  amount_bdt NUMERIC(12,2) NOT NULL CHECK (amount_bdt > 0),
+  payment_method TEXT NOT NULL CHECK (payment_method IN ('bkash','nagad','rocket','upay','bank')),
+  account_number TEXT NOT NULL CHECK (char_length(account_number) BETWEEN 6 AND 80),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','paid','rejected','cancelled')),
+  creator_note TEXT NOT NULL DEFAULT '',
+  admin_note TEXT NOT NULL DEFAULT '',
+  reviewed_by_email TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  reviewed_at TIMESTAMPTZ,
+  paid_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS creator_withdrawals_creator_idx ON creator_withdrawal_requests (creator_sub,status,created_at DESC);
+CREATE INDEX IF NOT EXISTS creator_withdrawals_status_idx ON creator_withdrawal_requests (status,created_at ASC);
 
 CREATE TABLE IF NOT EXISTS channel_applications (
   id UUID PRIMARY KEY,
