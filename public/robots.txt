@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /auth/
+Disallow: /admin
+Disallow: /studio
+Disallow: /login
+Disallow: /upload
+Disallow: /history
+Disallow: /subscriptions
+Disallow: /playlists
+Disallow: /channel/me
+Disallow: /channel/apply
+
+Sitemap: https://www.atharo.online/sitemap.xml
