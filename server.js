@@ -75,10 +75,10 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '32kb' }));
-app.use('/assets/atharo-logo-reveal.mp4', express.static(path.join(__dirname, 'public/assets'), {
-  maxAge: '30d',
-  immutable: true
-}));
+app.get('/assets/atharo-logo-reveal.mp4', (req, res, next) => {
+  res.set('Cache-Control', 'public, max-age=2592000, immutable');
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 const VIDEO_SELECT = `

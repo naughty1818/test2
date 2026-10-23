@@ -127,14 +127,7 @@
       dismissed = true;
       splash.classList.add('intro-splash-hidden');
       window.setTimeout(() => splash.remove(), 520);
-      try { sessionStorage.setItem('atharo:intro-seen', '1'); } catch (_) {}
     };
-    let alreadySeen = false;
-    try { alreadySeen = sessionStorage.getItem('atharo:intro-seen') === '1'; } catch (_) {}
-    if (alreadySeen) {
-      splash.remove();
-      return;
-    }
     video.addEventListener('ended', closeSplash, { once: true });
     video.addEventListener('error', closeSplash, { once: true });
     skip?.addEventListener('click', closeSplash);

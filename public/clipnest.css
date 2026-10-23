@@ -33,7 +33,7 @@ a { color: inherit; text-decoration: none; }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid #f05a4355; outline-offset: 2px; }
 ::selection { background: #f05a4333; }
 
-/* Full-screen Atharo logo reveal shown once per browser tab session. */
+/* Full-screen Atharo logo reveal shown when the site is entered. */
 .intro-splash { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; overflow: hidden; background: #07120f; opacity: 1; transition: opacity .5s ease, visibility .5s ease; }
 .intro-splash-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
 .intro-splash-video { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; background: #07120f; }
