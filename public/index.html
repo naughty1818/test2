@@ -46,6 +46,12 @@
   </script>
 </head>
 <body>
+  <div class="intro-splash" id="introSplash" role="dialog" aria-label="Atharo intro" aria-modal="true">
+    <video class="intro-splash-video" id="introSplashVideo" autoplay muted playsinline preload="auto" aria-hidden="true">
+      <source src="/assets/atharo-logo-reveal.mp4" type="video/mp4">
+    </video>
+    <button class="intro-splash-skip" id="introSplashSkip" type="button">Skip intro</button>
+  </div>
   <div class="app-frame">
     <header class="topbar">
       <button class="icon-button mobile-menu-trigger" id="mobileToggle" type="button" aria-expanded="false" aria-controls="sidebar" aria-label="মেনু খুলুন">☰</button>
@@ -109,6 +115,34 @@
     </nav>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script>
+  (() => {
+    const splash = document.getElementById('introSplash');
+    const video = document.getElementById('introSplashVideo');
+    const skip = document.getElementById('introSplashSkip');
+    if (!splash || !video) return;
+    let dismissed = false;
+    const closeSplash = () => {
+      if (dismissed) return;
+      dismissed = true;
+      splash.classList.add('intro-splash-hidden');
+      window.setTimeout(() => splash.remove(), 520);
+      try { sessionStorage.setItem('atharo:intro-seen', '1'); } catch (_) {}
+    };
+    let alreadySeen = false;
+    try { alreadySeen = sessionStorage.getItem('atharo:intro-seen') === '1'; } catch (_) {}
+    if (alreadySeen) {
+      splash.remove();
+      return;
+    }
+    video.addEventListener('ended', closeSplash, { once: true });
+    video.addEventListener('error', closeSplash, { once: true });
+    skip?.addEventListener('click', closeSplash);
+    window.setTimeout(closeSplash, 6500);
+    const playPromise = video.play();
+    if (playPromise?.catch) playPromise.catch(closeSplash);
+  })();
+  </script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/i18n.js?v=login-startup-fix-1"></script>
   <script src="/console.js?v=premium-withdrawals-1"></script>

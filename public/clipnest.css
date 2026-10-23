@@ -33,6 +33,17 @@ a { color: inherit; text-decoration: none; }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid #f05a4355; outline-offset: 2px; }
 ::selection { background: #f05a4333; }
 
+/* Full-screen Atharo logo reveal shown once per browser tab session. */
+.intro-splash { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; overflow: hidden; background: #07120f; opacity: 1; transition: opacity .5s ease, visibility .5s ease; }
+.intro-splash-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+.intro-splash-video { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; background: #07120f; }
+.intro-splash-skip { position: absolute; right: clamp(16px, 3vw, 42px); bottom: max(22px, env(safe-area-inset-bottom)); min-height: 38px; padding: 0 16px; border: 1px solid #ffffff66; border-radius: 999px; color: #fff; background: #07120f99; font-size: 12px; font-weight: 700; backdrop-filter: blur(8px); transition: background .18s, transform .18s; }
+.intro-splash-skip:hover { background: #07120fcc; transform: translateY(-1px); }
+@media (max-width: 600px) {
+  .intro-splash-video { object-fit: contain; }
+  .intro-splash-skip { right: 16px; bottom: max(16px, env(safe-area-inset-bottom)); }
+}
+
 .app-frame { min-height: 100vh; }
 .topbar { height: 74px; position: sticky; top: 0; z-index: 30; display: grid; grid-template-columns: 222px minmax(260px, 1fr) 220px; align-items: center; gap: 26px; padding: 0 36px; background: rgba(248,247,244,.94); backdrop-filter: blur(16px); border-bottom: 1px solid #e9e7e1; }
 .brand-lockup { display: inline-flex; align-items: center; gap: 10px; width: fit-content; }
