@@ -74,19 +74,19 @@
       <aside class="sidebar" id="sidebar" aria-hidden="false">
         <div class="sidebar-label">দেখো</div>
         <nav aria-label="প্রধান নেভিগেশন">
-          <a href="/" data-route data-nav="home" class="nav-item"><span aria-hidden="true">⌂</span><span>হোম</span></a>
-          <a href="/search" data-route data-nav="search" class="nav-item"><span aria-hidden="true">⌕</span><span>খুঁজে দেখো</span></a>
-          <a href="/subscriptions" data-route data-nav="subscriptions" class="nav-item"><span aria-hidden="true">▤</span><span>সাবস্ক্রিপশন</span></a>
-          <a href="/channels" data-route data-nav="channels" class="nav-item"><span aria-hidden="true">◉</span><span>চ্যানেল</span></a>
-          <a href="/premium" data-route data-nav="premium" class="nav-item"><span aria-hidden="true">◇</span><span>Premium সিরিজ</span></a>
+          <a href="/" data-route data-nav="home" class="nav-item"><span aria-hidden="true"><img class="nav-item-icon" src="/assets/home.svg" alt=""></span><span>হোম</span></a>
+          <a href="/search" data-route data-nav="search" class="nav-item"><span aria-hidden="true"><img class="nav-item-icon" src="/assets/explore.svg" alt=""></span><span>খুঁজে দেখো</span></a>
+          <a href="/subscriptions" data-route data-nav="subscriptions" class="nav-item"><span aria-hidden="true"><img class="nav-item-icon" src="/assets/subscriptions.svg" alt=""></span><span>সাবস্ক্রিপশন</span></a>
+          <a href="/channels" data-route data-nav="channels" class="nav-item"><span aria-hidden="true"><img class="nav-item-icon" src="/assets/channels.svg" alt=""></span><span>চ্যানেল</span></a>
+          <a href="/premium" data-route data-nav="premium" class="nav-item"><span aria-hidden="true"><img class="nav-item-icon" src="/assets/premium.svg" alt=""></span><span>Premium সিরিজ</span></a>
         </nav>
         <div class="sidebar-divider"></div>
         <div class="sidebar-label">তোমার লাইব্রেরি</div>
         <nav aria-label="ব্যক্তিগত লাইব্রেরি">
-          <a href="/history" data-route data-nav="history" class="nav-item"><span aria-hidden="true">◷</span><span>দেখার ইতিহাস</span></a>
-          <a href="/playlists" data-route data-nav="playlists" class="nav-item"><span aria-hidden="true">▣</span><span>প্লেলিস্ট ও পরে দেখব</span></a>
-          <a href="/channel/me" data-route data-nav="my-channel" class="nav-item"><span aria-hidden="true">♡</span><span>আমার চ্যানেল</span></a>
-          <a href="/upload" data-route data-nav="upload" class="nav-item"><span aria-hidden="true">↑</span><span>ভিডিও আপলোড</span></a>
+          <a href="/history" data-route data-nav="history" class="nav-item"><span aria-hidden="true"><img class="nav-item-icon" src="/assets/history.svg" alt=""></span><span>দেখার ইতিহাস</span></a>
+          <a href="/playlists" data-route data-nav="playlists" class="nav-item"><span aria-hidden="true"><img class="nav-item-icon" src="/assets/playlist.svg" alt=""></span><span>প্লেলিস্ট ও পরে দেখব</span></a>
+          <a href="/channel/me" data-route data-nav="my-channel" class="nav-item"><span aria-hidden="true"><img class="nav-item-icon" src="/assets/my-channel.svg" alt=""></span><span>আমার চ্যানেল</span></a>
+          <a href="/upload" data-route data-nav="upload" class="nav-item"><span aria-hidden="true"><img class="nav-item-icon" src="/assets/upload.svg" alt=""></span><span>ভিডিও আপলোড</span></a>
         </nav>
         <div class="sidebar-note">
           <div class="sidebar-note-icon"><span aria-hidden="true">▷</span></div>
@@ -107,10 +107,10 @@
       </main>
     </div>
     <nav class="mobile-bottom-nav" aria-label="মোবাইল নেভিগেশন">
-      <a href="/" data-route data-mobile-nav="home"><span>⌂</span><span>হোম</span></a>
-      <a href="/subscriptions" data-route data-mobile-nav="subscriptions"><span>▤</span><span>সাবস্ক্রিপশন</span></a>
-      <a href="/upload" data-route data-mobile-nav="upload"><span class="mobile-upload">↑</span><span>আপলোড</span></a>
-          <a href="/playlists" data-route data-mobile-nav="playlists"><span>▣</span><span>লাইব্রেরি</span></a>
+      <a href="/" data-route data-mobile-nav="home"><span><img src="/assets/home.svg" alt=""></span><span>হোম</span></a>
+      <a href="/subscriptions" data-route data-mobile-nav="subscriptions"><span><img src="/assets/subscriptions.svg" alt=""></span><span>সাবস্ক্রিপশন</span></a>
+      <a href="/upload" data-route data-mobile-nav="upload"><span class="mobile-upload"><img src="/assets/upload.svg" alt=""></span><span>আপলোড</span></a>
+          <a href="/playlists" data-route data-mobile-nav="playlists"><span><img src="/assets/playlist.svg" alt=""></span><span>লাইব্রেরি</span></a>
     </nav>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -1211,6 +1211,13 @@
     if (notificationPopover && !event.target.closest('.notification-wrap')) notificationPopover.hidden = true;
   }, true);
   sidebar.addEventListener('touchmove', event => { if (sidebar.scrollHeight > sidebar.clientHeight) event.stopPropagation(); }, { passive: true });
+  let sidebarScrollTimer = null;
+  sidebar.addEventListener('scroll', () => {
+    if (!isDesktopSidebar()) return;
+    sidebar.classList.add('is-scrolling');
+    window.clearTimeout(sidebarScrollTimer);
+    sidebarScrollTimer = window.setTimeout(() => sidebar.classList.remove('is-scrolling'), 700);
+  }, { passive: true });
   searchForm.addEventListener('submit', event => { event.preventDefault(); state.query = globalSearch.value.trim(); state.category = ''; navigate('/search' + (state.query ? '?q=' + encodeURIComponent(state.query) : '')); });
   if (socket) {
     socket.on('connect', () => { if (state.currentVideoId) socket.emit('video:join', state.currentVideoId); if (state.currentChannelHandle) socket.emit('channel:join', state.currentChannelHandle); });
