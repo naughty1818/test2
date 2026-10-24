@@ -726,8 +726,9 @@
       const playerBrand=$('div',{class:'player-brand-overlay'},[$('img',{src:'/assets/atharo-logo.png?v=atharo-player-layout-3',alt:'Atharo',class:'player-brand-logo'}),$('div',{class:'player-brand-copy'},[$('strong',{text:text(video.title,'বাংলা ভিডিও')}),$('span',{text:'Atharo  ·  '+(Number(video.views||0).toLocaleString('en-US'))+' views'})])]);
       const centerPlayButton=playerIconButton('play','player-center-play','ভিডিও চালাও');
       centerPlayButton.addEventListener('click',()=>{if(player.paused)player.play().catch(()=>{});else player.pause();});
+      const centerSeekControls=$('div',{class:'player-center-seek-controls'},[backwardButton,centerPlayButton,forwardButton]);
       const playerTopControls=$('div',{class:'player-top-controls'},[captions,castButton,autoNextButton,settingsButton]);
-      const playerControls=$('div',{class:'player-controls'},[backwardButton,playButton,forwardButton,progress,timeLabel,volumeButton,volume,fullscreenButton]);
+      const playerControls=$('div',{class:'player-controls'},[playButton,progress,timeLabel,volumeButton,volume,fullscreenButton]);
       const positionKey='atharo:video-position:'+id, savedPosition=Number(localStorage.getItem(positionKey))||0;
       const setPlaying=playing=>{setPlayerIcon(playButton,playing?'pause':'play');playButton.setAttribute('aria-label',playing?'ভিডিও থামাও':'ভিডিও চালাও');};
       const syncProgress=()=>{const duration=Number(player.duration)||0;progress.max=duration||100;progress.value=Number(player.currentTime)||0;timeLabel.textContent=formatDuration(player.currentTime)+' / '+formatDuration(duration);if(player.currentTime>0)try{localStorage.setItem(positionKey,String(Math.floor(player.currentTime)));}catch(_){} };
@@ -770,7 +771,7 @@
       const lShapeBottomImageLink = $('a', { class: 'l-shape-bottom-image-link', target:'_blank', rel:'noopener noreferrer' }, [lShapeBottomImage]);
       lShapeBody.append(lShapeLandingUrl,lShapeDetails,lShapeBottomImageLink);
       lShapeAd.append(lShapeRightLink,lShapeBody,lShapeClose);
-      stage.append(player,playerBrand,centerPlayButton,playerLoader,actionFeedback,playerStatus,retryPlayback,playerTopControls,playerControls,settingsMenu,lShapeAd);if(player.readyState>=1)playerStatus.hidden=true;
+      stage.append(player,playerBrand,centerSeekControls,playerLoader,actionFeedback,playerStatus,retryPlayback,playerTopControls,playerControls,settingsMenu,lShapeAd);if(player.readyState>=1)playerStatus.hidden=true;
       let lAdShown = false, lAdTimer = null, lAdDismissTimer = null, lShapeLayout = null, nextVideoId = null;
       const fitLShapeToStage = () => {
         if(!lShapeLayout)return;
