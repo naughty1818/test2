@@ -27,7 +27,7 @@
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/atharo-favicon.png?v=atharo-icon-2">
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/atharo-apple-touch-icon.png?v=atharo-icon-2">
   <link rel="manifest" href="/manifest.webmanifest?v=atharo-icon-2">
-  <link rel="stylesheet" href="/clipnest.css?v=atharo-player-reference-3">
+  <link rel="stylesheet" href="/clipnest.css?v=premium-commerce-1">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -704,9 +704,9 @@
       const playerLoader=$('div',{class:'atharo-player-loader',hidden:true},[$('img',{src:'/assets/atharo-favicon.png?v=atharo-icon-2',alt:'Atharo'}),$('span',{text:'লোড হচ্ছে…'})]);
       const actionFeedback=$('div',{class:'player-action-feedback','aria-live':'polite',hidden:true});
       const showAction=message=>{actionFeedback.textContent=message;actionFeedback.hidden=false;clearTimeout(showAction.timer);showAction.timer=setTimeout(()=>{actionFeedback.hidden=true;},850);};
-      const playerIcon=name=>$('img',{src:'/assets/'+name+'.svg?v=atharo-player-reference-3',alt:'',class:'player-control-icon'});
+      const playerIcon=name=>$('img',{src:'/assets/'+name+'.svg',alt:'',class:'player-control-icon'});
       const playerIconButton=(icon,className,label)=>{const node=button('','player-control-button '+className);node.append(playerIcon(icon));node.setAttribute('aria-label',label);return node;};
-      const setPlayerIcon=(node,icon)=>{const image=node.querySelector('.player-control-icon');if(image)image.src='/assets/'+icon+'.svg?v=atharo-player-reference-3';};
+      const setPlayerIcon=(node,icon)=>{const image=node.querySelector('.player-control-icon');if(image)image.src='/assets/'+icon+'.svg';};
       const playButton=playerIconButton('play','player-play-button','ভিডিও চালাও');
       const backwardButton=playerIconButton('backward_10','player-skip-button player-backward-button','১০ সেকেন্ড পিছনে');
       const forwardButton=playerIconButton('forward_10','player-skip-button player-forward-button','১০ সেকেন্ড সামনে');
@@ -715,7 +715,7 @@
       const volumeButton=playerIconButton('volume','player-volume-button','শব্দ বন্ধ করো');
       const volume=$('input',{type:'range',class:'player-volume-range',min:'0',max:'1',step:'0.05',value:'1','aria-label':'শব্দের মাত্রা'});
       const captions=$('select',{class:'player-caption-select','aria-label':'Subtitle নির্বাচন'});captions.append($('option',{value:'',text:'CC'}));
-      const castButton=playerIconButton('cast','player-cast-button','Cast করো');
+      const castButton=button('◫','player-control-button player-cast-button');castButton.setAttribute('aria-label','Cast করো');
       const autoNextButton=playerIconButton('replay','player-autonext-button','Auto next চালু বা বন্ধ করো');
       const autoNextKey='atharo:auto-next',autoNext=localStorage.getItem(autoNextKey)!=='off';autoNextButton.setAttribute('aria-pressed',String(autoNext));autoNextButton.classList.toggle('player-toggle-active',autoNext);
       const speed=$('select',{class:'player-speed','aria-label':'Playback speed'});[['0.75','0.75×'],['1','1×'],['1.25','1.25×'],['1.5','1.5×'],['2','2×']].forEach(([value,label])=>speed.append($('option',{value,text:label})));
@@ -723,12 +723,8 @@
       const settingsButton=playerIconButton('settings','player-settings-button','ভিডিও সেটিংস');
       const fullscreenButton=playerIconButton('fullscreen','player-fullscreen-button','পূর্ণ পর্দা');
       const settingsMenu=$('div',{class:'player-settings-menu',hidden:true},[$('span',{text:'Playback speed'}),speed]);
-      const playerBrand=$('div',{class:'player-brand-overlay'},[$('img',{src:'/assets/atharo-logo.png?v=atharo-player-layout-3',alt:'Atharo',class:'player-brand-logo'}),$('div',{class:'player-brand-copy'},[$('strong',{text:text(video.title,'বাংলা ভিডিও')}),$('span',{text:'Atharo  ·  '+(Number(video.views||0).toLocaleString('en-US'))+' views'})])]);
-      const centerPlayButton=playerIconButton('play','player-center-play','ভিডিও চালাও');
-      centerPlayButton.addEventListener('click',()=>{if(player.paused)player.play().catch(()=>{});else player.pause();});
-      const centerSeekControls=$('div',{class:'player-center-seek-controls'},[backwardButton,centerPlayButton,forwardButton]);
       const playerTopControls=$('div',{class:'player-top-controls'},[captions,castButton,autoNextButton,settingsButton]);
-      const playerControls=$('div',{class:'player-controls'},[playButton,progress,timeLabel,volumeButton,volume,fullscreenButton]);
+      const playerControls=$('div',{class:'player-controls'},[backwardButton,playButton,forwardButton,progress,timeLabel,volumeButton,volume,fullscreenButton]);
       const positionKey='atharo:video-position:'+id, savedPosition=Number(localStorage.getItem(positionKey))||0;
       const setPlaying=playing=>{setPlayerIcon(playButton,playing?'pause':'play');playButton.setAttribute('aria-label',playing?'ভিডিও থামাও':'ভিডিও চালাও');};
       const syncProgress=()=>{const duration=Number(player.duration)||0;progress.max=duration||100;progress.value=Number(player.currentTime)||0;timeLabel.textContent=formatDuration(player.currentTime)+' / '+formatDuration(duration);if(player.currentTime>0)try{localStorage.setItem(positionKey,String(Math.floor(player.currentTime)));}catch(_){} };
@@ -754,8 +750,7 @@
       window.__atharoPlayerKeydown?.();document.addEventListener('keydown',playerKeydown);window.__atharoPlayerKeydown=()=>document.removeEventListener('keydown',playerKeydown);
       player.addEventListener('waiting',()=>{playerLoader.hidden=false;playerStatus.textContent='ভিডিও বাফার হচ্ছে… নেটওয়ার্ক ধীর হলে কিছুক্ষণ অপেক্ষা করো।';playerStatus.hidden=false;showAction('Buffering');});
       player.addEventListener('stalled',()=>{playerLoader.hidden=false;playerStatus.textContent='ভিডিও ডেটা আসতে দেরি হচ্ছে।';playerStatus.hidden=false;showAction('Loading');});
-      player.addEventListener('playing',()=>{playerLoader.hidden=true;playerStatus.hidden=true;retryPlayback.hidden=true;setPlaying(true);stage.classList.add('player-is-playing');});
-      player.addEventListener('pause',()=>stage.classList.remove('player-is-playing'));
+      player.addEventListener('playing',()=>{playerLoader.hidden=true;playerStatus.hidden=true;retryPlayback.hidden=true;setPlaying(true);});
       player.addEventListener('pause',()=>{setPlaying(false);showAction('❚❚ Paused');});
       player.addEventListener('error',()=>{playerLoader.hidden=true;playerStatus.textContent='ভিডিও লোড হয়নি। সংযোগ পরীক্ষা করে আবার চেষ্টা করো।';playerStatus.hidden=false;retryPlayback.hidden=false;showAction('Playback error');});
       stage.addEventListener('mousemove',()=>{stage.classList.add('player-controls-visible');clearTimeout(stage._controlsTimer);stage._controlsTimer=setTimeout(()=>stage.classList.remove('player-controls-visible'),2500);});
@@ -771,7 +766,7 @@
       const lShapeBottomImageLink = $('a', { class: 'l-shape-bottom-image-link', target:'_blank', rel:'noopener noreferrer' }, [lShapeBottomImage]);
       lShapeBody.append(lShapeLandingUrl,lShapeDetails,lShapeBottomImageLink);
       lShapeAd.append(lShapeRightLink,lShapeBody,lShapeClose);
-      stage.append(player,playerBrand,centerSeekControls,playerLoader,actionFeedback,playerStatus,retryPlayback,playerTopControls,playerControls,settingsMenu,lShapeAd);if(player.readyState>=1)playerStatus.hidden=true;
+      stage.append(player,playerLoader,actionFeedback,playerStatus,retryPlayback,playerTopControls,playerControls,settingsMenu,lShapeAd);if(player.readyState>=1)playerStatus.hidden=true;
       let lAdShown = false, lAdTimer = null, lAdDismissTimer = null, lShapeLayout = null, nextVideoId = null;
       const fitLShapeToStage = () => {
         if(!lShapeLayout)return;
