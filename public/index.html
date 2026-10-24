@@ -27,7 +27,7 @@
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/atharo-favicon.png?v=atharo-icon-2">
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/atharo-apple-touch-icon.png?v=atharo-icon-2">
   <link rel="manifest" href="/manifest.webmanifest?v=atharo-icon-2">
-  <link rel="stylesheet" href="/clipnest.css?v=premium-commerce-1">
+  <link rel="stylesheet" href="/clipnest.css?v=atharo-player-refresh-2">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -704,9 +704,9 @@
       const playerLoader=$('div',{class:'atharo-player-loader',hidden:true},[$('img',{src:'/assets/atharo-favicon.png?v=atharo-icon-2',alt:'Atharo'}),$('span',{text:'লোড হচ্ছে…'})]);
       const actionFeedback=$('div',{class:'player-action-feedback','aria-live':'polite',hidden:true});
       const showAction=message=>{actionFeedback.textContent=message;actionFeedback.hidden=false;clearTimeout(showAction.timer);showAction.timer=setTimeout(()=>{actionFeedback.hidden=true;},850);};
-      const playerIcon=name=>$('img',{src:'/assets/'+name+'.svg',alt:'',class:'player-control-icon'});
+      const playerIcon=name=>$('img',{src:'/assets/'+name+'.svg?v=atharo-brand-icons-2',alt:'',class:'player-control-icon'});
       const playerIconButton=(icon,className,label)=>{const node=button('','player-control-button '+className);node.append(playerIcon(icon));node.setAttribute('aria-label',label);return node;};
-      const setPlayerIcon=(node,icon)=>{const image=node.querySelector('.player-control-icon');if(image)image.src='/assets/'+icon+'.svg';};
+      const setPlayerIcon=(node,icon)=>{const image=node.querySelector('.player-control-icon');if(image)image.src='/assets/'+icon+'.svg?v=atharo-brand-icons-2';};
       const playButton=playerIconButton('play','player-play-button','ভিডিও চালাও');
       const backwardButton=playerIconButton('backward_10','player-skip-button player-backward-button','১০ সেকেন্ড পিছনে');
       const forwardButton=playerIconButton('forward_10','player-skip-button player-forward-button','১০ সেকেন্ড সামনে');
