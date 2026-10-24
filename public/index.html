@@ -71,7 +71,7 @@
       </div>
     </header>
     <div class="page-layout">
-      <aside class="sidebar" id="sidebar" aria-hidden="true" inert>
+      <aside class="sidebar" id="sidebar" aria-hidden="false">
         <div class="sidebar-label">দেখো</div>
         <nav aria-label="প্রধান নেভিগেশন">
           <a href="/" data-route data-nav="home" class="nav-item"><span aria-hidden="true">⌂</span><span>হোম</span></a>
@@ -277,7 +277,16 @@
   }
   function setPage(children) { app.replaceChildren(...children); app.focus({ preventScroll: true }); }
   function loadingPage(message = 'লোড হচ্ছে…') { setPage([$ ('div', { class: 'atharo-page-loader' }, [$('img', { src: '/assets/atharo-favicon.png?v=atharo-icon-2', alt: 'Atharo' }), $('span', { text: message })])]); }
-  function closeMobile() { sidebar.classList.remove('sidebar-open'); sidebar.inert=true; sidebar.setAttribute('aria-hidden','true'); mobileToggle.setAttribute('aria-expanded', 'false'); mobileToggle.setAttribute('aria-label','মেনু খুলুন'); }
+  function isDesktopSidebar() { return window.matchMedia('(min-width: 761px)').matches; }
+  function closeMobile() {
+    sidebar.classList.remove('sidebar-open');
+    sidebar.inert = !isDesktopSidebar();
+    sidebar.setAttribute('aria-hidden', String(!isDesktopSidebar()));
+    mobileToggle.setAttribute('aria-expanded', 'false');
+    mobileToggle.setAttribute('aria-label','মেনু খুলুন');
+  }
+  if (!isDesktopSidebar()) closeMobile();
+  window.addEventListener('resize', () => { if (!isDesktopSidebar()) closeMobile(); else { sidebar.inert = false; sidebar.setAttribute('aria-hidden', 'false'); } });
   function closeAccountMenu() { document.querySelectorAll('.account-menu.open').forEach(menu => { menu.classList.remove('open'); const toggle = menu.previousElementSibling; if (toggle) toggle.setAttribute('aria-expanded', 'false'); }); }
   function leaveRealtimeRooms() {
     if (socket && state.currentVideoId) socket.emit('video:leave', state.currentVideoId);
@@ -1186,10 +1195,20 @@
   });
   window.addEventListener('popstate',()=>safeRenderRoute());
   window.addEventListener('atharo:language-change',()=>{if(languageSelect&&window.AtharoI18n)languageSelect.value=window.AtharoI18n.locale;if(mobileLanguageSelect&&window.AtharoI18n)mobileLanguageSelect.value=window.AtharoI18n.locale;safeRenderRoute();});
-  mobileToggle.addEventListener('click', event => { event.stopPropagation(); closeAccountMenu(); const open = sidebar.classList.toggle('sidebar-open'); sidebar.inert=!open; sidebar.setAttribute('aria-hidden',String(!open)); mobileToggle.setAttribute('aria-expanded', String(open)); mobileToggle.setAttribute('aria-label',open?'মেনু বন্ধ করুন':'মেনু খুলুন'); });
+  mobileToggle.addEventListener('click', event => {
+    event.stopPropagation();
+    closeAccountMenu();
+    const open = sidebar.classList.toggle('sidebar-open');
+    sidebar.inert = isDesktopSidebar() ? false : !open;
+    sidebar.setAttribute('aria-hidden', String(isDesktopSidebar() ? false : !open));
+    mobileToggle.setAttribute('aria-expanded', String(open));
+    mobileToggle.setAttribute('aria-label',open?'মেনু বন্ধ করুন':'মেনু খুলুন');
+  });
   document.addEventListener('pointerdown', event => {
     if (!sidebar.contains(event.target) && event.target !== mobileToggle && !mobileToggle.contains(event.target)) closeMobile();
     if (!event.target.closest('.account-wrap')) closeAccountMenu();
+    const notificationPopover = notificationArea.querySelector('.notification-popover');
+    if (notificationPopover && !event.target.closest('.notification-wrap')) notificationPopover.hidden = true;
   }, true);
   sidebar.addEventListener('touchmove', event => { if (sidebar.scrollHeight > sidebar.clientHeight) event.stopPropagation(); }, { passive: true });
   searchForm.addEventListener('submit', event => { event.preventDefault(); state.query = globalSearch.value.trim(); state.category = ''; navigate('/search' + (state.query ? '?q=' + encodeURIComponent(state.query) : '')); });

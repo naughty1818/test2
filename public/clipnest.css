@@ -1334,9 +1334,23 @@ body.admin-fullscreen .main-content { width:100%; max-width:none; min-height:100
   .topbar>.top-search { grid-column:3; grid-row:1; }
   .top-actions { grid-column:4; grid-row:1; }
   .page-layout { display:block; padding:0 36px; }
-  .main-content { padding:28px 0 60px; }
-  .sidebar { position:fixed; z-index:29; top:74px; bottom:0; left:0; width:250px; height:auto; min-height:0; overflow-y:auto; padding:26px 20px 18px; border-right:1px solid var(--border); background:var(--background); box-shadow:12px 0 32px #2025201c; transform:translateX(-105%); transition:transform .2s ease; }
-  .sidebar.sidebar-open { transform:translateX(0); }
+  .main-content { padding:28px 0 60px 78px; }
+  .sidebar { position:fixed; z-index:29; top:74px; bottom:0; left:0; width:64px; height:auto; min-height:0; overflow-x:hidden; overflow-y:auto; padding:26px 8px 18px; border-right:1px solid var(--border); background:var(--background); box-shadow:none; transform:none; transition:width .2s ease, box-shadow .2s ease; }
+  .sidebar.sidebar-open { width:250px; box-shadow:12px 0 32px #2025201c; }
+  .sidebar:not(.sidebar-open) .sidebar-label,
+  .sidebar:not(.sidebar-open) .nav-item > span:last-child,
+  .sidebar:not(.sidebar-open) .sidebar-note,
+  .sidebar:not(.sidebar-open) .sidebar-footer { visibility:hidden; opacity:0; }
+  .sidebar:not(.sidebar-open) .nav-item { width:48px; justify-content:center; padding:0; gap:0; }
+  .sidebar:not(.sidebar-open) .sidebar-divider { margin:24px 8px 23px; }
+  .sidebar.sidebar-open .sidebar-label,
+  .sidebar.sidebar-open .nav-item > span:last-child,
+  .sidebar.sidebar-open .sidebar-note,
+  .sidebar.sidebar-open .sidebar-footer { visibility:visible; opacity:1; }
+  .sidebar .sidebar-label,
+  .sidebar .nav-item > span:last-child,
+  .sidebar .sidebar-note,
+  .sidebar .sidebar-footer { transition:opacity .12s ease; }
   body.watch-player-page .sidebar,body.watch-player-page .mobile-menu-trigger { display:none !important; }
   body.watch-player-page .page-layout { display:block; padding:0 36px; }
   body.watch-player-page .main-content { padding:28px 0 60px; }
