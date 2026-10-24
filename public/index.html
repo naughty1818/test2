@@ -705,12 +705,18 @@
       const actionFeedback=$('div',{class:'player-action-feedback','aria-live':'polite',hidden:true});
       const showAction=message=>{actionFeedback.textContent=message;actionFeedback.hidden=false;clearTimeout(showAction.timer);showAction.timer=setTimeout(()=>{actionFeedback.hidden=true;},850);};
       const playerBrandCopy=$('div',{class:'player-brand-copy'},[$('strong',{text:text(video.title,'ভিডিও')}),$('span',{text:text(video.ownerName,'Atharo নির্মাতা')+' · '+number(data.viewsCount)+' ভিউ'})]);
-      const playerBrandOverlay=$('div',{class:'player-brand-overlay'},[$('img',{src:'/assets/atharo-logo.png',alt:'Atharo',class:'player-brand-mark'}),playerBrandCopy]);
+      const playerCollapseButton=playerIconButton('collapse','player-mobile-collapse','Player controls — পরে যোগ করা হবে');playerCollapseButton.disabled=true;playerCollapseButton.title='Player collapse — পরে যোগ করা হবে';
+      const playerBrandOverlay=$('div',{class:'player-brand-overlay'},[playerCollapseButton,$('img',{src:'/assets/atharo-logo.png',alt:'Atharo',class:'player-brand-mark'}),playerBrandCopy]);
       const playerIcon=name=>$('img',{src:'/assets/'+name+'.svg',alt:'',class:'player-control-icon'});
       const playerIconButton=(icon,className,label)=>{const node=button('','player-control-button '+className);node.append(playerIcon(icon));node.setAttribute('aria-label',label);return node;};
       const setPlayerIcon=(node,icon)=>{const image=node.querySelector('.player-control-icon');if(image)image.src='/assets/'+icon+'.svg';};
       const playButton=playerIconButton('play','player-play-button','ভিডিও চালাও');
       const centerPlayButton=playerIconButton('play','player-center-play','ভিডিও চালাও');
+      const mobileCenterControls=$('div',{class:'player-mobile-center-controls'});
+      const mobileBackwardButton=playerIconButton('backward_10','player-mobile-skip','১০ সেকেন্ড পিছনে');
+      const mobilePlayButton=playerIconButton('play','player-mobile-play','ভিডিও চালাও');
+      const mobileForwardButton=playerIconButton('forward_10','player-mobile-skip','১০ সেকেন্ড সামনে');
+      mobileCenterControls.append(mobileBackwardButton,mobilePlayButton,mobileForwardButton);
       const backwardButton=playerIconButton('backward_10','player-skip-button player-backward-button','১০ সেকেন্ড পিছনে');
       const forwardButton=playerIconButton('forward_10','player-skip-button player-forward-button','১০ সেকেন্ড সামনে');
       const progress=$('input',{type:'range',class:'player-progress',min:'0',max:'100',value:'0',step:'0.1','aria-label':'ভিডিওর অগ্রগতি'});
@@ -727,17 +733,24 @@
       const speed=$('select',{class:'player-speed','aria-label':'Playback speed'});[['0.75','0.75×'],['1','1×'],['1.25','1.25×'],['1.5','1.5×'],['2','2×']].forEach(([value,label])=>speed.append($('option',{value,text:label})));
       const savedSpeed=Number(localStorage.getItem('atharo:video-speed'))||1;speed.value=String([0.75,1,1.25,1.5,2].includes(savedSpeed)?savedSpeed:1);
       const settingsButton=playerIconButton('settings','player-settings-button','ভিডিও সেটিংস');
+      const moreButton=playerIconButton('more','player-more-button','আরও player options');
       const fullscreenButton=playerIconButton('fullscreen','player-fullscreen-button','পূর্ণ পর্দা');
+      const mobileCaptionsButton=playerIconButton('captions_cc','player-mobile-captions','Captions চালু বা বন্ধ করো');
       const qualityOption=button('','player-setting-option');qualityOption.append(playerIcon('quality'),$('span',{text:'Quality'}),$('strong',{text:'Auto'}));qualityOption.disabled=true;qualityOption.title='Quality selector — পরে যোগ করা হবে';
-      const settingsMenu=$('div',{class:'player-settings-menu',hidden:true},[qualityOption,$('label',{class:'player-setting-label',text:'Playback speed'}),speed]);
-      const playerTopControls=$('div',{class:'player-top-controls'},[captions,castButton,pipButton,miniPlayerButton,theaterButton,settingsButton]);
-      const playerControls=$('div',{class:'player-controls'},[backwardButton,playButton,forwardButton,progress,timeLabel,volumeButton,volume,fullscreenButton]);
+      const autoNextRow=$('div',{class:'player-setting-row'},[$('span',{text:'Auto next'}),autoNextButton]);
+      const settingsMenu=$('div',{class:'player-settings-menu',hidden:true},[qualityOption,$('label',{class:'player-setting-label',text:'Playback speed'}),speed,autoNextRow]);
+      const playerTopControls=$('div',{class:'player-top-controls'},[castButton,captions,settingsButton,moreButton]);
+      const playerControls=$('div',{class:'player-controls'},[backwardButton,playButton,forwardButton,progress,timeLabel,volumeButton,volume,miniPlayerButton,pipButton,theaterButton,fullscreenButton,mobileCaptionsButton]);
       const positionKey='atharo:video-position:'+id, savedPosition=Number(localStorage.getItem(positionKey))||0;
-      const setPlaying=playing=>{setPlayerIcon(playButton,playing?'pause':'play');playButton.setAttribute('aria-label',playing?'ভিডিও থামাও':'ভিডিও চালাও');setPlayerIcon(centerPlayButton,playing?'pause':'play');centerPlayButton.setAttribute('aria-label',playing?'ভিডিও থামাও':'ভিডিও চালাও');centerPlayButton.hidden=playing;};
+      const setPlaying=playing=>{setPlayerIcon(playButton,playing?'pause':'play');playButton.setAttribute('aria-label',playing?'ভিডিও থামাও':'ভিডিও চালাও');setPlayerIcon(mobilePlayButton,playing?'pause':'play');mobilePlayButton.setAttribute('aria-label',playing?'ভিডিও থামাও':'ভিডিও চালাও');setPlayerIcon(centerPlayButton,playing?'pause':'play');centerPlayButton.setAttribute('aria-label',playing?'ভিডিও থামাও':'ভিডিও চালাও');centerPlayButton.hidden=playing;};
       const syncProgress=()=>{const duration=Number(player.duration)||0;progress.max=duration||100;progress.value=Number(player.currentTime)||0;stage.style.setProperty('--player-progress',duration?Math.min(100,(Number(player.currentTime)||0)/duration*100)+'%':'0%');timeLabel.textContent=formatDuration(player.currentTime)+' / '+formatDuration(duration);if(player.currentTime>0)try{localStorage.setItem(positionKey,String(Math.floor(player.currentTime)));}catch(_){} };
       const toggleFullscreen=async()=>{if(document.fullscreenElement){document.exitFullscreen?.();try{await screen.orientation?.unlock?.();}catch(_){} }else{try{await stage.requestFullscreen?.();await screen.orientation?.lock?.('landscape');}catch(_){stage.requestFullscreen?.();}}};
       document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement){try{screen.orientation?.unlock?.();}catch(_){}}},{once:false});
       playButton.addEventListener('click',()=>{if(player.paused)player.play().catch(()=>{});else player.pause();});
+      mobilePlayButton.addEventListener('click',()=>{if(player.paused)player.play().catch(()=>{});else player.pause();});
+      const seekBy=seconds=>{player.currentTime=Math.max(0,Math.min(player.duration||Infinity,(Number(player.currentTime)||0)+seconds));showAction((seconds>0?'+':'')+seconds+' seconds');syncProgress();};
+      mobileBackwardButton.addEventListener('click',()=>seekBy(-10));
+      mobileForwardButton.addEventListener('click',()=>seekBy(10));
       centerPlayButton.addEventListener('click',()=>{if(player.paused)player.play().catch(()=>{});else player.pause();});
       let clickTimer=null;
       player.addEventListener('click',()=>{clearTimeout(clickTimer);clickTimer=setTimeout(()=>{if(player.paused)player.play().catch(()=>{});else player.pause();},180);});
@@ -753,6 +766,8 @@
       autoNextButton.addEventListener('click',()=>{const next=autoNextButton.getAttribute('aria-pressed')!=='true';autoNextButton.setAttribute('aria-pressed',String(next));autoNextButton.classList.toggle('player-toggle-active',next);try{localStorage.setItem(autoNextKey,next?'on':'off');}catch(_){}showAction(next?'Auto next on':'Auto next off');});
       speed.addEventListener('change',()=>{player.playbackRate=Number(speed.value)||1;try{localStorage.setItem('atharo:video-speed',speed.value);}catch(_){}});
       settingsButton.addEventListener('click',()=>{settingsMenu.hidden=!settingsMenu.hidden;showAction('Settings');});
+      moreButton.addEventListener('click',()=>{settingsMenu.hidden=!settingsMenu.hidden;showAction('Player options');});
+      mobileCaptionsButton.addEventListener('click',()=>{if(captions.options.length<2){showAction('No captions available');return;}captions.selectedIndex=captions.selectedIndex>0?0:1;captions.dispatchEvent(new Event('change'));});
       theaterButton.addEventListener('click',()=>{const active=section.classList.toggle('watch-theater-mode');stage.classList.toggle('player-theater-mode',active);theaterButton.classList.toggle('player-toggle-active',active);theaterButton.setAttribute('aria-pressed',String(active));showAction(active?'Theater mode on':'Theater mode off');});
       pipButton.addEventListener('click',async()=>{try{if(document.pictureInPictureElement)await document.exitPictureInPicture();else await player.requestPictureInPicture();}catch(_){notify('এই browser-এ Picture in picture চালু করা যায়নি।','error');}});
       fullscreenButton.addEventListener('click',toggleFullscreen);
@@ -776,7 +791,7 @@
       const lShapeBottomImageLink = $('a', { class: 'l-shape-bottom-image-link', target:'_blank', rel:'noopener noreferrer' }, [lShapeBottomImage]);
       lShapeBody.append(lShapeLandingUrl,lShapeDetails,lShapeBottomImageLink);
       lShapeAd.append(lShapeRightLink,lShapeBody,lShapeClose);
-      stage.append(player,playerLoader,actionFeedback,playerStatus,retryPlayback,playerBrandOverlay,centerPlayButton,playerTopControls,playerControls,settingsMenu,lShapeAd);if(player.readyState>=1)playerStatus.hidden=true;
+      stage.append(player,playerLoader,actionFeedback,playerStatus,retryPlayback,playerBrandOverlay,centerPlayButton,mobileCenterControls,playerTopControls,playerControls,settingsMenu,lShapeAd);if(player.readyState>=1)playerStatus.hidden=true;
       let lAdShown = false, lAdTimer = null, lAdDismissTimer = null, lShapeLayout = null, nextVideoId = null;
       const fitLShapeToStage = () => {
         if(!lShapeLayout)return;
@@ -922,7 +937,7 @@
         player.addEventListener('timeupdate',()=>{const now=Date.now(),wall=Math.max(0,(now-lastTick)/1000),delta=player.currentTime-lastPosition;if(!player.paused&&!player.seeking&&delta>=0&&delta<=wall*2+2)watchedSeconds+=Math.min(delta,wall+1);lastPosition=player.currentTime;lastTick=now;if(watchedSeconds>=25){const elapsed=Math.min(30,Math.round(watchedSeconds));watchedSeconds=0;sendAnalytics(elapsed);}});
         player.addEventListener('seeking',()=>{lastPosition=player.currentTime;lastTick=Date.now();});
       }
-      jsonFetch('/api/videos/'+encodeURIComponent(id)+'/captions').then(data=>{if(token!==state.routeToken)return;(data.captions||[]).forEach(caption=>{const track=document.createElement('track');track.kind='subtitles';track.srclang=caption.language;track.label=caption.label;track.src='/api/videos/'+encodeURIComponent(id)+'/captions/'+encodeURIComponent(caption.language);if(caption.isDefault)track.default=true;player.append(track);captions.append($('option',{value:caption.language,text:caption.label||caption.language}));});captions.addEventListener('change',()=>{[...player.textTracks].forEach(track=>{track.mode=track.language===captions.value?'showing':'disabled';});});}).catch(()=>{});
+      jsonFetch('/api/videos/'+encodeURIComponent(id)+'/captions').then(data=>{if(token!==state.routeToken)return;(data.captions||[]).forEach(caption=>{const track=document.createElement('track');track.kind='subtitles';track.srclang=caption.language;track.label=caption.label;track.src='/api/videos/'+encodeURIComponent(id)+'/captions/'+encodeURIComponent(caption.language);if(caption.isDefault)track.default=true;player.append(track);captions.append($('option',{value:caption.language,text:caption.label||caption.language}));});captions.addEventListener('change',()=>{[...player.textTracks].forEach(track=>{track.mode=track.language===captions.value?'showing':'disabled';});mobileCaptionsButton.classList.toggle('player-toggle-active',captions.selectedIndex>0);});}).catch(()=>{});
       jsonFetch('/api/videos/'+encodeURIComponent(id)+'/chapters').then(data=>{if(token!==state.routeToken||!(data.chapters||[]).length)return;chaptersPanel.hidden=false;chaptersPanel.append($('h2',{text:'ভিডিওর অধ্যায়'}));const list=$('div',{class:'chapter-list'});(data.chapters||[]).forEach(chapter=>list.append(button(Math.floor(chapter.startSeconds/60)+':'+String(Math.floor(chapter.startSeconds%60)).padStart(2,'0')+' · '+chapter.title,'chapter-button',()=>{player.currentTime=chapter.startSeconds;player.play().catch(()=>{});})));chaptersPanel.append(list);}).catch(()=>{});
       fetch('/api/videos/'+encodeURIComponent(id)+'/transcript').then(async response=>{if(!response.ok)return;const content=await response.text();if(token===state.routeToken&&content.trim()){transcript.hidden=false;transcript.querySelector('pre').textContent=content;}}).catch(()=>{});
       jsonFetch('/api/sponsor/serve?placement=watch_sidebar').then(result => { if (token === state.routeToken && result.ad) aside.append(sponsoredCard(result.ad, id, true)); }).catch(() => {});

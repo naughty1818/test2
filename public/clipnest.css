@@ -1631,3 +1631,68 @@ body.admin-fullscreen .main-content { width:100%; max-width:none; min-height:100
   .player-stage .player-controls .player-control-button { width:28px !important; height:29px !important; }
   .player-stage .player-controls .player-time { font-size:8px; }
 }
+
+
+/* Reference-matched control placement and sizing: separate desktop and phone arrangements. */
+.player-mobile-collapse,.player-mobile-center-controls,.player-mobile-captions { display:none !important; }
+.player-top-controls .player-control-button { width:32px !important; height:32px !important; border-radius:8px !important; }
+.player-top-controls .player-control-icon { width:22px; height:22px; }
+.player-top-controls .player-caption-select { width:35px; min-width:35px; height:32px; padding-left:25px !important; background-color:#0b2927b8; background-position:3px center; background-size:20px; }
+.player-top-controls .player-settings-button,.player-top-controls .player-more-button { width:32px !important; height:32px !important; }
+.player-stage .player-controls { left:14px; right:14px; bottom:10px; min-height:50px; gap:7px; padding:17px 8px 4px; }
+.player-stage .player-controls .player-skip-button { display:none !important; }
+.player-stage .player-controls .player-play-button { order:1; width:32px !important; height:32px !important; }
+.player-stage .player-controls .player-volume-button { order:2; width:32px !important; height:32px !important; }
+.player-stage .player-controls .player-volume-range { order:3; width:0; opacity:0; transition:width .18s ease,opacity .18s ease; }
+.player-stage .player-controls .player-volume-button:hover + .player-volume-range,.player-stage .player-controls .player-volume-range:focus-visible { width:68px; opacity:1; }
+.player-stage .player-controls .player-time { order:4; margin-right:auto; font-size:11px; }
+.player-stage .player-controls .player-mini-button { order:5; }
+.player-stage .player-controls .player-pip-button { order:6; }
+.player-stage .player-controls .player-theater-button { order:7; }
+.player-stage .player-controls .player-fullscreen-button { order:8; }
+.player-stage .player-controls .player-mobile-captions { display:none !important; }
+.player-stage .player-controls .player-control-button { width:32px !important; height:32px !important; border-radius:8px !important; }
+.player-control-button.player-toggle-active { border-color:#45e5c977 !important; color:#e9fffa !important; background:#007c756e !important; }
+.player-setting-row { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:36px; color:#c5dfd8; font-size:11px; }
+.player-setting-row .player-autonext-button { width:32px !important; height:32px !important; }
+@media(max-width:760px) {
+  .player-brand-overlay { left:7px; top:6px; gap:7px; max-width:38%; }
+  .player-mobile-collapse { display:grid !important; width:30px !important; height:30px !important; border-radius:50% !important; background:#061b1bd9 !important; }
+  .player-mobile-collapse .player-control-icon { width:20px; height:20px; }
+  .player-brand-mark { width:53px; max-height:27px; }
+  .player-brand-copy { display:none; }
+  .player-top-controls { top:5px; right:6px; gap:3px; max-width:58%; padding:2px; border:0; background:#061b1b55; }
+  .player-top-controls .player-settings-button { display:none !important; }
+  .player-top-controls .player-more-button { display:grid !important; width:30px !important; height:30px !important; }
+  .player-top-controls .player-control-button { width:30px !important; height:30px !important; }
+  .player-top-controls .player-control-icon { width:20px; height:20px; }
+  .player-top-controls .player-caption-select { width:34px; min-width:34px; height:30px; }
+  .player-stage .player-center-play { display:none !important; }
+  .player-stage .player-mobile-center-controls { position:absolute; z-index:8; top:50%; left:50%; display:flex !important; align-items:center; gap:clamp(22px,8vw,42px); transform:translate(-50%,-50%); }
+  .player-stage .player-mobile-center-controls .player-mobile-skip { width:44px !important; height:44px !important; border-radius:50% !important; background:#041b1bd9 !important; box-shadow:0 4px 20px #0008; }
+  .player-stage .player-mobile-center-controls .player-mobile-skip .player-control-icon { width:28px; height:28px; }
+  .player-stage .player-mobile-center-controls .player-mobile-play { width:58px !important; height:58px !important; border:1px solid #45e5c9a6 !important; border-radius:50% !important; background:#061c1be8 !important; box-shadow:0 0 0 7px #45e5c91c,0 6px 24px #0008; }
+  .player-stage .player-mobile-center-controls .player-mobile-play .player-control-icon { width:30px; height:30px; }
+  .player-stage .player-controls { left:7px; right:7px; bottom:5px; min-height:44px; gap:4px; padding:15px 5px 2px; border:0; border-radius:7px; background:linear-gradient(180deg,#04171500,#041715e8 35%); }
+  .player-stage .player-controls .player-progress { top:0; left:6px; width:calc(100% - 12px); height:16px; }
+  .player-stage .player-controls .player-play-button,.player-stage .player-controls .player-skip-button,.player-stage .player-controls .player-mini-button,.player-stage .player-controls .player-pip-button,.player-stage .player-controls .player-theater-button { display:none !important; }
+  .player-stage .player-controls .player-time { order:1; margin-right:auto; font-size:10px; }
+  .player-stage .player-controls .player-volume-button { order:2; width:32px !important; height:32px !important; }
+  .player-stage .player-controls .player-volume-range { display:none !important; }
+  .player-stage .player-controls .player-mobile-captions { display:grid !important; order:3; width:32px !important; height:32px !important; }
+  .player-stage .player-controls .player-fullscreen-button { order:4; width:32px !important; height:32px !important; }
+  .player-stage .player-controls,.player-stage .player-top-controls,.player-stage .player-brand-overlay { opacity:1; transform:none; }
+  .player-stage .player-settings-menu { top:43px; right:6px; bottom:auto; min-width:190px; }
+  .watch-layout.watch-theater-mode { display:flex; flex-direction:column; }
+  .watch-layout.watch-theater-mode .recommendations { display:flex; }
+}
+@media(max-width:380px) {
+  .player-brand-overlay { max-width:36%; }
+  .player-brand-mark { width:46px; }
+  .player-top-controls { max-width:60%; gap:2px; }
+  .player-top-controls .player-control-button { width:27px !important; height:28px !important; }
+  .player-top-controls .player-caption-select { width:32px; min-width:32px; }
+  .player-stage .player-mobile-center-controls { gap:20px; }
+  .player-stage .player-mobile-center-controls .player-mobile-skip { width:40px !important; height:40px !important; }
+  .player-stage .player-mobile-center-controls .player-mobile-play { width:54px !important; height:54px !important; }
+}
