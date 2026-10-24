@@ -1,1 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="#02736D"><path d="M11 16V4L6.5 8.5 5 7l7-7 7 7-1.5 1.5L13 4v12zM3 14h3v6h12v-6h3v9H3z"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" role="img" aria-labelledby="title">
+<title id="title">Upload</title>
+<path fill="#007C75" d="M11 16V4L6.5 8.5 5 7l7-7 7 7-1.5 1.5L13 4v12z"/>
+<path fill="#45E5C9" d="M11 4.8 7.8 8l1.4 1.4L12 6.6l2.8 2.8L16.2 8 13 4.8V16h-2z"/>
+<path fill="#007C75" d="M3 14h3v6h12v-6h3v9H3z"/>
+<path fill="#45E5C9" d="M8 17h8v2H8z"/>
+</svg>

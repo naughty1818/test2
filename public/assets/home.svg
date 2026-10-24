@@ -1,1 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="#02736D"><path d="M2 10.4 12 2l10 8.4-1.8 2.1-1.7-1.4V21h-5v-6h-3v6h-5V11.1l-1.7 1.4z"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" role="img" aria-labelledby="title">
+<title id="title">Home</title>
+<path fill="#007C75" d="M2 10.4 12 2l10 8.4-1.8 2.1-1.7-1.4V21h-5v-6h-3v6h-5V11.1l-1.7 1.4z"/>
+<path fill="#45E5C9" d="M12 4.6 4.5 11h2.2v8h3.8v-6h3v6h3.8v-8h2.2z"/>
+<path fill="#007C75" d="M10.5 21v-6h3v6z"/>
+</svg>

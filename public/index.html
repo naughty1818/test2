@@ -691,7 +691,7 @@
     wrap.append(body); return wrap;
   }
   async function renderWatch(id, token) {
-    updateNav('/watch/' + id); if(!state.session.user){renderLogin('ভিডিও দেখতে আগে Google account দিয়ে লগইন করো।');return;} loadingPage('ভিডিও খুঁজছি…');
+    updateNav('/watch/' + id); loadingPage('ভিডিও খুঁজছি…');
     try {
       const data = await jsonFetch('/api/videos/' + encodeURIComponent(id)); if (token !== state.routeToken) return;
       const video = data.video || {}; state.currentVideoId = id;
@@ -1165,7 +1165,7 @@
     if (path !== '/admin') app.classList.remove('admin-shell', 'console-page');
     document.body.classList.toggle('studio-fullscreen', path === '/studio' && Boolean(state.session.profile));
     document.body.classList.toggle('admin-fullscreen', path === '/admin');
-    const watchPlayerPage=path.startsWith('/watch/')&&Boolean(state.session.user);
+    const watchPlayerPage=path.startsWith('/watch/');
     document.body.classList.toggle('watch-player-page',watchPlayerPage);
     if(watchPlayerPage)closeMobile();
     if (path === '/') { document.title=window.AtharoI18n?.t('Atharo | আঠারো · বাংলা ভিডিও')??'Atharo | আঠারো · বাংলা ভিডিও'; return renderHome(token); }

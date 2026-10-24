@@ -370,8 +370,7 @@ async function premiumVideoAccess(video, userSub) {
 async function accessVideo(req, res, next) {
   try {
     req.auth = req.auth || await loadSession(req);
-    if (!req.auth) return jsonError(res,401,'Sign in to watch videos.',{code:'login_required'});
-    if (req.auth.session.accountStatus !== 'active') return jsonError(res,403,'This account is currently restricted.');
+    if (req.auth && req.auth.session.accountStatus !== 'active') return jsonError(res,403,'This account is currently restricted.');
     const video = await getVideo(req.params.id);
     if (!video) return jsonError(res, 404, 'Video not found / ভিডিও পাওয়া যায়নি।');
     req.video = video;
@@ -616,13 +615,15 @@ app.get('/api/videos/subscriptions', requireAuth, async (req, res, next) => {
     res.json(await loadCards({ subscriptions: true, userSub: req.auth.session.sub, viewerType: req.auth.session.viewerType, limit }));
   } catch (error) { next(error); }
 });
-app.get('/api/videos/:id', requireAuth, requireActive, requireValidId, async (req, res, next) => {
+app.get('/api/videos/:id', requireValidId, async (req, res, next) => {
   try {
+    const auth = await loadSession(req);
+    if (auth && auth.session.accountStatus !== 'active') return jsonError(res, 403, 'This account is currently restricted.');
     const video = await getVideo(req.params.id);
     if (!video) return jsonError(res, 404, 'Video not found / ভিডিও পাওয়া যায়নি।');
-    const auth = req.auth;
-    const access=await premiumVideoAccess(video,auth.session.sub);
-    if (!await canView(video, auth.session.sub, auth.session.viewerType || 'normal',access.paid)) return jsonError(res, 403, 'This video is private / ভিডিওটি private or unavailable in this viewing mode.');
+    const viewerSub = auth?.session.sub || null;
+    const access=await premiumVideoAccess(video,viewerSub);
+    if (!await canView(video, viewerSub, auth?.session.viewerType || 'normal',access.paid)) return jsonError(res, 403, 'This video is private / ভিডিওটি private or unavailable in this viewing mode.');
     if (!access.allowed) return jsonError(res, 403, 'এই premium video দেখতে আগে purchase করুন।', { code: 'premium_required', itemType: 'video', itemId: video.id, priceBdt: Number(video.price_bdt) || 0 });
     // Sign the R2 URL directly; do not make a serial R2 HEAD request before playback starts.
     const state = await pool.query(`SELECT
@@ -630,7 +631,7 @@ app.get('/api/videos/:id', requireAuth, requireActive, requireValidId, async (re
       EXISTS(SELECT 1 FROM playlist_items pi JOIN playlists p ON p.id=pi.playlist_id WHERE p.owner_sub=$2 AND p.is_watch_later=TRUE AND pi.video_id=$1) AS watch_later,
       (SELECT COUNT(*)::bigint FROM subscriptions WHERE channel_sub=$3) AS subscribers_count,
       EXISTS(SELECT 1 FROM subscriptions WHERE subscriber_sub=$2 AND channel_sub=$3) AS subscribed,
-      (SELECT feedback FROM video_feedback WHERE video_id=$1 AND user_sub=$2) AS feedback`, [video.id, auth.session.sub, video.owner_sub || null]);
+      (SELECT feedback FROM video_feedback WHERE video_id=$1 AND user_sub=$2) AS feedback`, [video.id, viewerSub, video.owner_sub || null]);
     const stateRow = state.rows[0] || {};
     const profile = video.owner_handle ? { handle: video.owner_handle, display_name: video.owner_name, bio: '', avatar_url: video.owner_avatar } : null;
     const card = videoCard({ ...video, liked: stateRow.liked, watch_later: stateRow.watch_later, feedback:stateRow.feedback });

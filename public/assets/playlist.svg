@@ -1,1 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="#02736D"><path d="M3 3h13v2H3zm0 5h13v2H3zm0 5h9v2H3zm13-1 7 4-7 4z"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" role="img" aria-labelledby="title">
+<title id="title">Playlist</title>
+<path fill="#007C75" d="M3 3h13v2H3zm0 5h13v2H3zm0 5h9v2H3z"/>
+<path fill="#45E5C9" d="M16 12l7 4-7 4z"/>
+<path fill="#007C75" d="M16 12v8l7-4z"/>
+<path fill="#45E5C9" d="M16 12l7 4-7 4z"/>
+</svg>

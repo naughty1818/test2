@@ -1364,6 +1364,9 @@ body.admin-fullscreen .main-content { width:100%; max-width:none; min-height:100
   body.watch-player-page .page-layout { display:block; padding:0 36px; }
   body.watch-player-page .main-content { padding:28px 0 60px; }
 }
+@media (min-width:1051px) {
+  .mobile-menu-trigger { transform:translateX(-24px); }
+}
 @media (min-width:761px) and (max-width:1000px) {
   .topbar { grid-template-columns:38px minmax(130px,190px) minmax(100px,1fr) minmax(250px,auto); gap:9px; padding:0 12px; }
   .top-actions { gap:6px; }
