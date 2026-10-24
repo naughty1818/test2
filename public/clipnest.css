@@ -1772,3 +1772,401 @@ body.admin-fullscreen .main-content { width:100%; max-width:none; min-height:100
 @media (prefers-reduced-motion: reduce) {
   .player-control-button, .player-controls, .player-top-controls { transition: none !important; }
 }
+
+
+/* Reference-matched Atharo player layout: cinematic desktop + compact mobile */
+:root {
+  --atharo-green: #007C75;
+  --atharo-mint: #45E5C9;
+  --atharo-light-mint: #A5F8E8;
+}
+.player-stage {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border: 1px solid rgba(0,124,117,.78);
+  border-radius: 16px;
+  background: #020908;
+  box-shadow: 0 0 0 1px rgba(69,229,201,.06), 0 14px 42px rgba(0,0,0,.24);
+}
+.player-media {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #020908;
+}
+.player-brand-overlay {
+  position: absolute;
+  z-index: 3;
+  top: 18px;
+  left: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(65%, 440px);
+  pointer-events: none;
+  opacity: .98;
+  transition: opacity .18s ease;
+}
+.player-brand-logo {
+  display: block;
+  width: 78px;
+  max-height: 34px;
+  object-fit: contain;
+  object-position: left center;
+  filter: drop-shadow(0 2px 10px rgba(0,0,0,.42));
+}
+.player-brand-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  color: #f2fffc;
+  text-shadow: 0 1px 6px rgba(0,0,0,.9);
+}
+.player-brand-copy strong {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.player-brand-copy span {
+  color: rgba(225,255,249,.82);
+  font-size: 10px;
+  line-height: 1.25;
+}
+.player-center-seek-controls {
+  position: absolute;
+  z-index: 4;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(26px, 5vw, 62px);
+  transform: translate(-50%,-50%);
+  pointer-events: none;
+}
+.player-center-seek-controls .player-control-button {
+  pointer-events: auto;
+  width: 44px !important;
+  height: 44px !important;
+  border: 1px solid rgba(165,248,232,.22) !important;
+  border-radius: 50% !important;
+  color: var(--atharo-light-mint) !important;
+  background: rgba(0,18,16,.28) !important;
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,.35));
+}
+.player-center-seek-controls .player-control-icon {
+  width: 26px !important;
+  height: 26px !important;
+}
+.player-center-seek-controls .player-center-play {
+  width: 62px !important;
+  height: 62px !important;
+  border-color: rgba(69,229,201,.48) !important;
+  background: rgba(0,124,117,.36) !important;
+  backdrop-filter: blur(8px);
+}
+.player-center-seek-controls .player-center-play .player-control-icon {
+  width: 34px !important;
+  height: 34px !important;
+}
+.player-stage.player-is-playing .player-center-play {
+  opacity: 0;
+  transform: scale(.88);
+  pointer-events: none;
+}
+.player-stage:not(.player-is-playing) .player-center-play {
+  opacity: 1;
+  transform: scale(1);
+}
+.player-top-controls {
+  position: absolute;
+  z-index: 5;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity .18s ease, transform .18s ease;
+}
+.player-stage:hover .player-top-controls,
+.player-stage.player-controls-visible .player-top-controls,
+.player-stage:focus-within .player-top-controls {
+  opacity: 1;
+  transform: translateY(0);
+}
+.player-top-controls .player-control-button {
+  display: inline-grid !important;
+  place-items: center;
+  width: 38px !important;
+  height: 38px !important;
+  padding: 0 !important;
+  border: 1px solid transparent !important;
+  border-radius: 9px !important;
+  color: var(--atharo-light-mint) !important;
+  background: rgba(1,17,15,.42) !important;
+}
+.player-top-controls .player-control-button:hover,
+.player-top-controls .player-control-button:focus-visible {
+  border-color: rgba(69,229,201,.55) !important;
+  background: rgba(0,124,117,.55) !important;
+}
+.player-control-icon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  pointer-events: none;
+}
+.player-top-controls .player-control-icon { width: 23px; height: 23px; }
+.player-caption-select {
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 3px 0 25px !important;
+  border: 1px solid rgba(69,229,201,.35) !important;
+  border-radius: 9px !important;
+  color: var(--atharo-light-mint) !important;
+  background-color: rgba(1,17,15,.58) !important;
+  background-image: url('/assets/captions_cc.svg?v=atharo-brand-icons-2');
+  background-repeat: no-repeat;
+  background-position: 4px center;
+  background-size: 20px 20px;
+  font-size: 0 !important;
+  appearance: none;
+}
+.player-top-controls select {
+  color: var(--atharo-light-mint) !important;
+  border-color: rgba(69,229,201,.35) !important;
+  background-color: rgba(1,17,15,.78) !important;
+}
+.player-top-controls .player-toggle-active {
+  border-color: rgba(69,229,201,.65) !important;
+  color: var(--atharo-light-mint) !important;
+  background: rgba(0,124,117,.65) !important;
+}
+.player-controls {
+  position: absolute;
+  z-index: 5;
+  left: 16px;
+  right: 16px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 8px 2px;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(180deg,transparent,rgba(0,8,7,.76));
+  opacity: 0;
+  transform: translateY(5px);
+  transition: opacity .18s ease, transform .18s ease;
+}
+.player-stage:hover .player-controls,
+.player-stage.player-controls-visible .player-controls,
+.player-stage:focus-within .player-controls {
+  opacity: 1;
+  transform: translateY(0);
+}
+.player-controls .player-control-button {
+  display: inline-grid !important;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px !important;
+  height: 34px !important;
+  padding: 0 !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  color: var(--atharo-light-mint) !important;
+  background: transparent !important;
+}
+.player-controls .player-control-button:hover,
+.player-controls .player-control-button:focus-visible {
+  border-color: rgba(69,229,201,.35) !important;
+  background: rgba(0,124,117,.32) !important;
+}
+.player-controls .player-control-icon { width: 23px; height: 23px; }
+.player-controls .player-progress {
+  flex: 1 1 auto;
+  width: 1px;
+  min-width: 50px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--atharo-mint);
+  cursor: pointer;
+}
+.player-progress::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(230,255,250,.36);
+}
+.player-progress::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(230,255,250,.36);
+}
+.player-progress::-webkit-slider-thumb {
+  width: 13px;
+  height: 13px;
+  margin-top: -4.5px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--atharo-mint);
+  box-shadow: 0 0 0 3px rgba(69,229,201,.15);
+}
+.player-progress::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--atharo-mint);
+  box-shadow: 0 0 0 3px rgba(69,229,201,.15);
+}
+.player-time {
+  flex: 0 0 auto;
+  color: #e9fffb;
+  font: 500 12px/1.2 Inter,system-ui,sans-serif;
+  white-space: nowrap;
+}
+.player-volume-range {
+  width: 72px;
+  accent-color: var(--atharo-mint);
+}
+.player-settings-menu {
+  position: absolute;
+  z-index: 8;
+  top: 62px;
+  right: 16px;
+  bottom: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(69,229,201,.3);
+  border-radius: 12px;
+  color: var(--atharo-light-mint);
+  background: rgba(2,18,16,.96);
+  box-shadow: 0 12px 34px rgba(0,0,0,.38);
+  backdrop-filter: blur(12px);
+}
+.player-settings-menu[hidden] { display: none !important; }
+.player-settings-menu .player-speed {
+  min-height: 34px;
+  padding: 6px 10px 6px 30px;
+  border: 1px solid rgba(69,229,201,.3);
+  border-radius: 8px;
+  color: var(--atharo-light-mint);
+  background-color: rgba(0,124,117,.18);
+  background-image: url('/assets/playback_speed.svg?v=atharo-brand-icons-2');
+  background-repeat: no-repeat;
+  background-position: 5px center;
+  background-size: 20px 20px;
+}
+.player-stage:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  aspect-ratio: auto;
+  border: 0;
+  border-radius: 0;
+  background: #000;
+}
+.player-stage:fullscreen .player-media { width: 100%; height: 100%; }
+.player-stage:fullscreen .player-controls { bottom: 18px; left: 18px; right: 18px; }
+.player-stage:fullscreen .player-top-controls { top: 18px; right: 18px; }
+
+@media (max-width: 760px) {
+  .player-stage {
+    width: calc(100% + 30px);
+    margin: 0 -15px;
+    border: 0;
+    border-radius: 0;
+    aspect-ratio: 16 / 9;
+    box-shadow: none;
+  }
+  .player-brand-overlay {
+    top: 10px;
+    left: 10px;
+    gap: 7px;
+    max-width: 55%;
+  }
+  .player-brand-logo { width: 54px; max-height: 25px; }
+  .player-brand-copy strong { max-width: 100%; font-size: 10px; }
+  .player-brand-copy span { font-size: 8px; }
+  .player-top-controls {
+    top: 7px;
+    right: 7px;
+    gap: 3px;
+    opacity: 1;
+    transform: none;
+  }
+  .player-top-controls .player-control-button {
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 7px !important;
+  }
+  .player-top-controls .player-control-icon { width: 19px; height: 19px; }
+  .player-caption-select {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    padding-left: 20px !important;
+    background-position: 2px center;
+    background-size: 17px 17px;
+  }
+  .player-center-seek-controls { gap: clamp(24px, 7vw, 38px); }
+  .player-center-seek-controls .player-control-button {
+    width: 35px !important;
+    height: 35px !important;
+  }
+  .player-center-seek-controls .player-control-icon { width: 22px !important; height: 22px !important; }
+  .player-center-seek-controls .player-center-play {
+    width: 48px !important;
+    height: 48px !important;
+  }
+  .player-center-seek-controls .player-center-play .player-control-icon { width: 29px !important; height: 29px !important; }
+  .player-controls {
+    left: 8px;
+    right: 8px;
+    bottom: 5px;
+    gap: 5px;
+    padding: 14px 3px 2px;
+    opacity: 1;
+    transform: none;
+  }
+  .player-controls .player-play-button,
+  .player-controls .player-volume-range { display: none !important; }
+  .player-controls .player-control-button {
+    width: 30px !important;
+    height: 30px !important;
+  }
+  .player-controls .player-control-icon { width: 20px; height: 20px; }
+  .player-controls .player-progress { min-width: 20px; height: 16px; }
+  .player-time { font-size: 9px; }
+  .player-settings-menu {
+    top: 43px;
+    right: 7px;
+    left: auto;
+    max-width: calc(100% - 14px);
+    gap: 8px;
+    padding: 9px;
+    font-size: 11px;
+  }
+  .player-stage:not(.player-controls-visible) .player-controls,
+  .player-stage:not(.player-controls-visible) .player-top-controls { opacity: 1; }
+  .player-stage:fullscreen .player-controls { bottom: 9px; left: 8px; right: 8px; }
+  .player-stage:fullscreen .player-top-controls { top: 9px; right: 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .player-control-button, .player-controls, .player-top-controls, .player-center-play { transition: none !important; }
+}
