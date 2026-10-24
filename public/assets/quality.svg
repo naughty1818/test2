@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Video quality</title>
+  <rect x="7" y="12" width="50" height="36" rx="7" fill="none" stroke="#007C75" stroke-width="4"/>
+  <path d="M17 22h30v16H17z" fill="#45E5C9" opacity=".28"/>
+  <path d="M23 52h18" stroke="#007C75" stroke-width="4" stroke-linecap="round"/>
+  <path d="M23 33v-8h7.5a3.5 3.5 0 0 1 0 7H23m9 0v-7h6a3.5 3.5 0 0 1 0 7h-6m10 0v-8h5" fill="none" stroke="#45E5C9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

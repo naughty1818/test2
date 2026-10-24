@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="300" viewBox="0 0 500 300">
+<rect width="500" height="300" fill="#FFFFFF"/>
+<title>AHNAF OPC video player icon set</title>
+<g transform="translate(18 18)"><rect x="8" y="8" width="48" height="48" rx="13" fill="#007C75"/><path d="M25 19.5Q25 16.5 28 18.3L43 29Q46 31 43 33L28 44Q25 46 25 42.5Z" fill="#45E5C9"/><path d="M25 27L36 31L25 37Z" fill="#A5F8E8" opacity=".8"/></g>
+<text x="50.0" y="88" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#006B66">play</text>
+<g transform="translate(118 18)"><rect x="8" y="8" width="48" height="48" rx="13" fill="#007C75"/><rect x="22" y="19" width="6.5" height="26" rx="3.2" fill="#45E5C9"/><rect x="35.5" y="19" width="6.5" height="26" rx="3.2" fill="#45E5C9"/></g>
+<text x="150.0" y="88" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#006B66">pause</text>
+<g transform="translate(218 18)"><path d="M48 22A21 21 0 1 0 50 39" fill="none" stroke="#007C75" stroke-width="5.5" stroke-linecap="round"/><path d="M44 10L51 10L51 24L37 24Z" fill="#007C75"/><path d="M27 22L27 42L43 32Z" fill="#45E5C9"/></g>
+<text x="250.0" y="88" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#006B66">replay</text>
+<g transform="translate(318 18)"><path d="M13 18L28 30L13 42Z" fill="#007C75"/><path d="M25 18L40 30L25 42Z" fill="#007C75"/><circle cx="44" cy="30" r="13" fill="#007C75" stroke="#FFFFFF" stroke-width="1.5"/><text x="44" y="34.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="700" fill="#45E5C9">10</text></g>
+<text x="350.0" y="88" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#006B66">forward 10</text>
+<g transform="translate(418 18)"><path d="M51 18L36 30L51 42Z" fill="#007C75"/><path d="M39 18L24 30L39 42Z" fill="#007C75"/><circle cx="20" cy="30" r="13" fill="#007C75" stroke="#FFFFFF" stroke-width="1.5"/><text x="20" y="34.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="700" fill="#45E5C9">10</text></g>
+<text x="450.0" y="88" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#006B66">backward 10</text>
+<g transform="translate(18 118)"><path d="M10 26H18L31 16V46L18 36H10Z" fill="#007C75"/><path d="M37 23Q47 31 37 39M41 17Q56 31 41 45" fill="none" stroke="#45E5C9" stroke-width="3.5" stroke-linecap="round"/></g>
+<text x="50.0" y="188" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#006B66">volume</text>
+<g transform="translate(118 118)"><path d="M9 26H17L30 16V46L17 36H9Z" fill="#007C75"/><path d="M37 25L49 37M49 25L37 37" stroke="#45E5C9" stroke-width="4" stroke-linecap="round"/><path d="M8 52L53 8" stroke="#007C75" stroke-width="3.5" stroke-linecap="round"/></g>
+<text x="150.0" y="188" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#006B66">mute</text>
+<g transform="translate(218 118)"><rect x="7" y="13" width="50" height="38" rx="8" fill="#007C75"/><rect x="13" y="19" width="38" height="26" rx="4" fill="#45E5C9"/><text x="32" y="36.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="800" fill="#006B66">CC</text></g>
+<text x="250.0" y="188" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#006B66">captions cc</text>
+<g transform="translate(318 118)"><g fill="#007C75"><circle cx="32" cy="32" r="19"/><rect x="28" y="6" width="8" height="12" rx="3"/><rect x="28" y="46" width="8" height="12" rx="3"/><rect x="6" y="28" width="12" height="8" rx="3"/><rect x="46" y="28" width="12" height="8" rx="3"/><rect x="12" y="12" width="10" height="8" rx="3" transform="rotate(-45 17 16)"/><rect x="42" y="44" width="10" height="8" rx="3" transform="rotate(-45 47 48)"/><rect x="42" y="12" width="10" height="8" rx="3" transform="rotate(45 47 16)"/><rect x="12" y="44" width="10" height="8" rx="3" transform="rotate(45 17 48)"/></g><circle cx="32" cy="32" r="9" fill="#45E5C9"/><circle cx="32" cy="32" r="4" fill="#007C75"/></g>
+<text x="350.0" y="188" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#006B66">settings</text>
+<g transform="translate(418 118)"><rect x="7" y="13" width="50" height="36" rx="6" fill="#007C75"/><rect x="12" y="18" width="40" height="26" rx="3" fill="none" stroke="#FFFFFF" stroke-width="2"/><path d="M25 24Q25 22 27 23L37 29Q39 30 37 31L27 37Q25 38 25 36Z" fill="#45E5C9"/><rect x="39" y="36" width="17" height="13" rx="2.5" fill="#007C75" stroke="#FFFFFF" stroke-width="2"/></g>
+<text x="450.0" y="188" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#006B66">mini player</text>
+<g transform="translate(18 218)"><rect x="7" y="13" width="50" height="36" rx="6" fill="#007C75"/><rect x="12" y="18" width="40" height="26" rx="3" fill="#45E5C9"/><path d="M27 24Q27 22 29 23L39 29Q41 30 39 31L29 37Q27 38 27 36Z" fill="#007C75"/><rect x="12" y="18" width="3" height="26" fill="#A5F8E8"/><rect x="49" y="18" width="3" height="26" fill="#A5F8E8"/></g>
+<text x="50.0" y="288" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#006B66">theater mode</text>
+<g transform="translate(118 218)"><path d="M11 24V14Q11 11 14 11H24M40 11H50Q53 11 53 14V24M53 40V50Q53 53 50 53H40M24 53H14Q11 53 11 50V40" fill="none" stroke="#007C75" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></g>
+<text x="150.0" y="288" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#006B66">fullscreen</text>
+<g transform="translate(218 218)"><path d="M48 23A19 19 0 1 0 45 45" fill="none" stroke="#007C75" stroke-width="5" stroke-linecap="round"/><path d="M43 12L51 12L51 25L38 25Z" fill="#007C75"/><text x="31" y="37" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="800" fill="#007C75">1×</text></g>
+<text x="250.0" y="288" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#006B66">playback speed</text>
+<g transform="translate(318 218)"><rect x="7" y="12" width="40" height="31" rx="5" fill="none" stroke="#007C75" stroke-width="4"/><rect x="27" y="29" width="29" height="25" rx="4" fill="#007C75" stroke="#FFFFFF" stroke-width="2"/><path d="M37 35Q37 33 39 34L47 39Q49 40 47 41L39 46Q37 47 37 45Z" fill="#45E5C9"/></g>
+<text x="350.0" y="288" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#006B66">picture in picture</text>
+</svg>
