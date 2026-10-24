@@ -704,12 +704,12 @@
       const playerLoader=$('div',{class:'atharo-player-loader',hidden:true},[$('img',{src:'/assets/atharo-favicon.png?v=atharo-icon-2',alt:'Atharo'}),$('span',{text:'লোড হচ্ছে…'})]);
       const actionFeedback=$('div',{class:'player-action-feedback','aria-live':'polite',hidden:true});
       const showAction=message=>{actionFeedback.textContent=message;actionFeedback.hidden=false;clearTimeout(showAction.timer);showAction.timer=setTimeout(()=>{actionFeedback.hidden=true;},850);};
-      const playerBrandCopy=$('div',{class:'player-brand-copy'},[$('strong',{text:text(video.title,'ভিডিও')}),$('span',{text:text(video.ownerName,'Atharo নির্মাতা')+' · '+number(data.viewsCount)+' ভিউ'})]);
-      const playerCollapseButton=playerIconButton('collapse','player-mobile-collapse','Player controls — পরে যোগ করা হবে');playerCollapseButton.disabled=true;playerCollapseButton.title='Player collapse — পরে যোগ করা হবে';
-      const playerBrandOverlay=$('div',{class:'player-brand-overlay'},[playerCollapseButton,$('img',{src:'/assets/atharo-logo.png',alt:'Atharo',class:'player-brand-mark'}),playerBrandCopy]);
       const playerIcon=name=>$('img',{src:'/assets/'+name+'.svg',alt:'',class:'player-control-icon'});
       const playerIconButton=(icon,className,label)=>{const node=button('','player-control-button '+className);node.append(playerIcon(icon));node.setAttribute('aria-label',label);return node;};
       const setPlayerIcon=(node,icon)=>{const image=node.querySelector('.player-control-icon');if(image)image.src='/assets/'+icon+'.svg';};
+      const playerBrandCopy=$('div',{class:'player-brand-copy'},[$('strong',{text:text(video.title,'ভিডিও')}),$('span',{text:text(video.ownerName,'Atharo নির্মাতা')+' · '+number(data.viewsCount)+' ভিউ'})]);
+      const playerCollapseButton=playerIconButton('collapse','player-mobile-collapse','Player controls — পরে যোগ করা হবে');playerCollapseButton.disabled=true;playerCollapseButton.title='Player collapse — পরে যোগ করা হবে';
+      const playerBrandOverlay=$('div',{class:'player-brand-overlay'},[playerCollapseButton,$('img',{src:'/assets/atharo-logo.png',alt:'Atharo',class:'player-brand-mark'}),playerBrandCopy]);
       const playButton=playerIconButton('play','player-play-button','ভিডিও চালাও');
       const centerPlayButton=playerIconButton('play','player-center-play','ভিডিও চালাও');
       const mobileCenterControls=$('div',{class:'player-mobile-center-controls'});
