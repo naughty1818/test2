@@ -48,9 +48,8 @@
 <body>
   <div class="intro-splash" id="introSplash" role="dialog" aria-label="Atharo intro" aria-modal="true">
     <video class="intro-splash-video" id="introSplashVideo" autoplay muted playsinline preload="auto" aria-hidden="true">
-      <source src="/assets/atharo-logo-reveal.mp4" type="video/mp4">
+      <source src="/assets/atharo-logo-reveal-007670.mp4" type="video/mp4">
     </video>
-    <button class="intro-splash-skip" id="introSplashSkip" type="button">Skip intro</button>
   </div>
   <div class="app-frame">
     <header class="topbar">
@@ -119,7 +118,6 @@
   (() => {
     const splash = document.getElementById('introSplash');
     const video = document.getElementById('introSplashVideo');
-    const skip = document.getElementById('introSplashSkip');
     if (!splash || !video) return;
     let dismissed = false;
     const closeSplash = () => {
@@ -130,7 +128,6 @@
     };
     video.addEventListener('ended', closeSplash, { once: true });
     video.addEventListener('error', closeSplash, { once: true });
-    skip?.addEventListener('click', closeSplash);
     window.setTimeout(closeSplash, 6500);
     const playPromise = video.play();
     if (playPromise?.catch) playPromise.catch(closeSplash);
@@ -552,8 +549,13 @@
     ];
     return { fields, read: () => ({ classLevel: classLevel.value.trim(), subject: subject.value.trim(), syllabusTag: syllabusTag.value.trim() }) };
   }
-  function heroPanel(featured) {
-    const section = $('section', { class: 'hero-panel' });
+  function heroPanel(featured, options = {}) {
+    const section = $('section', { class: 'hero-panel' + (options.loading ? ' hero-panel-loading' : '') });
+    if (options.loading) {
+      section.setAttribute('aria-busy', 'true');
+      section.append($('div', { class: 'hero-skeleton hero-skeleton-copy' }), $('div', { class: 'hero-skeleton hero-skeleton-caption' }));
+      return section;
+    }
     const img = $('img', { class: 'hero-image', src: featured ? (featured.thumbnailUrl || thumbFor(featured.category)) : '/assets/clipnest-river-boat.webp', alt: '', fetchpriority: 'high' });
     img.addEventListener('error', () => img.remove()); section.append(img, $('div', { class: 'hero-shade' }));
     const copy = $('div', { class: 'hero-copy' });
@@ -598,10 +600,10 @@
       educationForm.addEventListener('submit', event => { event.preventDefault(); const params = new URLSearchParams({ category: 'শেখা' }); for (const [key, value] of Object.entries(controls.read())) if (value) params.set(key, value); navigate('/?' + params.toString()); });
     }
     const grid = $('div', { class: 'video-grid' }, [emptyState('ভিডিও খুঁজছি…', 'একটু অপেক্ষা করো।')]);
-    feed.append(heading, chips); if (educationForm) feed.append(educationForm); feed.append(grid); const homeStickyAdSlot = $('div', { class: 'home-sticky-ad-slot' }); setPage([heroPanel(null), homeStickyAdSlot, feed, creatorCallout()]);
+    feed.append(heading, chips); if (educationForm) feed.append(educationForm); feed.append(grid); const homeStickyAdSlot = $('div', { class: 'home-sticky-ad-slot' }); const initialHero = heroPanel(null, { loading: true }); setPage([initialHero, homeStickyAdSlot, feed, creatorCallout()]);
     try {
       const data = await jsonFetch(queryUrl('', state.category, 0, 24, homeFilters)); if (token !== state.routeToken) return;
-      const videos = data.videos || []; app.replaceChildren(heroPanel(videos[0] || null), homeStickyAdSlot, feed, creatorCallout());
+      const videos = data.videos || []; const nextHero = heroPanel(videos[0] || null); nextHero.classList.add('hero-panel-enter'); initialHero.replaceWith(nextHero);
       chips.replaceWith(categoryChips(state.category, selectHomeCategory));
       const nextGrid = videoGrid(videos, 'এখনো কোনো public video নেই। প্রথম ভিডিওটি তোমার হতে পারে.', { featuredFirst: true }); grid.replaceWith(nextGrid);
       const adSettings=await adSettingsPromise;if(token!==state.routeToken)return;

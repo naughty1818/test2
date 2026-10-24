@@ -75,7 +75,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '32kb' }));
-app.get('/assets/atharo-logo-reveal.mp4', (req, res, next) => {
+app.get('/assets/atharo-logo-reveal-007670.mp4', (req, res, next) => {
   res.set('Cache-Control', 'public, max-age=2592000, immutable');
   next();
 });
