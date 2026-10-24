@@ -702,8 +702,7 @@
       const player = $('video', { class: 'player-media', autoplay: '', preload: 'metadata', playsinline: '', 'aria-label': text(video.title, 'ভিডিও প্লেয়ার') }); player.src = text(video.url, ''); if(video.thumbnailUrl)player.poster=video.thumbnailUrl;
       const playerStatus=$('div',{class:'player-status','aria-live':'polite',text:'ভিডিও লোড হচ্ছে…'}),retryPlayback=button('পুনরায় চেষ্টা','outline-cta',()=>{retryPlayback.hidden=true;playerStatus.textContent='ভিডিও আবার লোড হচ্ছে…';playerStatus.hidden=false;player.load();});retryPlayback.hidden=true;
       const playerLoader=$('div',{class:'atharo-player-loader',hidden:true},[$('img',{src:'/assets/atharo-favicon.png?v=atharo-icon-2',alt:'Atharo'}),$('span',{text:'লোড হচ্ছে…'})]);
-      const actionFeedback=$('div',{class:'player-action-feedback','aria-live':'polite',hidden:true});
-      const showAction=message=>{actionFeedback.textContent=message;actionFeedback.hidden=false;clearTimeout(showAction.timer);showAction.timer=setTimeout(()=>{actionFeedback.hidden=true;},850);};
+      const showAction=()=>{}; // Player action feedback is intentionally kept quiet.
       const playerIcon=name=>$('img',{src:'/assets/'+name+'.svg',alt:'',class:'player-control-icon'});
       const playerIconButton=(icon,className,label)=>{const node=button('','player-control-button '+className);node.append(playerIcon(icon));node.setAttribute('aria-label',label);return node;};
       const setPlayerIcon=(node,icon)=>{const image=node.querySelector('.player-control-icon');if(image)image.src='/assets/'+icon+'.svg';};
@@ -791,7 +790,7 @@
       const lShapeBottomImageLink = $('a', { class: 'l-shape-bottom-image-link', target:'_blank', rel:'noopener noreferrer' }, [lShapeBottomImage]);
       lShapeBody.append(lShapeLandingUrl,lShapeDetails,lShapeBottomImageLink);
       lShapeAd.append(lShapeRightLink,lShapeBody,lShapeClose);
-      stage.append(player,playerLoader,actionFeedback,playerStatus,retryPlayback,playerBrandOverlay,centerPlayButton,mobileCenterControls,playerTopControls,playerControls,settingsMenu,lShapeAd);if(player.readyState>=1)playerStatus.hidden=true;
+      stage.append(player,playerLoader,playerStatus,retryPlayback,playerBrandOverlay,centerPlayButton,mobileCenterControls,playerTopControls,playerControls,settingsMenu,lShapeAd);if(player.readyState>=1)playerStatus.hidden=true;
       let lAdShown = false, lAdTimer = null, lAdDismissTimer = null, lShapeLayout = null, nextVideoId = null;
       const fitLShapeToStage = () => {
         if(!lShapeLayout)return;
@@ -848,27 +847,36 @@
       }
       const actions = $('div', { class: 'watch-actions' });
       const stats = $('span', { class: 'watch-stats', text: number(data.likesCount) + ' লাইক · ' + number(data.viewsCount) + ' ভিউ' });
+      const likeCount=$('span',{class:'like-count',text:number(data.likesCount)});
       function updateStats(counts = {}) {
         if (counts.likesCount !== undefined) data.likesCount = counts.likesCount;
         if (counts.viewsCount !== undefined) data.viewsCount = counts.viewsCount;
         if (counts.commentsCount !== undefined) data.commentsCount = counts.commentsCount;
         stats.textContent = number(data.likesCount) + ' লাইক · ' + number(data.viewsCount) + ' ভিউ';
+        likeCount.textContent=number(data.likesCount);
         subtitle.firstElementChild.textContent = number(data.viewsCount) + ' ভিউ';
         commentsHeadingCount.textContent = number(data.commentsCount) + 'টি মন্তব্য';
       }
-      const like = button((data.liked ? '♥  ' : '♡  ') + number(data.likesCount), 'action-pill' + (data.liked ? ' action-pill-liked' : ''), async () => {
+      const actionIcon=name=>$('img',{src:'/assets/'+name+'.svg',alt:'',class:'action-pill-icon'});
+      const like = button('', 'action-pill action-icon-pill action-like' + (data.liked ? ' action-pill-liked' : ''), async () => {
         if (!state.session.user) { notify('লাইক দিতে আগে Google দিয়ে লগইন করো।'); navigate('/login'); return; }
-        like.disabled = true; try { const result = await jsonFetch('/api/videos/' + encodeURIComponent(id) + '/like', { method: 'POST', body: {} }); data.liked = result.liked; like.textContent = (result.liked ? '♥  ' : '♡  ') + number(result.likesCount); like.classList.toggle('action-pill-liked', result.liked); updateStats(result); }
+        like.disabled = true; try { const result = await jsonFetch('/api/videos/' + encodeURIComponent(id) + '/like', { method: 'POST', body: {} }); data.liked = result.liked; likeCount.textContent=number(result.likesCount); like.classList.toggle('action-pill-liked', result.liked); updateStats(result); }
         catch (error) { notify(error.message, 'error'); } finally { like.disabled = false; }
       });
-      const save = button(data.watchLater ? '▣  পরে দেখবে' : '＋  পরে দেখো', 'action-pill', async () => {
+      like.append(actionIcon('thumb_up'),likeCount);like.setAttribute('aria-label','Like '+number(data.likesCount));
+      const dislike=button('', 'action-pill action-icon-pill action-placeholder');dislike.append(actionIcon('thumb_down'),$('span',{text:'Dislike'}));dislike.disabled=true;dislike.title='Dislike — পরে যোগ করা হবে';dislike.setAttribute('aria-label','Dislike — পরে যোগ করা হবে');
+      const saveLabel=$('span',{text:data.watchLater?'পরে দেখবে':'পরে দেখো'});
+      const save = button('', 'action-pill action-icon-pill watch-later-action', async () => {
         if (!state.session.user) { notify('তালিকায় রাখতে লগইন করো।'); navigate('/login'); return; }
-        save.disabled = true; try { const result = await jsonFetch('/api/me/watch-later/' + encodeURIComponent(id), { method: 'POST', body: {} }); data.watchLater = result.saved; save.textContent = result.saved ? '▣  পরে দেখবে' : '＋  পরে দেখো'; notify(result.saved ? 'পরে দেখার তালিকায় যোগ হয়েছে।' : 'তালিকা থেকে সরানো হয়েছে।'); }
+        save.disabled = true; try { const result = await jsonFetch('/api/me/watch-later/' + encodeURIComponent(id), { method: 'POST', body: {} }); data.watchLater = result.saved; saveLabel.textContent=result.saved?'পরে দেখবে':'পরে দেখো'; notify(result.saved ? 'পরে দেখার তালিকায় যোগ হয়েছে।' : 'তালিকা থেকে সরানো হয়েছে।'); }
         catch (error) { notify(error.message, 'error'); } finally { save.disabled = false; }
       });
-      const share = button('↗  শেয়ার', 'action-pill', async () => { try { if(navigator.share)await navigator.share({title:video.title||'Atharo video',text:'Atharo-তে এই ভিডিওটি দেখো',url:location.href});else{await navigator.clipboard.writeText(location.href);notify('লিংক কপি হয়েছে।');} } catch (error) { if(error.name!=='AbortError')notify('ব্রাউজারের address bar থেকে link কপি করো।','error'); } });
+      save.append(actionIcon('bookmark'),saveLabel);save.setAttribute('aria-label','পরে দেখো');
+      const share = button('', 'action-pill action-icon-pill action-share', async () => { try { if(navigator.share)await navigator.share({title:video.title||'Atharo video',text:'Atharo-তে এই ভিডিওটি দেখো',url:location.href});else{await navigator.clipboard.writeText(location.href);notify('লিংক কপি হয়েছে।');} } catch (error) { if(error.name!=='AbortError')notify('ব্রাউজারের address bar থেকে link কপি করো।','error'); } });
+      share.append(actionIcon('share'),$('span',{text:'Share'}));
+      const download=button('', 'action-pill action-icon-pill action-download action-placeholder');download.append(actionIcon('download'),$('span',{text:'Download'}));download.disabled=true;download.title='Download — পরে যোগ করা হবে';download.setAttribute('aria-label','Download — পরে যোগ করা হবে');
       const playlistPicker = $('div', { class: 'playlist-picker', hidden: true });
-      const playlistButton = button('▤  প্লেলিস্ট', 'action-pill', async () => {
+      const playlistButton = button('', 'action-pill action-icon-pill action-playlist', async () => {
         if (!state.session.user) { notify('প্লেলিস্টে যোগ করতে লগইন করো।'); navigate('/login'); return; }
         playlistButton.disabled = true;
         try {
@@ -884,8 +892,9 @@
         } catch (error) { notify(error.message, 'error'); }
         finally { playlistButton.disabled = false; }
       });
-      actions.append(like, save, playlistButton, share, stats, videoMoreMenu(video));
-      if (state.session.profile && ownerHandle && state.session.profile.handle.toLowerCase() === ownerHandle.toLowerCase()) actions.append(button('মুছে ফেলো', 'action-pill', async () => {
+      playlistButton.append(actionIcon('playlist_add'),$('span',{text:'Playlist'}));
+      actions.append(like,dislike,share,download,playlistButton,save,stats,videoMoreMenu(video));
+      if (state.session.profile && ownerHandle && state.session.profile.handle.toLowerCase() === ownerHandle.toLowerCase()) actions.append(button('মুছে ফেলো', 'action-pill watch-delete-action', async () => {
         if (!window.confirm('এই ভিডিওটি স্থায়ীভাবে মুছে ফেলবে?')) return;
         try { await jsonFetch('/api/videos/' + encodeURIComponent(id), { method: 'DELETE' }); notify('ভিডিও মুছে ফেলা হয়েছে।'); navigate('/channel/me'); } catch (error) { notify(error.message, 'error'); }
       }));
@@ -922,7 +931,7 @@
       });
       let commentsLoaded=false;const loadComments=async()=>{if(commentsLoaded||video.commentsEnabled===false)return;commentsLoaded=true;try{const comments=await jsonFetch('/api/videos/'+encodeURIComponent(id)+'/comments?limit=50');if(token===state.routeToken)(comments.comments||[]).forEach(addComment);}catch(error){if(token===state.routeToken)commentsList.append($('p',{class:'inline-error',text:'মন্তব্য লোড করা যায়নি: '+error.message}));}};const expandComments=()=>{discussion.classList.remove('comments-collapsed');commentsHeading.setAttribute('aria-expanded','true');loadComments();};commentsHeading.addEventListener('click',expandComments);commentsHeading.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();expandComments();}});discussion.append(video.commentsEnabled === false ? $('div', { class: 'console-notice', text: 'এই ভিডিওতে নির্মাতা মন্তব্য বন্ধ রেখেছেন।' }) : commentForm, commentsList);
       if(ownerHandle&&(!state.session.profile||state.session.profile.handle?.toLowerCase()!==ownerHandle.toLowerCase()))creator.append(reportButton('channel',ownerHandle));
-      creator.append(actions); main.append(stage, postrollSlot, title, subtitle, creator, playlistPicker, description, chaptersPanel, transcript, discussion);
+      main.append(stage, postrollSlot, title, subtitle, actions, creator, playlistPicker, description, chaptersPanel, transcript, discussion);
       const aside = $('aside', { class: 'recommendations' }, [$('div', { class: 'recommendations-title' }, [$('h2', { text: 'এরপর দেখো' }), $('span', { text: 'এই বিভাগের আরও ভিডিও' })])]);
       section.append(main, aside); setPage([section]);
       if(state.session.user){
@@ -1254,7 +1263,7 @@
   if (socket) {
     socket.on('connect', () => { if (state.currentVideoId) socket.emit('video:join', state.currentVideoId); if (state.currentChannelHandle) socket.emit('channel:join', state.currentChannelHandle); });
     socket.on('notification:new',receiveNotification);
-    socket.on('video:stats', counts => { if (counts.videoId !== state.currentVideoId) return; const stats = document.querySelector('.watch-stats'); if (stats) stats.textContent = (window.AtharoI18n?.t(number(counts.likesCount)+' লাইক')??(number(counts.likesCount)+' লাইক')) + ' · ' + (window.AtharoI18n?.t(number(counts.viewsCount)+' ভিউ')??(number(counts.viewsCount)+' ভিউ')); const subtitle = document.querySelector('.watch-subtitle>span:first-child'); if (subtitle) subtitle.textContent = window.AtharoI18n?.t(number(counts.viewsCount)+' ভিউ')??(number(counts.viewsCount)+' ভিউ'); const heading = document.querySelector('.comment-count'); if (heading) heading.textContent = window.AtharoI18n?.t(number(counts.commentsCount)+'টি মন্তব্য')??(number(counts.commentsCount)+'টি মন্তব্য'); const like = document.querySelector('.watch-actions .action-pill'); if (like) like.textContent = (like.classList.contains('action-pill-liked') ? '♥  ' : '♡  ') + number(counts.likesCount); });
+    socket.on('video:stats', counts => { if (counts.videoId !== state.currentVideoId) return; const stats = document.querySelector('.watch-stats'); if (stats) stats.textContent = (window.AtharoI18n?.t(number(counts.likesCount)+' লাইক')??(number(counts.likesCount)+' লাইক')) + ' · ' + (window.AtharoI18n?.t(number(counts.viewsCount)+' ভিউ')??(number(counts.viewsCount)+' ভিউ')); const subtitle = document.querySelector('.watch-subtitle>span:first-child'); if (subtitle) subtitle.textContent = window.AtharoI18n?.t(number(counts.viewsCount)+' ভিউ')??(number(counts.viewsCount)+' ভিউ'); const heading = document.querySelector('.comment-count'); if (heading) heading.textContent = window.AtharoI18n?.t(number(counts.commentsCount)+'টি মন্তব্য')??(number(counts.commentsCount)+'টি মন্তব্য'); const likeCount = document.querySelector('.watch-actions .like-count'); if (likeCount) likeCount.textContent = number(counts.likesCount); const like = document.querySelector('.watch-actions .action-like'); if (like) like.setAttribute('aria-label', 'Like ' + number(counts.likesCount)); });
     socket.on('comment:new', comment => { if (comment.videoId !== state.currentVideoId) return; if (window.__addClipNestComment) window.__addClipNestComment(comment); });
     socket.on('channel:stats', message => { if (message.handle !== state.currentChannelHandle) return; document.querySelectorAll('.subscriber-count,.channel-subscribers').forEach(node => { node.textContent = window.AtharoI18n?.t(number(message.subscribersCount)+' জন সাবস্ক্রাইবার')??(number(message.subscribersCount)+' জন সাবস্ক্রাইবার'); }); });
   }

@@ -18,3 +18,12 @@ test('player icon helpers are declared before their first use in the watch playe
     'playerIconButton must be initialized before player controls call it'
   );
 });
+
+test('player actions do not create a transient text overlay', () => {
+  assert.doesNotMatch(html, /class:'player-action-feedback'/);
+  assert.match(html, /const showAction=\(\)=>\{\};/);
+});
+
+test('watch page places its phone action strip between metadata and channel card', () => {
+  assert.match(html, /main\.append\(stage, postrollSlot, title, subtitle, actions, creator,/);
+});
