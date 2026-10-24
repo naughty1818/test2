@@ -1348,7 +1348,9 @@ body.admin-fullscreen .main-content { width:100%; max-width:none; min-height:100
   .sidebar:not(.sidebar-open) .nav-item > span:last-child,
   .sidebar:not(.sidebar-open) .sidebar-note,
   .sidebar:not(.sidebar-open) .sidebar-footer { visibility:hidden; opacity:0; }
+  .sidebar:not(.sidebar-open) .nav-item > span:last-child { display:none; }
   .sidebar:not(.sidebar-open) .nav-item { width:48px; justify-content:center; padding:0; gap:0; }
+  .sidebar:not(.sidebar-open) .nav-item > span:first-child { margin-inline:auto; }
   .sidebar:not(.sidebar-open) .sidebar-divider { margin:24px 8px 23px; }
   .sidebar.sidebar-open .sidebar-label,
   .sidebar.sidebar-open .nav-item > span:last-child,
