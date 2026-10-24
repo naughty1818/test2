@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+<title id="title">Play</title>
+<rect x="8" y="8" width="48" height="48" rx="13" fill="#007C75"/><path d="M25 19.5Q25 16.5 28 18.3L43 29Q46 31 43 33L28 44Q25 46 25 42.5Z" fill="#45E5C9"/><path d="M25 27L36 31L25 37Z" fill="#A5F8E8" opacity=".8"/>
+</svg>

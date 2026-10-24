@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+<title id="title">Fullscreen</title>
+<path d="M11 24V14Q11 11 14 11H24M40 11H50Q53 11 53 14V24M53 40V50Q53 53 50 53H40M24 53H14Q11 53 11 50V40" fill="none" stroke="#007C75" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

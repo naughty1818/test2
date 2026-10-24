@@ -1436,6 +1436,11 @@ body.admin-fullscreen .main-content { width:100%; max-width:none; min-height:100
 .player-top-controls { position: absolute; z-index: 4; top: 10px; right: 10px; display: flex; align-items: center; gap: 5px; opacity: 0; transform: translateY(-4px); transition: opacity .2s ease, transform .2s ease; }
 .player-stage:hover .player-top-controls, .player-stage.player-controls-visible .player-top-controls, .player-stage:focus-within .player-top-controls { opacity: 1; transform: translateY(0); }
 .player-top-controls .player-control-button { width: 31px !important; height: 31px !important; color: #71e5af !important; border: 1px solid #42c88b99; border-radius: 7px !important; background: #06130dcc; font-size: 14px; }
+.player-control-icon { width: 24px; height: 24px; display: block; object-fit: contain; pointer-events: none; }
+.player-top-controls .player-control-icon { width: 25px; height: 25px; }
+.player-skip-button .player-control-icon { width: 25px; height: 25px; }
+.player-caption-select { padding-left: 27px !important; background-image: url('/assets/captions_cc.svg'); background-repeat: no-repeat; background-position: 4px center; background-size: 21px 21px; }
+.player-settings-menu .player-speed { padding-left: 27px; background-image: url('/assets/playback_speed.svg'); background-repeat: no-repeat; background-position: 4px center; background-size: 21px 21px; }
 .player-top-controls select { min-width: 35px; height: 31px; padding: 3px 4px; border: 1px solid #42c88b99; border-radius: 7px; color: #71e5af; background: #06130dcc; font-size: 10px; font-weight: 750; }
 .player-top-controls .player-toggle-active { color: #d1ffe5 !important; background: #168c63dd !important; }
 .atharo-player-loader { position: absolute; z-index: 5; left: 50%; top: 50%; display: grid; place-items: center; gap: 6px; min-width: 76px; padding: 9px 11px; transform: translate(-50%, -50%); border: 1px solid #55d39c66; border-radius: 12px; color: #c9fbe0; background: #06130dcc; font-size: 10px; font-weight: 700; }
