@@ -695,3 +695,110 @@ CREATE TABLE IF NOT EXISTS creator_withdrawal_requests (
 );
 CREATE INDEX IF NOT EXISTS creator_withdrawals_creator_created_idx ON creator_withdrawal_requests(creator_sub,created_at DESC);
 CREATE INDEX IF NOT EXISTS creator_withdrawals_review_idx ON creator_withdrawal_requests(status,created_at ASC);
+
+
+-- Shop access is gated by an Admin/Owner-reviewed seller application.
+CREATE TABLE IF NOT EXISTS shop_applications (
+  id UUID PRIMARY KEY,
+  user_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  business_name TEXT NOT NULL CHECK (char_length(business_name) BETWEEN 2 AND 120),
+  full_name TEXT NOT NULL CHECK (char_length(full_name) BETWEEN 2 AND 120),
+  phone TEXT NOT NULL CHECK (char_length(phone) BETWEEN 6 AND 40),
+  address TEXT NOT NULL CHECK (char_length(address) BETWEEN 5 AND 500),
+  business_type TEXT NOT NULL CHECK (char_length(business_type) BETWEEN 2 AND 80),
+  description TEXT NOT NULL CHECK (char_length(description) BETWEEN 20 AND 2000),
+  product_types TEXT NOT NULL CHECK (char_length(product_types) BETWEEN 2 AND 500),
+  social_url TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  decision_note TEXT NOT NULL DEFAULT '',
+  reviewed_by_email TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  reviewed_at TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS shop_applications_one_pending_idx
+  ON shop_applications(user_sub) WHERE status='pending';
+CREATE INDEX IF NOT EXISTS shop_applications_review_idx ON shop_applications(status,created_at ASC);
+
+CREATE TABLE IF NOT EXISTS shops (
+  id UUID PRIMARY KEY,
+  owner_sub TEXT NOT NULL UNIQUE REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  application_id UUID NOT NULL UNIQUE REFERENCES shop_applications(id) ON DELETE RESTRICT,
+  slug TEXT NOT NULL UNIQUE,
+  business_name TEXT NOT NULL CHECK (char_length(business_name) BETWEEN 2 AND 120),
+  description TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended','closed')),
+  approved_by_email TEXT NOT NULL,
+  approved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  suspended_reason TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS shops_status_idx ON shops(status,approved_at DESC);
+
+CREATE TABLE IF NOT EXISTS products (
+  id UUID PRIMARY KEY,
+  shop_id UUID NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+  owner_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE RESTRICT,
+  name TEXT NOT NULL CHECK (char_length(name) BETWEEN 2 AND 160),
+  description TEXT NOT NULL CHECK (char_length(description) BETWEEN 10 AND 4000),
+  price_bdt NUMERIC(12,2) NOT NULL CHECK (price_bdt > 0),
+  stock_quantity INTEGER NOT NULL DEFAULT 0 CHECK (stock_quantity >= 0),
+  category TEXT NOT NULL CHECK (char_length(category) BETWEEN 2 AND 80),
+  good_points TEXT NOT NULL DEFAULT '',
+  limitations TEXT NOT NULL DEFAULT '',
+  delivery_info TEXT NOT NULL DEFAULT '',
+  return_policy TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending_review' CHECK (status IN ('draft','pending_review','approved','rejected','hidden','out_of_stock')),
+  decision_note TEXT NOT NULL DEFAULT '',
+  reviewed_by_email TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  reviewed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS products_public_idx ON products(status,created_at DESC) WHERE status='approved';
+CREATE INDEX IF NOT EXISTS products_owner_idx ON products(owner_sub,status,updated_at DESC);
+CREATE INDEX IF NOT EXISTS products_search_idx ON products USING GIN (to_tsvector('simple', name || ' ' || description || ' ' || category));
+
+CREATE TABLE IF NOT EXISTS product_videos (
+  product_id UUID PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
+  video_id TEXT NOT NULL UNIQUE REFERENCES videos(id) ON DELETE CASCADE,
+  good_start_second INTEGER NOT NULL DEFAULT 0 CHECK (good_start_second >= 0),
+  limitation_start_second INTEGER NOT NULL DEFAULT 0 CHECK (limitation_start_second >= 0),
+  details_start_second INTEGER NOT NULL DEFAULT 0 CHECK (details_start_second >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS carts (
+  buyer_sub TEXT PRIMARY KEY REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS cart_items (
+  buyer_sub TEXT NOT NULL REFERENCES carts(buyer_sub) ON DELETE CASCADE,
+  product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  quantity INTEGER NOT NULL CHECK (quantity > 0),
+  added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (buyer_sub,product_id)
+);
+CREATE TABLE IF NOT EXISTS shop_orders (
+  id UUID PRIMARY KEY,
+  buyer_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE RESTRICT,
+  total_amount_bdt NUMERIC(12,2) NOT NULL CHECK (total_amount_bdt > 0),
+  shipping_address TEXT NOT NULL CHECK (char_length(shipping_address) BETWEEN 5 AND 1000),
+  payment_status TEXT NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending','paid','failed','refunded')),
+  order_status TEXT NOT NULL DEFAULT 'placed' CHECK (order_status IN ('placed','confirmed','processing','shipped','delivered','cancelled')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS shop_order_items (
+  order_id UUID NOT NULL REFERENCES shop_orders(id) ON DELETE CASCADE,
+  product_id UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+  seller_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE RESTRICT,
+  quantity INTEGER NOT NULL CHECK (quantity > 0),
+  unit_price_bdt NUMERIC(12,2) NOT NULL CHECK (unit_price_bdt > 0),
+  PRIMARY KEY (order_id,product_id)
+);
+CREATE INDEX IF NOT EXISTS shop_orders_buyer_idx ON shop_orders(buyer_sub,created_at DESC);
+CREATE INDEX IF NOT EXISTS shop_order_items_seller_idx ON shop_order_items(seller_sub,order_id);
+ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS payment_provider TEXT NOT NULL DEFAULT 'nogorpay';
+ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS provider_reference TEXT;
+ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS provider_invoice_id TEXT;
+ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS checkout_url TEXT;
+ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
+ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
+CREATE UNIQUE INDEX IF NOT EXISTS shop_orders_provider_invoice_idx ON shop_orders(provider_invoice_id) WHERE provider_invoice_id IS NOT NULL;

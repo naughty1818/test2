@@ -107,6 +107,71 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       res.json({ok:true,decision,handle:result.handle||null});
     }catch(error){if(error.status)return jsonError(res,error.status,error.message);next(error);}
   });
+
+  const makeShopSlug = value => {
+    const base = String(value || 'shop').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'shop';
+    return base;
+  };
+  app.get('/api/admin/shop-applications',adminAuth('admin'),async(req,res,next)=>{
+    try{
+      const status=['pending','approved','rejected','all'].includes(String(req.query.status||''))?String(req.query.status):'pending';
+      const result=await pool.query(`SELECT a.id,a.user_sub,a.business_name,a.full_name,a.phone,a.address,a.business_type,a.description,a.product_types,a.social_url,a.status,a.decision_note,a.created_at,a.reviewed_at,a.reviewed_by_email,u.email,u.google_name,u.google_picture,s.slug,s.status AS shop_status
+        FROM shop_applications a JOIN app_users u ON u.google_sub=a.user_sub LEFT JOIN shops s ON s.application_id=a.id
+        WHERE ($1='all' OR a.status=$1) ORDER BY CASE a.status WHEN 'pending' THEN 0 ELSE 1 END,a.created_at ASC LIMIT 100`,[status]);
+      res.json({applications:result.rows.map(a=>({id:a.id,userSub:a.user_sub,businessName:a.business_name,fullName:a.full_name,phone:a.phone,address:a.address,businessType:a.business_type,description:a.description,productTypes:a.product_types,socialUrl:a.social_url,status:a.status,decisionNote:a.decision_note,createdAt:a.created_at,reviewedAt:a.reviewed_at,reviewedBy:a.reviewed_by_email,email:a.email,name:a.google_name,picture:a.google_picture,shopSlug:a.slug,shopStatus:a.shop_status}))});
+    }catch(error){next(error);}
+  });
+  app.post('/api/admin/shop-applications/:id/decision',adminAuth('admin'),async(req,res,next)=>{
+    try{
+      if(!validUuid(req.params.id))return fail(res,'Invalid Shop application id.');
+      const decision=String(req.body?.decision||''),note=clean(req.body?.note,2000);
+      if(!['approved','rejected'].includes(decision))return fail(res,'Choose approve or reject.');
+      if(note.length<5)return fail(res,'Add a decision note of at least 5 characters.');
+      const result=await withTransaction(async client=>{
+        const locked=await client.query('SELECT * FROM shop_applications WHERE id=$1 FOR UPDATE',[req.params.id]);
+        if(!locked.rowCount)return null;
+        const a=locked.rows[0];
+        if(a.status!=='pending')throw Object.assign(new Error('This Shop application has already been decided.'),{status:409});
+        let slug=null;
+        if(decision==='approved'){
+          const existing=await client.query('SELECT id FROM shops WHERE owner_sub=$1',[a.user_sub]);
+          if(existing.rowCount)throw Object.assign(new Error('This account already has a Shop.'),{status:409});
+          const base=makeShopSlug(a.business_name);
+          for(let i=0;i<12;i++){
+            const candidate=i===0?base:`${base}-${crypto.randomBytes(2).toString('hex')}`;
+            const inserted=await client.query(`INSERT INTO shops(id,owner_sub,application_id,slug,business_name,description,approved_by_email) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(slug) DO NOTHING RETURNING slug`,[crypto.randomUUID(),a.user_sub,a.id,candidate,a.business_name,a.description,req.admin.email]);
+            if(inserted.rowCount){slug=inserted.rows[0].slug;break;}
+          }
+          if(!slug)throw new Error('Could not allocate a unique Shop URL.');
+        }
+        await client.query('UPDATE shop_applications SET status=$2,decision_note=$3,reviewed_by_email=$4,reviewed_at=NOW() WHERE id=$1',[a.id,decision,note,req.admin.email]);
+        await writeAudit(client,req.admin,'shop_application_'+decision,'shop_application',a.id,note,{businessName:a.business_name,userSub:a.user_sub,shopSlug:slug});
+        return {userSub:a.user_sub,businessName:a.business_name,slug};
+      });
+      if(!result)return jsonError(res,404,'Shop application not found.');
+      if(notifyUser)await notifyUser(result.userSub,null,'shop_application_'+decision,decision==='approved'?'Shop approved':'Shop application update',decision==='approved'?`Your Shop “${result.businessName}” is approved. Product publishing can now be enabled.`:`Your Shop application was not approved. Note: ${note}`,'/studio?tab=shop');
+      res.json({ok:true,decision,slug:result.slug||null});
+    }catch(error){if(error.status)return jsonError(res,error.status,error.message);next(error);}
+  });
+  app.get('/api/admin/shop-products',adminAuth('admin'),async(req,res,next)=>{
+    try{
+      const status=['pending_review','approved','rejected','hidden','out_of_stock','all'].includes(String(req.query.status||''))?String(req.query.status):'pending_review';
+      const result=await pool.query(`SELECT p.*,s.business_name,u.email,u.google_name,pv.video_id FROM products p JOIN shops s ON s.id=p.shop_id JOIN app_users u ON u.google_sub=p.owner_sub LEFT JOIN product_videos pv ON pv.product_id=p.id WHERE ($1='all' OR p.status=$1) ORDER BY CASE p.status WHEN 'pending_review' THEN 0 ELSE 1 END,p.created_at ASC LIMIT 200`,[status]);
+      res.json({products:result.rows.map(p=>({id:p.id,name:p.name,description:p.description,priceBdt:Number(p.price_bdt),stockQuantity:p.stock_quantity,category:p.category,goodPoints:p.good_points,limitations:p.limitations,deliveryInfo:p.delivery_info,returnPolicy:p.return_policy,status:p.status,decisionNote:p.decision_note,createdAt:p.created_at,reviewedAt:p.reviewed_at,businessName:p.business_name,email:p.email,ownerName:p.google_name,videoId:p.video_id||null}))});
+    }catch(error){next(error);}
+  });
+  app.post('/api/admin/shop-products/:id/decision',adminAuth('admin'),async(req,res,next)=>{
+    try{
+      if(!validUuid(req.params.id))return fail(res,'Invalid product id.');
+      const decision=String(req.body?.decision||''),note=clean(req.body?.note,2000);
+      if(!['approved','rejected','hidden'].includes(decision))return fail(res,'Choose approve, reject, or hide.');
+      if(note.length<5)return fail(res,'Add a decision note of at least 5 characters.');
+      const result=await withTransaction(async client=>{const locked=await client.query('SELECT id,owner_sub,name,status FROM products WHERE id=$1 FOR UPDATE',[req.params.id]);if(!locked.rowCount)return null;const p=locked.rows[0];const next=decision==='approved'?'approved':decision==='rejected'?'rejected':'hidden';await client.query('UPDATE products SET status=$2,decision_note=$3,reviewed_by_email=$4,reviewed_at=NOW(),updated_at=NOW() WHERE id=$1',[p.id,next,note,req.admin.email]);await writeAudit(client,req.admin,'shop_product_'+decision,'product',p.id,note,{productName:p.name,ownerSub:p.owner_sub});return {ownerSub:p.owner_sub,name:p.name};});
+      if(!result)return jsonError(res,404,'Product not found.');
+      if(notifyUser)await notifyUser(result.ownerSub,null,'shop_product_'+decision,'Shop product review update',`Your product “${result.name}” is ${decision}. Note: ${note}`,'/studio?tab=shop');
+      res.json({ok:true,status:decision==='approved'?'approved':decision==='rejected'?'rejected':'hidden'});
+    }catch(error){if(error.status)return jsonError(res,error.status,error.message);next(error);}
+  });
   app.get('/api/admin/verification-requests',adminAuth('admin'),async(req,res,next)=>{
     try{
       const status=['pending','approved','rejected','all'].includes(String(req.query.status||''))?String(req.query.status):'pending';

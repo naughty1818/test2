@@ -984,6 +984,7 @@ require('./learning')({ app, pool, withTransaction, s3, bucket: R2_BUCKET, requi
 require('./admin')({ app, requireAuth, requireActive, loadSession, notifyUser:sendNotification, getVideo, signedVideoUrl });
 require('./creator-studio')({ app, pool, requireAuth, requireActive, requireChannel, requireValidId, validUuid, safeText, normalizeCategory, normalizeVisibility });
 require('./premium-marketplace')({ app, pool, withTransaction, requireAuth, requireActive, requireChannel, loadSession, validUuid, safeText });
+require('./shop-approval')({ app, pool, withTransaction, requireAuth, requireActive, safeText, validVideoId });
 
 io.use(async (socket, next) => {
   try {
