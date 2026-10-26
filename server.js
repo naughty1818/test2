@@ -2,6 +2,7 @@
 
 require('dotenv').config();
 const path = require('path');
+const fs = require('fs/promises');
 const http = require('http');
 const crypto = require('crypto');
 const express = require('express');
@@ -78,6 +79,31 @@ app.use(express.json({ limit: '32kb' }));
 app.get('/assets/atharo-logo-reveal-007670.mp4', (req, res, next) => {
   res.set('Cache-Control', 'public, max-age=2592000, immutable');
   next();
+});
+app.get('/sitemap.xml', async (req, res) => {
+  const staticSitemapPath = path.join(__dirname, 'public', 'sitemap.xml');
+  let sitemap = await fs.readFile(staticSitemapPath, 'utf8');
+  try {
+    const result = await pool.query(`
+      SELECT path, lastmod FROM (
+        SELECT '/watch/' || v.id::text AS path, v.created_at AS lastmod
+        FROM videos v JOIN app_users u ON u.google_sub=v.owner_sub
+        WHERE v.visibility='Public' AND v.moderation_status='active' AND u.account_status='active'
+        UNION ALL
+        SELECT '/channel/' || p.handle AS path, MAX(v.created_at) AS lastmod
+        FROM profiles p JOIN app_users u ON u.google_sub=p.sub
+        JOIN videos v ON v.owner_sub=p.sub
+        WHERE u.account_status='active' AND v.visibility='Public' AND v.moderation_status='active'
+        GROUP BY p.handle
+      ) public_pages
+      ORDER BY lastmod DESC NULLS LAST LIMIT 49000
+    `);
+    const entries = result.rows.map(row => `  <url>\n    <loc>https://www.atharo.online${row.path}</loc>${row.lastmod ? `\n    <lastmod>${new Date(row.lastmod).toISOString().slice(0, 10)}</lastmod>` : ''}\n  </url>`).join('\n');
+    sitemap = sitemap.replace('</urlset>', `${entries ? `\n${entries}\n` : ''}</urlset>`);
+  } catch (error) {
+    console.error('Dynamic sitemap entries could not be loaded:', error.message);
+  }
+  res.set('Cache-Control', 'public, max-age=3600').type('application/xml').send(sitemap);
 });
 app.use(express.static(path.join(__dirname, 'public')));
 
