@@ -136,11 +136,12 @@ module.exports = function attachPremiumMarketplace({ app, pool, withTransaction,
       const auth = req.auth || await loadSession(req), sub = auth?.session?.sub || '';
       const result = await pool.query(`SELECT v.id,v.title,v.description,v.price_bdt,v.is_premium,v.thumbnail_object_name,v.created_at AS updated_at,
         p.display_name,p.handle,p.avatar_url,u.google_name,(v.owner_sub=$1 OR EXISTS(SELECT 1 FROM premium_video_entitlements e WHERE e.video_id=v.id AND e.buyer_sub=$1)) AS owned,
+        EXISTS(SELECT 1 FROM premium_video_entitlements e WHERE e.video_id=v.id AND e.buyer_sub=$1) AS purchased,
         (SELECT COUNT(*)::bigint FROM premium_playlist_orders o WHERE o.video_id=v.id AND o.status='paid') AS sold
         FROM videos v JOIN app_users u ON u.google_sub=v.owner_sub LEFT JOIN profiles p ON p.sub=v.owner_sub
         WHERE v.visibility='Public' AND v.is_premium=TRUE AND v.moderation_status='active' AND u.account_status='active'
         ORDER BY v.created_at DESC LIMIT 100`, [sub]);
-      res.json({ videos: result.rows.map(v => productRow({ ...v, name:v.title, is_public:true })) });
+      res.json({ videos: result.rows.map(v => ({ ...productRow({ ...v, name:v.title, is_public:true }), purchased:Boolean(v.purchased) })) });
     } catch (error) { next(error); }
   });
   app.get('/api/premium/videos/:id', async (req,res,next)=>{
