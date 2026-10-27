@@ -757,6 +757,34 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
     } catch (error) { next(error); }
   });
 
+  app.post('/api/admin/wallet/talent/:id/release',adminAuth('admin'),async(req,res,next)=>{
+    try{
+      if(!validUuid(req.params.id))return jsonError(res,400,'Invalid Talent earning id.');
+      const note=clean(req.body?.note,1000);if(note.length<5)return jsonError(res,400,'Add a release note of at least 5 characters.');
+      const result=await withTransaction(async client=>{
+        const found=await client.query('SELECT id,provider_sub,COALESCE(creator_net_bdt,amount_bdt) AS net_bdt,status,released_at FROM talent_earnings WHERE id=$1 FOR UPDATE',[req.params.id]);
+        if(!found.rowCount)return null;const row=found.rows[0];
+        if(row.status!=='pending_payout'||row.released_at)throw Object.assign(new Error('Only unreleased pending Talent earnings can be released.'),{status:409});
+        const amount=Number(row.net_bdt);if(!(amount>0))throw Object.assign(new Error('Talent net amount must be positive.'),{status:409});
+        await client.query('UPDATE talent_earnings SET released_at=NOW() WHERE id=$1',[row.id]);
+        await client.query(`INSERT INTO creator_wallet_entries(id,creator_sub,source,source_ref,amount_bdt,description,metadata) VALUES($1,$2,'talent',$3,$4,'Talent order released',jsonb_build_object('earningId',$5::text,'adminNote',$6::text)) ON CONFLICT(source,source_ref) DO NOTHING`,[crypto.randomUUID(),row.provider_sub,'talent:'+row.id,amount,row.id,note]);
+        await writeAudit(client,req.admin,'talent_earning_release','talent_earning',row.id,note,{creatorSub:row.provider_sub,amountBdt:amount});return {id:row.id,amountBdt:amount,status:'available'};
+      });if(!result)return jsonError(res,404,'Talent earning not found.');res.json({earning:result});
+    }catch(error){next(error);}
+  });
+  app.post('/api/admin/wallet/ads-settlements',adminAuth('admin'),async(req,res,next)=>{
+    try{
+      const creatorSub=clean(req.body?.creatorSub,200),reference=clean(req.body?.settlementRef,160),note=clean(req.body?.note,1000),amount=Number(req.body?.amountBdt);
+      if(!creatorSub||reference.length<3||note.length<5||!Number.isFinite(amount)||amount<=0||amount>10000000||req.body?.confirmedReceived!==true)return jsonError(res,400,'Supply creator, actual-receipt confirmation, unique reference, positive amount and reconciliation note.');
+      const result=await withTransaction(async client=>{
+        const id=crypto.randomUUID();
+        const inserted=await client.query(`INSERT INTO creator_ad_settlements(id,creator_sub,settlement_ref,amount_bdt,note,confirmed_received,settled_by_email) VALUES($1,$2,$3,$4,$5,TRUE,$6) ON CONFLICT(creator_sub,settlement_ref) DO NOTHING RETURNING id`,[id,creatorSub,reference,amount,note,req.admin.email]);
+        if(!inserted.rowCount)throw Object.assign(new Error('This settlement reference has already been recorded.'),{status:409});
+        await client.query(`INSERT INTO creator_wallet_entries(id,creator_sub,source,source_ref,amount_bdt,description,metadata) VALUES($1,$2,'ads',$3,$4,'Confirmed Ads settlement',jsonb_build_object('settlementRef',$5::text,'adminNote',$6::text)) ON CONFLICT(source,source_ref) DO NOTHING`,[crypto.randomUUID(),creatorSub,'ads:'+reference,amount,reference,note]);
+        await writeAudit(client,req.admin,'ads_wallet_settlement','creator_ad_settlement',id,note,{creatorSub,amountBdt:amount,settlementRef:reference,confirmedReceived:true});return {id,creatorSub,amountBdt:amount,settlementRef:reference};
+      });res.status(201).json({settlement:result});
+    }catch(error){next(error);}
+  });
   app.get('/api/admin/creator-withdrawals', adminAuth('admin'), async(req,res,next)=>{
     try{
       const status=['pending','approved','rejected','paid','all'].includes(String(req.query.status||''))?String(req.query.status):'pending';
@@ -781,6 +809,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
         if(action==='paid'&&r.status!=='approved')throw Object.assign(new Error('Only approved withdrawal requests can be marked paid.'),{status:409});
         const status=action==='approve'?'approved':action==='reject'?'rejected':'paid';
         await client.query(`UPDATE creator_withdrawal_requests SET status=$2,decision_note=$3,reviewed_by_email=$4,reviewed_at=NOW(),paid_at=CASE WHEN $2='paid' THEN NOW() ELSE paid_at END WHERE id=$1`,[r.id,status,note,req.admin.email]);
+        if(action==='paid') await client.query(`INSERT INTO creator_wallet_entries(id,creator_sub,source,source_ref,amount_bdt,description,metadata) VALUES($1,$2,'withdrawal',$3,$4,'Manual creator payout',jsonb_build_object('withdrawalId',$5::text,'adminNote',$6::text)) ON CONFLICT(source,source_ref) DO NOTHING`,[crypto.randomUUID(),r.creator_sub,'withdrawal:'+r.id+':paid',-Number(r.amount_bdt),r.id,note]);
         await writeAudit(client,req.admin,'creator_withdrawal_'+action,'creator_withdrawal',r.id,note,{creatorSub:r.creator_sub,amountBdt:Number(r.amount_bdt),payoutMethod:r.payout_method});
         return {id:r.id,status};
       });

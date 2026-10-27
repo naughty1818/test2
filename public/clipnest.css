@@ -1801,3 +1801,16 @@ body.admin-fullscreen .main-content { width:100%; max-width:none; min-height:100
   .player-stage .player-mobile-center-controls .player-mobile-play{width:55px!important;height:55px!important}
   .player-stage .player-mobile-center-controls .player-mobile-skip .player-control-icon,.player-stage .player-mobile-center-controls .player-mobile-play .player-control-icon{width:45px!important;height:45px!important}
 }
+
+/* Unified creator wallet */
+.wallet-stats .console-stat:first-child { border-color:#46cba080; background:linear-gradient(145deg,#13382a,#102219); }
+.wallet-source-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.wallet-source-grid .console-stat { min-width:0; }
+.wallet-two-col { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:16px 0; }
+.wallet-activity { display:grid; gap:8px; }
+.wallet-activity-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:13px 15px; border:1px solid #263f32; border-radius:12px; background:#0e1d16; }
+.wallet-activity-row p { margin:5px 0 0; color:#92aa9a; font-size:11px; overflow-wrap:anywhere; }
+.wallet-positive { color:#77dfb8; white-space:nowrap; }
+.wallet-negative { color:#f09a90; white-space:nowrap; }
+@media(max-width:850px){.wallet-source-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.wallet-two-col{grid-template-columns:1fr}}
+@media(max-width:520px){.wallet-source-grid{grid-template-columns:1fr 1fr}.wallet-activity-row{align-items:flex-start}.wallet-activity-row>strong{font-size:12px}}

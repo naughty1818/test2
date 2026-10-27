@@ -891,3 +891,54 @@ CREATE TABLE IF NOT EXISTS talent_earnings (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS talent_earnings_provider_idx ON talent_earnings(provider_sub,status,created_at DESC);
+
+-- Unified creator wallet (append-only, source-aware). Amounts are signed: credits positive, payouts/reversals negative.
+ALTER TABLE creator_withdrawal_requests ADD COLUMN IF NOT EXISTS payout_method TEXT;
+ALTER TABLE creator_withdrawal_requests ADD COLUMN IF NOT EXISTS payout_details_ciphertext TEXT;
+ALTER TABLE creator_withdrawal_requests ADD COLUMN IF NOT EXISTS decision_note TEXT NOT NULL DEFAULT '';
+ALTER TABLE creator_withdrawal_requests ADD COLUMN IF NOT EXISTS reviewed_by_email TEXT;
+ALTER TABLE creator_withdrawal_requests ALTER COLUMN account_number DROP NOT NULL;
+ALTER TABLE creator_withdrawal_requests ALTER COLUMN payment_method DROP NOT NULL;
+ALTER TABLE talent_earnings ADD COLUMN IF NOT EXISTS released_at TIMESTAMPTZ;
+ALTER TABLE talent_earnings ADD COLUMN IF NOT EXISTS creator_net_bdt NUMERIC(12,2);
+UPDATE talent_earnings SET creator_net_bdt=amount_bdt WHERE creator_net_bdt IS NULL;
+UPDATE creator_withdrawal_requests SET payout_method=payment_method WHERE payout_method IS NULL;
+CREATE TABLE IF NOT EXISTS creator_wallet_entries (
+  id UUID PRIMARY KEY,
+  creator_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE RESTRICT,
+  source TEXT NOT NULL CHECK(source IN ('premium','talent','ads','withdrawal','adjustment','reversal')),
+  source_ref TEXT NOT NULL,
+  amount_bdt NUMERIC(12,2) NOT NULL CHECK(amount_bdt <> 0),
+  currency TEXT NOT NULL DEFAULT 'BDT' CHECK(currency='BDT'),
+  description TEXT NOT NULL DEFAULT '',
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(source,source_ref)
+);
+CREATE INDEX IF NOT EXISTS creator_wallet_entries_creator_idx ON creator_wallet_entries(creator_sub,created_at DESC);
+CREATE TABLE IF NOT EXISTS creator_payout_settings (
+  creator_sub TEXT PRIMARY KEY REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  payout_method TEXT NOT NULL CHECK(payout_method IN ('bkash','nagad','bank')),
+  payout_details_ciphertext TEXT NOT NULL,
+  account_last4 TEXT NOT NULL DEFAULT '',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS creator_ad_settlements (
+  id UUID PRIMARY KEY,
+  creator_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE RESTRICT,
+  settlement_ref TEXT NOT NULL,
+  amount_bdt NUMERIC(12,2) NOT NULL CHECK(amount_bdt > 0),
+  note TEXT NOT NULL DEFAULT '',
+  confirmed_received BOOLEAN NOT NULL DEFAULT FALSE,
+  settled_by_email TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(creator_sub,settlement_ref)
+);
+-- Idempotent backfill of already-posted Premium net earnings. Ad estimates are intentionally not credited.
+INSERT INTO creator_wallet_entries(id,creator_sub,source,source_ref,amount_bdt,description,created_at)
+SELECT gen_random_uuid(),creator_sub,'premium','premium:'||order_id::text,amount_bdt,COALESCE(description,'Premium sale'),created_at
+FROM creator_wallet_ledger WHERE amount_bdt > 0 ON CONFLICT(source,source_ref) DO NOTHING;
+-- Preserve historical paid withdrawals in the new balance so they cannot be withdrawn a second time.
+INSERT INTO creator_wallet_entries(id,creator_sub,source,source_ref,amount_bdt,description,created_at,metadata)
+SELECT gen_random_uuid(),creator_sub,'withdrawal','withdrawal:'||id::text||':paid',-amount_bdt,'Historical paid withdrawal',COALESCE(paid_at,created_at),jsonb_build_object('withdrawalId',id::text,'migration','legacy_paid')
+FROM creator_withdrawal_requests WHERE status='paid' ON CONFLICT(source,source_ref) DO NOTHING;

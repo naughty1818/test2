@@ -67,6 +67,9 @@ module.exports = function attachPremiumMarketplace({ app, pool, withTransaction,
       }
       await client.query(`INSERT INTO creator_wallet_ledger(id,creator_sub,order_id,amount_bdt,entry_type,description)
         VALUES($1,$2,$3,$4,'sale','Premium content sale') ON CONFLICT(order_id) DO NOTHING`, [crypto.randomUUID(), order.creator_sub, order.id, creatorAmount]);
+      await client.query(`INSERT INTO creator_wallet_entries(id,creator_sub,source,source_ref,amount_bdt,description,metadata)
+        VALUES($1,$2,'premium',$3,$4,'Premium content sale',jsonb_build_object('orderId',$5::text,'grossBdt',$6::numeric,'feeBdt',$7::numeric)) ON CONFLICT(source,source_ref) DO NOTHING`,
+        [crypto.randomUUID(),order.creator_sub,'premium:'+order.id,creatorAmount,order.id,amount,fee]);
       return { ok: true };
     });
   }
@@ -219,51 +222,53 @@ module.exports = function attachPremiumMarketplace({ app, pool, withTransaction,
         orders:paidOrders.rows.map(o=>({id:o.id,contentType:o.video_id?'video':'playlist',playlistName:o.content_name,amountBdt:Number(o.amount_bdt)||0,creatorEarningBdt:Number(o.creator_earning_bdt)||0,createdAt:o.created_at,buyer:o.email?o.email.replace(/^(.{2}).*(@.*)$/,'$1•••$2'):'Viewer'}))});
     } catch(error){next(error);}
   });
+  async function walletPayload(sub, client = pool) {
+    const [totals, sourceTotals, pendingTalent, adEstimate, activity, requests, payout] = await Promise.all([
+      client.query(`SELECT COALESCE(SUM(amount_bdt),0)::numeric AS balance,COALESCE(SUM(amount_bdt) FILTER(WHERE amount_bdt>0),0)::numeric AS earned,COALESCE(-SUM(amount_bdt) FILTER(WHERE source='withdrawal'),0)::numeric AS paid FROM creator_wallet_entries WHERE creator_sub=$1`,[sub]),
+      client.query(`SELECT source,COALESCE(SUM(amount_bdt),0)::numeric AS amount FROM creator_wallet_entries WHERE creator_sub=$1 AND amount_bdt>0 GROUP BY source`,[sub]),
+      client.query(`SELECT COALESCE(SUM(amount_bdt),0)::numeric AS amount,COUNT(*)::int AS count FROM talent_earnings WHERE provider_sub=$1 AND status='pending_payout' AND released_at IS NULL`,[sub]),
+      client.query(`SELECT COALESCE(SUM(estimated_creator_earnings_bdt),0)::numeric AS amount FROM ad_events WHERE creator_sub=$1`,[sub]),
+      client.query(`SELECT id,source,source_ref,amount_bdt,description,metadata,created_at FROM creator_wallet_entries WHERE creator_sub=$1 ORDER BY created_at DESC LIMIT 100`,[sub]),
+      client.query(`SELECT id,amount_bdt,payout_method,status,decision_note,created_at,reviewed_at,paid_at FROM creator_withdrawal_requests WHERE creator_sub=$1 ORDER BY created_at DESC LIMIT 50`,[sub]),
+      client.query('SELECT payout_method,account_last4,updated_at FROM creator_payout_settings WHERE creator_sub=$1',[sub])
+    ]);
+    const t=totals.rows[0]||{}, pending=Number(pendingTalent.rows[0]?.amount||0), balance=Number(t.balance||0);
+    const reserved=(await client.query(`SELECT COALESCE(SUM(amount_bdt),0)::numeric AS amount FROM creator_withdrawal_requests WHERE creator_sub=$1 AND status IN('pending','approved')`,[sub])).rows[0]?.amount||0;
+    return { earnedBdt:money(t.earned), availableBdt:Math.max(0,money(balance-Number(reserved))), reservedBdt:money(reserved), paidBdt:money(t.paid), pendingBdt:money(pending), estimatedAdsBdt:money(adEstimate.rows[0]?.amount||0),
+      sources:{premium:{earnedBdt:money(sourceTotals.rows.find(x=>x.source==='premium')?.amount||0)},talent:{availableBdt:money(sourceTotals.rows.find(x=>x.source==='talent')?.amount||0),pendingBdt:money(pending)},ads:{settledBdt:money(sourceTotals.rows.find(x=>x.source==='ads')?.amount||0),estimatedBdt:money(adEstimate.rows[0]?.amount||0)}},
+      activity:activity.rows.map(x=>({id:x.id,source:x.source,reference:x.source_ref,amountBdt:Number(x.amount_bdt),description:x.description,metadata:x.metadata,createdAt:x.created_at})),
+      withdrawals:requests.rows.map(r=>({id:r.id,amountBdt:Number(r.amount_bdt),payoutMethod:r.payout_method||'unknown',status:r.status,decisionNote:r.decision_note,createdAt:r.created_at,reviewedAt:r.reviewed_at,paidAt:r.paid_at})),
+      payoutSettings:payout.rows[0]?{method:payout.rows[0].payout_method,maskedDestination:'•••• '+payout.rows[0].account_last4,updatedAt:payout.rows[0].updated_at}:null};
+  }
   app.get('/api/creator/wallet', requireAuth, requireChannel, async(req,res,next)=>{
+    try{res.set('Cache-Control','private, no-store');res.json(await walletPayload(req.auth.session.sub));}catch(error){next(error);}
+  });
+  app.put('/api/creator/wallet/payout-settings',requireAuth,requireActive,requireChannel,async(req,res,next)=>{
     try{
-      const sub=req.auth.session.sub;
-      const [earned,withdrawn,requests]=await Promise.all([
-        pool.query('SELECT COALESCE(SUM(amount_bdt),0)::numeric AS total FROM creator_wallet_ledger WHERE creator_sub=$1',[sub]),
-        pool.query("SELECT COALESCE(SUM(amount_bdt),0)::numeric AS total FROM creator_withdrawal_requests WHERE creator_sub=$1 AND status IN('pending','approved','paid')",[sub]),
-        pool.query('SELECT id,amount_bdt,payout_method,status,decision_note,created_at,reviewed_at,paid_at FROM creator_withdrawal_requests WHERE creator_sub=$1 ORDER BY created_at DESC LIMIT 50',[sub])
-      ]);
-      res.set('Cache-Control','private, no-store');res.json({earnedBdt:money(earned.rows[0].total),reservedBdt:money(withdrawn.rows[0].total),availableBdt:Math.max(0,money(Number(earned.rows[0].total)-Number(withdrawn.rows[0].total))),withdrawals:requests.rows.map(r=>({id:r.id,amountBdt:Number(r.amount_bdt),payoutMethod:r.payout_method,status:r.status,decisionNote:r.decision_note,createdAt:r.created_at,reviewedAt:r.reviewed_at,paidAt:r.paid_at}))});
+      const method=String(req.body?.payoutMethod||''),name=String(req.body?.accountName||'').replace(/[\u0000-\u001f]/g,'').trim().slice(0,120),account=String(req.body?.accountNumber||'').replace(/[\u0000-\u001f]/g,'').trim().slice(0,100);
+      if(!['bkash','nagad','bank'].includes(method)||name.length<2||account.length<6)return res.status(400).json({error:'সঠিক payout method, account name ও destination দিন।'});
+      const ciphertext=encryptPayoutDetails({accountName:name,accountNumber:account});
+      await pool.query(`INSERT INTO creator_payout_settings(creator_sub,payout_method,payout_details_ciphertext,account_last4,updated_at) VALUES($1,$2,$3,$4,NOW()) ON CONFLICT(creator_sub) DO UPDATE SET payout_method=EXCLUDED.payout_method,payout_details_ciphertext=EXCLUDED.payout_details_ciphertext,account_last4=EXCLUDED.account_last4,updated_at=NOW()`,[req.auth.session.sub,method,ciphertext,account.slice(-4)]);
+      res.status(200).json({payoutSettings:{method,maskedDestination:'•••• '+account.slice(-4)}});
     }catch(error){next(error);}
   });
-  app.post('/api/creator/withdrawals', requireAuth, requireActive, requireChannel, async(req,res,next)=>{
+  app.post(['/api/creator/wallet/withdrawals','/api/creator/withdrawals'], requireAuth, requireActive, requireChannel, async(req,res,next)=>{
     try{
-      const amount=Number(req.body?.amountBdt),method=String(req.body?.payoutMethod||''),name=String(req.body?.accountName||'').trim().slice(0,120),account=String(req.body?.accountNumber||'').replace(/[\u0000-\u001f]/g,'').trim().slice(0,100);
-      if(!Number.isFinite(amount)||amount<=0||amount>1000000||!['bkash','nagad','bank'].includes(method)||name.length<2||account.length<6)return res.status(400).json({error:'Amount, payout method, account name, and valid destination details দিন।'});
-      const ciphertext=encryptPayoutDetails({accountName:name,accountNumber:account});
+      const amount=Number(req.body?.amountBdt), sub=req.auth.session.sub;
+      if(!Number.isFinite(amount)||amount<100||amount>1000000)return res.status(400).json({error:'ন্যূনতম withdrawal ১০০ BDT; সর্বোচ্চ ১,০০০,০০০ BDT।'});
       const result=await withTransaction(async client=>{
-        await client.query('SELECT sub FROM profiles WHERE sub=$1 FOR UPDATE',[req.auth.session.sub]);
-        const balance=await client.query(`SELECT (COALESCE((SELECT SUM(amount_bdt) FROM creator_wallet_ledger WHERE creator_sub=$1),0)-COALESCE((SELECT SUM(amount_bdt) FROM creator_withdrawal_requests WHERE creator_sub=$1 AND status IN('pending','approved','paid')),0))::numeric AS available`,[req.auth.session.sub]);
-        if(amount>Number(balance.rows[0]?.available||0))throw Object.assign(new Error('Withdrawal amount exceeds your available balance.'),{status:409});
-        const id=crypto.randomUUID();await client.query(`INSERT INTO creator_withdrawal_requests(id,creator_sub,amount_bdt,payout_method,payout_details_ciphertext) VALUES($1,$2,$3,$4,$5)`,[id,req.auth.session.sub,money(amount),method,ciphertext]);
-        return {id,amountBdt:money(amount),status:'pending'};
+        await client.query('SELECT sub FROM profiles WHERE sub=$1 FOR UPDATE',[sub]);
+        const payout=await client.query('SELECT payout_method,payout_details_ciphertext FROM creator_payout_settings WHERE creator_sub=$1 FOR UPDATE',[sub]);
+        if(!payout.rowCount)throw Object.assign(new Error('আগে নিরাপদে payout method সংরক্ষণ করুন।'),{status:400});
+        const sums=await client.query(`SELECT COALESCE(SUM(amount_bdt),0)::numeric AS balance FROM creator_wallet_entries WHERE creator_sub=$1`,[sub]);
+        const held=await client.query(`SELECT COALESCE(SUM(amount_bdt),0)::numeric AS amount FROM creator_withdrawal_requests WHERE creator_sub=$1 AND status IN('pending','approved')`,[sub]);
+        const available=Number(sums.rows[0]?.balance||0)-Number(held.rows[0]?.amount||0);
+        if(amount>available)throw Object.assign(new Error('Withdrawal amount exceeds your available balance.'),{status:409});
+        const id=crypto.randomUUID();
+        await client.query(`INSERT INTO creator_withdrawal_requests(id,creator_sub,amount_bdt,payout_method,payout_details_ciphertext,payment_method,account_number,status) VALUES($1,$2,$3,$4,$5,$4,NULL,'pending')`,[id,sub,money(amount),payout.rows[0].payout_method,payout.rows[0].payout_details_ciphertext]);
+        return {id,amountBdt:money(amount),status:'pending',payoutMethod:payout.rows[0].payout_method};
       });
       res.status(201).json({withdrawal:result});
-    }catch(error){next(error);}
-  });
-
-  app.patch('/api/creator/premium/playlists/:id', requireAuth, requireActive, requireChannel, async (req,res,next)=>{
-    try{
-      if(!validUuid(req.params.id))return res.status(400).json({error:'Invalid playlist id.'});
-      const premium=Boolean(req.body?.isPremium),price=Number(req.body?.priceBdt),previewIds=Array.isArray(req.body?.previewVideoIds)?[...new Set(req.body.previewVideoIds.map(String))].slice(0,100):null;
-      if(premium&&(!Number.isFinite(price)||price<=0||price>1000000))return res.status(400).json({error:'Premium price 1 থেকে 1,000,000 BDT-এর মধ্যে দিন।'});
-      if(premium){const visible=await pool.query('SELECT 1 FROM playlists WHERE id=$1 AND owner_sub=$2 AND is_creator_playlist=TRUE AND is_public=TRUE',[req.params.id,req.auth.session.sub]);if(!visible.rowCount)return res.status(400).json({error:'Premium series বিক্রির জন্য creator playlist Public হতে হবে।'});}
-      const result=await withTransaction(async client=>{
-        const updated=await client.query(`UPDATE playlists SET is_premium=$3,price_bdt=$4,updated_at=NOW() WHERE id=$1 AND owner_sub=$2 AND is_creator_playlist=TRUE RETURNING id,name,is_premium,price_bdt`,[req.params.id,req.auth.session.sub,premium,premium?price.toFixed(2):'0']);
-        if(!updated.rowCount)return null;
-        if(previewIds){
-          const valid=await client.query(`SELECT i.video_id FROM playlist_items i JOIN videos v ON v.id=i.video_id WHERE i.playlist_id=$1 AND i.video_id=ANY($2::text[]) AND v.visibility='Public' AND v.moderation_status='active'`,[req.params.id,previewIds]);
-          if(valid.rowCount!==previewIds.length)throw Object.assign(new Error('Free preview videos must be active Public videos inside this playlist.'),{status:400});
-          await client.query('UPDATE playlist_items SET is_preview=(video_id=ANY($2::text[])) WHERE playlist_id=$1',[req.params.id,previewIds]);
-        }
-        return updated.rows[0];
-      });
-      if(!result)return res.status(404).json({error:'Creator playlist not found.'});
-      res.json({playlist:{id:result.id,name:result.name,isPremium:Boolean(result.is_premium),priceBdt:Number(result.price_bdt)||0}});
     }catch(error){next(error);}
   });
   app.patch('/api/creator/premium/videos/:id',requireAuth,requireActive,requireChannel,async(req,res,next)=>{

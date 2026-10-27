@@ -226,7 +226,7 @@ module.exports = function attachTalentMarketplace({ app, pool, withTransaction, 
       const changed = await withTransaction(async client => {
         const r = await client.query("UPDATE talent_orders SET status='completed',completed_at=NOW(),updated_at=NOW() WHERE id=$1 AND buyer_sub=$2 AND status='submitted' RETURNING id,provider_sub,amount_bdt",[req.params.id,req.auth.session.sub]);
         if (!r.rowCount) return null;
-        await client.query("INSERT INTO talent_earnings(id,order_id,provider_sub,amount_bdt,status) VALUES($1,$2,$3,$4,'pending_payout') ON CONFLICT(order_id) DO NOTHING",[crypto.randomUUID(),r.rows[0].id,r.rows[0].provider_sub,r.rows[0].amount_bdt]);
+        await client.query("INSERT INTO talent_earnings(id,order_id,provider_sub,amount_bdt,creator_net_bdt,status) VALUES($1,$2,$3,$4,$4,'pending_payout') ON CONFLICT(order_id) DO NOTHING",[crypto.randomUUID(),r.rows[0].id,r.rows[0].provider_sub,r.rows[0].amount_bdt]);
         await client.query("INSERT INTO talent_order_events(order_id,actor_sub,event_type,details) VALUES($1,$2,'work_accepted','Buyer accepted the submitted work.')",[req.params.id,req.auth.session.sub]);
         return true;
       });
