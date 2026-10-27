@@ -1792,3 +1792,12 @@ body.admin-fullscreen .main-content { width:100%; max-width:none; min-height:100
 .talent-nav-icon{width:26px;height:26px;object-fit:contain;border-radius:8px}.mobile-bottom-nav .talent-nav-icon{width:25px;height:25px}.talent-status-progress{display:flex;gap:5px;margin:14px 0 8px}.talent-status-progress span{height:5px;flex:1;border-radius:8px;background:#263c32}.talent-status-progress span.done{background:linear-gradient(90deg,#087b70,#35c7a6)}.talent-order-updated{font-size:.86rem;color:#96aa9d}.talent-purchase-details{padding:13px;border-radius:12px;background:#0a1510;border:1px solid #263c32}.talent-purchase-details p{line-height:1.65}
 
 @media(max-width:760px){.mobile-bottom-nav>a{min-width:0;flex:1}.mobile-bottom-nav>a>span:last-child{white-space:nowrap;font-size:8px}}
+
+/* User-provided bottom icons; central mobile transport controls use 45px artwork and 60px gaps. */
+.player-stage .player-center-play .player-control-icon{width:45px;height:45px}
+@media(max-width:760px){
+  .player-stage .player-mobile-center-controls{gap:60px!important}
+  .player-stage .player-mobile-center-controls .player-mobile-skip{width:50px!important;height:50px!important}
+  .player-stage .player-mobile-center-controls .player-mobile-play{width:55px!important;height:55px!important}
+  .player-stage .player-mobile-center-controls .player-mobile-skip .player-control-icon,.player-stage .player-mobile-center-controls .player-mobile-play .player-control-icon{width:45px!important;height:45px!important}
+}
