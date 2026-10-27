@@ -10,3 +10,12 @@
 - [x] Admin/Owner payout destination দেখে withdrawal approve/reject বা manual payment-এর পর Paid mark করেন; সব decision audit log-এ যায়।
 - [ ] Actual payout-provider API, fraud/refund/chargeback workflow এবং compliance review আলাদা production follow-up।
 - [ ] Existing automated tests pass এবং changed server/frontend files syntax-check হবে।
+
+
+## Atharo Talent MVP
+- [x] Separate `/talent` marketplace, listing detail and Creator Studio listing creation
+- [x] Creator-owned Public video portfolio, package snapshot and buyer work brief
+- [x] Provider acceptance, NogorPay checkout/verification, delivery submission, revisions and completion
+- [x] Talent-specific order events and pending-payout earning records (not connected to withdrawals)
+- [ ] Admin moderation, cancellation/refund/dispute, order messaging and file attachments
+- [ ] Completed-order reviews, payout/release policy, compliance and end-to-end provider testing

@@ -45,6 +45,15 @@ Owner-এর Platform settings থেকে monetization eligibility-এর **mi
 
 **Sponsor/ads monetization এখনও estimate-only:** এখানে advertiser billing, contract/invoice বা advertiser-payment reconciliation নেই; CPM-based creator share withdrawable balance নয়। Premium video/playlist purchase-এ configured NogorPay hosted checkout এবং provider verification ব্যবহার হয়; সফল purchase-এর পর Admin-configured video/playlist fee কেটে creator net share ledger-এ যায়। Creator withdrawal request করা যায় এবং Admin/Owner approve/reject করে external/manual transfer শেষে Paid mark করেন—অ্যাপ কোনো bank/mobile-wallet transfer API চালায় না। Production cashout-এর আগে fraud/refund/chargeback handling, platform terms, Bangladesh tax/payment compliance, identity/eligibility review ও payout-provider integration স্থাপন করুন। Payout detail AES-256-GCM encryption-এ রাখা হয়; `PAYOUT_ENCRYPTION_KEY` স্থিরভাবে configure করুন (না থাকলে `SESSION_SECRET` থেকে derive হয়), key পরিবর্তন করলে পুরনো payout detail আর decrypt নাও হতে পারে।
 
+## Atharo Talent marketplace (MVP)
+
+- `/talent`-এ published Talent listings browse/search ও category filter করা যায়; listing-এ skills, scope, packages, delivery days, revisions এবং creator-owned Public Atharo video portfolio দেখা যায়।
+- Creator Studio → **Atharo Talent** থেকে প্রথম MVP-তে একটি package-সহ listing draft বা publish করা যায়। Listing ও order-এর permission server-side creator/buyer ownership দিয়ে যাচাই হয়।
+- Buyer project brief দিয়ে offer পাঠান; provider contract snapshot accept করলে buyer NogorPay checkout করেন। Verified provider status ও exact amount মিললে order `in_progress` হয়—browser redirect payment proof নয়।
+- Provider deliverable note/HTTPS link জমা দেন; buyer completion accept করতে বা included revision চাইতে পারেন। Completed order creator-এর `talent_earnings`-এ `pending_payout` হিসেবে রেকর্ড হয়।
+- Talent-এর listing/order/event/deliverable/earning schema `schema.sql`-এ idempotently যোগ হয় এবং Express API `talent-marketplace.js`-এ আলাদা module। Existing Shop physical order ও Premium purchase schema অক্ষত থাকে।
+- **সীমাবদ্ধতা:** এই MVP-তে order messaging/file upload, admin dispute/refund, cancellation workflow, reviews, automatic payout ও escrow নেই। `pending_payout` creator-ට withdrawable wallet balance බව නොකියයි; manual payout/release policy, refund/chargeback, compliance review ও dispute operations ঠিক না করে real-market launch করবেন না. NogorPay server credentials এবং Talent webhook URL hosting environment-এ configure করতে হবে.
+
 ## কোথায় কোন ডেটা থাকে
 
 | ডেটা | অবস্থান |

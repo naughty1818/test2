@@ -1011,6 +1011,7 @@ require('./admin')({ app, requireAuth, requireActive, loadSession, notifyUser:se
 require('./creator-studio')({ app, pool, requireAuth, requireActive, requireChannel, requireValidId, validUuid, safeText, normalizeCategory, normalizeVisibility });
 require('./premium-marketplace')({ app, pool, withTransaction, requireAuth, requireActive, requireChannel, loadSession, validUuid, safeText });
 require('./shop-approval')({ app, pool, withTransaction, requireAuth, requireActive, safeText, validVideoId });
+require('./talent-marketplace')({ app, pool, withTransaction, requireAuth, requireActive, requireChannel, validUuid });
 
 io.use(async (socket, next) => {
   try {

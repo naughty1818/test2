@@ -27,7 +27,7 @@
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/atharo-favicon.png?v=atharo-icon-2">
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/atharo-apple-touch-icon.png?v=atharo-icon-2">
   <link rel="manifest" href="/manifest.webmanifest?v=atharo-icon-2">
-  <link rel="stylesheet" href="/clipnest.css?v=premium-library-shop-2">
+  <link rel="stylesheet" href="/clipnest.css?v=atharo-talent-1">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -80,6 +80,7 @@
           <a href="/channels" data-route data-nav="channels" class="nav-item"><span aria-hidden="true"><img class="nav-item-icon" src="/assets/channels.svg" alt=""></span><span>চ্যানেল</span></a>
           <a href="/shop" data-route data-nav="shop" class="nav-item"><span aria-hidden="true"><img class="nav-item-icon shop-nav-icon" src="/assets/shop.svg" alt=""></span><span>Shop</span></a>
           <a href="/premium" data-route data-nav="premium" class="nav-item"><span aria-hidden="true"><img class="nav-item-icon" src="/assets/premium.svg" alt=""></span><span>Premium সিরিজ</span></a>
+          <a href="/talent" data-route data-nav="talent" class="nav-item"><span aria-hidden="true">✦</span><span>Atharo Talent</span></a>
         </nav>
         <div class="sidebar-divider"></div>
         <div class="sidebar-label">তোমার লাইব্রেরি</div>
@@ -138,7 +139,8 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="/i18n.js?v=login-startup-fix-1"></script>
   <script src="/console.js?v=premium-withdrawals-1"></script>
-  <script src="/studio.js?v=premium-commerce-1"></script>
+  <script src="/studio.js?v=atharo-talent-1"></script>
+  <script src="/talent.js?v=atharo-talent-1"></script>
   <script>
   'use strict';
   const app = document.getElementById('app');
@@ -304,7 +306,7 @@
   function updateNav(path) {
     document.querySelectorAll('[data-nav]').forEach(link => {
       const target = link.dataset.nav;
-      const active = target === 'home' ? path === '/' : target === 'search' ? path.startsWith('/search') : target === 'upload' ? path === '/upload' : target === 'subscriptions' ? path.startsWith('/subscriptions') : target === 'history' ? path.startsWith('/history') : target === 'playlists' ? path.startsWith('/playlists') || path.startsWith('/playlist/') : target === 'premium' ? path.startsWith('/premium') : target === 'shop' ? path.startsWith('/shop') : target === 'channels' ? path.startsWith('/channels') || (path.startsWith('/channel/') && path !== '/channel/me') : target === 'my-channel' ? path === '/channel/me' : false;
+      const active = target === 'home' ? path === '/' : target === 'search' ? path.startsWith('/search') : target === 'upload' ? path === '/upload' : target === 'subscriptions' ? path.startsWith('/subscriptions') : target === 'history' ? path.startsWith('/history') : target === 'playlists' ? path.startsWith('/playlists') || path.startsWith('/playlist/') : target === 'premium' ? path.startsWith('/premium') : target === 'shop' ? path.startsWith('/shop') : target === 'talent' ? path.startsWith('/talent') : target === 'channels' ? path.startsWith('/channels') || (path.startsWith('/channel/') && path !== '/channel/me') : target === 'my-channel' ? path === '/channel/me' : false;
       link.classList.toggle('nav-item-active', active);
     });
     document.querySelectorAll('[data-mobile-nav]').forEach(link => {
@@ -1226,6 +1228,9 @@
     if (path === '/playlists') { document.title=window.AtharoI18n?.t('প্লেলিস্ট · Atharo | আঠারো')??'প্লেলিস্ট · Atharo | আঠারো'; return renderPlaylists(token); }
     if (path === '/premium') { document.title='Premium creator playlists · Atharo'; return renderPremium(token); }
     if (path === '/shop') { document.title='Shop · Atharo'; return renderShop(token); }
+    if (path === '/talent') { document.title='Atharo Talent · দক্ষ মানুষ খুঁজুন'; window.AtharoTalentContext={jsonFetch,notify,navigate,session:state.session}; return window.AtharoTalent.renderCatalog(app); }
+    if (path === '/talent/orders') { document.title='Talent orders · Atharo'; window.AtharoTalentContext={jsonFetch,notify,navigate,session:state.session}; if(!state.session.user)return renderLogin('Talent order দেখতে আগে লগইন করুন।'); return window.AtharoTalent.renderOrders(app); }
+    if (path.startsWith('/talent/')) { const slug=decodeURIComponent(path.slice('/talent/'.length)); document.title='Talent listing · Atharo'; window.AtharoTalentContext={jsonFetch,notify,navigate,session:state.session}; return window.AtharoTalent.renderDetail(app,slug); }
     if (path.startsWith('/watch/')) { const id = decodeURIComponent(path.slice('/watch/'.length)); document.title=window.AtharoI18n?.t('ভিডিও · Atharo | আঠারো')??'ভিডিও · Atharo | আঠারো'; return renderWatch(id, token); }
     if (path.startsWith('/channel/')) { const handle = decodeURIComponent(path.slice('/channel/'.length)); document.title=window.AtharoI18n?.t('চ্যানেল · Atharo | আঠারো')??'চ্যানেল · Atharo | আঠারো'; return renderChannel(handle, token); }
     if (path.startsWith('/playlist/')) { const id = decodeURIComponent(path.slice('/playlist/'.length)); document.title=window.AtharoI18n?.t('প্লেলিস্ট · Atharo | আঠারো')??'প্লেলিস্ট · Atharo | আঠারো'; return renderPlaylist(id, token); }

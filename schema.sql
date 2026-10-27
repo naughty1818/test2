@@ -802,3 +802,91 @@ ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS checkout_url TEXT;
 ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
 ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
 CREATE UNIQUE INDEX IF NOT EXISTS shop_orders_provider_invoice_idx ON shop_orders(provider_invoice_id) WHERE provider_invoice_id IS NOT NULL;
+
+-- Atharo Talent: service listings and project-based hiring (separate from physical Shop orders).
+CREATE TABLE IF NOT EXISTS talent_listings (
+  id UUID PRIMARY KEY,
+  provider_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE RESTRICT,
+  slug TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL CHECK(char_length(title) BETWEEN 4 AND 120),
+  description TEXT NOT NULL CHECK(char_length(description) BETWEEN 20 AND 4000),
+  category TEXT NOT NULL CHECK(category IN('software-development','web-design','tutoring','graphic-design','writing-translation','video-editing','other')),
+  skills TEXT[] NOT NULL DEFAULT '{}',
+  requirements TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN('draft','published','paused')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS talent_listings_public_idx ON talent_listings(category,updated_at DESC) WHERE status='published';
+CREATE INDEX IF NOT EXISTS talent_listings_search_idx ON talent_listings USING GIN(to_tsvector('simple',title||' '||description||' '||array_to_string(skills,' ')));
+CREATE TABLE IF NOT EXISTS talent_packages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  listing_id UUID NOT NULL REFERENCES talent_listings(id) ON DELETE CASCADE,
+  name TEXT NOT NULL CHECK(char_length(name) BETWEEN 1 AND 40),
+  scope TEXT NOT NULL CHECK(char_length(scope) BETWEEN 1 AND 1000),
+  price_bdt NUMERIC(12,2) NOT NULL CHECK(price_bdt>0),
+  delivery_days INTEGER NOT NULL CHECK(delivery_days BETWEEN 1 AND 365),
+  revisions SMALLINT NOT NULL DEFAULT 0 CHECK(revisions BETWEEN 0 AND 20),
+  position SMALLINT NOT NULL DEFAULT 0,
+  UNIQUE(listing_id,position)
+);
+CREATE TABLE IF NOT EXISTS talent_portfolio_videos (
+  listing_id UUID NOT NULL REFERENCES talent_listings(id) ON DELETE CASCADE,
+  video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE RESTRICT,
+  position SMALLINT NOT NULL DEFAULT 0,
+  PRIMARY KEY(listing_id,video_id),
+  UNIQUE(listing_id,position)
+);
+CREATE TABLE IF NOT EXISTS talent_orders (
+  id UUID PRIMARY KEY,
+  listing_id UUID NOT NULL REFERENCES talent_listings(id) ON DELETE RESTRICT,
+  package_id UUID NOT NULL REFERENCES talent_packages(id) ON DELETE RESTRICT,
+  buyer_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE RESTRICT,
+  provider_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE RESTRICT,
+  amount_bdt NUMERIC(12,2) NOT NULL CHECK(amount_bdt>0),
+  contract_snapshot JSONB NOT NULL,
+  buyer_brief TEXT NOT NULL CHECK(char_length(buyer_brief) BETWEEN 20 AND 4000),
+  status TEXT NOT NULL DEFAULT 'awaiting_provider' CHECK(status IN('awaiting_provider','awaiting_payment','in_progress','submitted','revision_requested','completed','declined','cancelled','disputed','refunded','payment_failed')),
+  revisions_used SMALLINT NOT NULL DEFAULT 0 CHECK(revisions_used>=0),
+  provider_invoice_id TEXT,
+  checkout_url TEXT,
+  provider_reference TEXT,
+  paid_at TIMESTAMPTZ,
+  verified_at TIMESTAMPTZ,
+  provider_accepted_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(provider_invoice_id),
+  CHECK(buyer_sub<>provider_sub)
+);
+CREATE INDEX IF NOT EXISTS talent_orders_buyer_idx ON talent_orders(buyer_sub,created_at DESC);
+CREATE INDEX IF NOT EXISTS talent_orders_provider_idx ON talent_orders(provider_sub,status,created_at DESC);
+CREATE TABLE IF NOT EXISTS talent_order_events (
+  id BIGSERIAL PRIMARY KEY,
+  order_id UUID NOT NULL REFERENCES talent_orders(id) ON DELETE RESTRICT,
+  actor_sub TEXT REFERENCES app_users(google_sub) ON DELETE SET NULL,
+  event_type TEXT NOT NULL,
+  details TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS talent_order_events_order_idx ON talent_order_events(order_id,created_at);
+CREATE TABLE IF NOT EXISTS talent_deliverables (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id UUID NOT NULL REFERENCES talent_orders(id) ON DELETE RESTRICT,
+  note TEXT NOT NULL DEFAULT '',
+  delivery_url TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK(char_length(note)<=2000),
+  CHECK(delivery_url IS NULL OR delivery_url ~* '^https://')
+);
+CREATE INDEX IF NOT EXISTS talent_deliverables_order_idx ON talent_deliverables(order_id,created_at DESC);
+CREATE TABLE IF NOT EXISTS talent_earnings (
+  id UUID PRIMARY KEY,
+  order_id UUID NOT NULL UNIQUE REFERENCES talent_orders(id) ON DELETE RESTRICT,
+  provider_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE RESTRICT,
+  amount_bdt NUMERIC(12,2) NOT NULL CHECK(amount_bdt>0),
+  status TEXT NOT NULL DEFAULT 'pending_payout' CHECK(status IN('pending_payout','paid','reversed')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS talent_earnings_provider_idx ON talent_earnings(provider_sub,status,created_at DESC);
