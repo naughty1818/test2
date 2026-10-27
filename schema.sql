@@ -897,12 +897,19 @@ ALTER TABLE creator_withdrawal_requests ADD COLUMN IF NOT EXISTS payout_method T
 ALTER TABLE creator_withdrawal_requests ADD COLUMN IF NOT EXISTS payout_details_ciphertext TEXT;
 ALTER TABLE creator_withdrawal_requests ADD COLUMN IF NOT EXISTS decision_note TEXT NOT NULL DEFAULT '';
 ALTER TABLE creator_withdrawal_requests ADD COLUMN IF NOT EXISTS reviewed_by_email TEXT;
-ALTER TABLE creator_withdrawal_requests ALTER COLUMN account_number DROP NOT NULL;
-ALTER TABLE creator_withdrawal_requests ALTER COLUMN payment_method DROP NOT NULL;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='creator_withdrawal_requests' AND column_name='account_number') THEN
+    ALTER TABLE creator_withdrawal_requests ALTER COLUMN account_number DROP NOT NULL;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='creator_withdrawal_requests' AND column_name='payment_method') THEN
+    ALTER TABLE creator_withdrawal_requests ALTER COLUMN payment_method DROP NOT NULL;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='creator_withdrawal_requests' AND column_name='payment_method') THEN
+      END IF;
+END $$;
 ALTER TABLE talent_earnings ADD COLUMN IF NOT EXISTS released_at TIMESTAMPTZ;
 ALTER TABLE talent_earnings ADD COLUMN IF NOT EXISTS creator_net_bdt NUMERIC(12,2);
 UPDATE talent_earnings SET creator_net_bdt=amount_bdt WHERE creator_net_bdt IS NULL;
-UPDATE creator_withdrawal_requests SET payout_method=payment_method WHERE payout_method IS NULL;
 CREATE TABLE IF NOT EXISTS creator_wallet_entries (
   id UUID PRIMARY KEY,
   creator_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE RESTRICT,
