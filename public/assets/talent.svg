@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Atharo Talent</title>
+  <defs>
+    <linearGradient id="brand" x1="8" y1="8" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#35C7A6"/>
+      <stop offset="1" stop-color="#087B70"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="#0B211B"/>
+  <path d="M14 25.5A4.5 4.5 0 0 1 18.5 21h8.2l3.2 4h15.6a4.5 4.5 0 0 1 4.5 4.5v15a4.5 4.5 0 0 1-4.5 4.5h-27a4.5 4.5 0 0 1-4.5-4.5v-19Z" fill="url(#brand)"/>
+  <path d="M14 32h36v12.5a4.5 4.5 0 0 1-4.5 4.5h-27a4.5 4.5 0 0 1-4.5-4.5V32Z" fill="#E7FFF6" opacity=".94"/>
+  <path d="M28 32v4.5a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V32" fill="none" stroke="#087B70" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="m48 10 1.8 4.7 4.7 1.8-4.7 1.8L48 23l-1.8-4.7-4.7-1.8 4.7-1.8L48 10Z" fill="#F28B72" stroke="#0B211B" stroke-width="1.5" stroke-linejoin="round"/>
+  <circle cx="16" cy="17" r="2" fill="#F28B72"/>
+</svg>

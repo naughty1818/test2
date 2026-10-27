@@ -51,8 +51,10 @@ Owner-এর Platform settings থেকে monetization eligibility-এর **mi
 - Creator Studio → **Atharo Talent** থেকে প্রথম MVP-তে একটি package-সহ listing draft বা publish করা যায়। Listing ও order-এর permission server-side creator/buyer ownership দিয়ে যাচাই হয়।
 - Buyer project brief দিয়ে offer পাঠান; provider contract snapshot accept করলে buyer NogorPay checkout করেন। Verified provider status ও exact amount মিললে order `in_progress` হয়—browser redirect payment proof নয়।
 - Provider deliverable note/HTTPS link জমা দেন; buyer completion accept করতে বা included revision চাইতে পারেন। Completed order creator-এর `talent_earnings`-এ `pending_payout` হিসেবে রেকর্ড হয়।
+- Buyer-এর `/talent/my-orders` page-এ শুধু নিজের কেনা কাজগুলো দেখা যায়; Creator approval, payment-needed, work-in-progress, submitted, revision এবং completed status বাংলায়, সর্বশেষ update, delivery note/link ও পরবর্তী action-সহ দেখায়।
+- `public/assets/talent.svg`-এ teal/coral brand icon; desktop sidebar ও mobile navigation-এ আলাদা **আমার অর্ডার** shortcut আছে।
 - Talent-এর listing/order/event/deliverable/earning schema `schema.sql`-এ idempotently যোগ হয় এবং Express API `talent-marketplace.js`-এ আলাদা module। Existing Shop physical order ও Premium purchase schema অক্ষত থাকে।
-- **সীমাবদ্ধতা:** এই MVP-তে order messaging/file upload, admin dispute/refund, cancellation workflow, reviews, automatic payout ও escrow নেই। `pending_payout` creator-ට withdrawable wallet balance බව නොකියයි; manual payout/release policy, refund/chargeback, compliance review ও dispute operations ঠিক না করে real-market launch করবেন না. NogorPay server credentials এবং Talent webhook URL hosting environment-এ configure করতে হবে.
+- **সীমাবদ্ধতা:** এই MVP-তে order messaging/file upload, admin dispute/refund, cancellation workflow, reviews, automatic payout ও escrow নেই। `pending_payout` কোনো withdrawable balance নয়। Manual payout/release policy, refund/chargeback handling, compliance review ও dispute operations ঠিক না করে real-market launch করবেন না। NogorPay server credentials এবং Talent webhook URL hosting environment-এ configure করতে হবে.
 
 ## কোথায় কোন ডেটা থাকে
 

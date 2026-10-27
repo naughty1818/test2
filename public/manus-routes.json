@@ -67,6 +67,10 @@
     {
       "path": "/talent/:slug",
       "title": "Atharo Talent listing"
+    },
+    {
+      "path": "/talent/my-orders",
+      "title": "My Atharo Talent orders"
     }
   ]
 }

@@ -17,5 +17,7 @@
 - [x] Creator-owned Public video portfolio, package snapshot and buyer work brief
 - [x] Provider acceptance, NogorPay checkout/verification, delivery submission, revisions and completion
 - [x] Talent-specific order events and pending-payout earning records (not connected to withdrawals)
+- [x] Buyer-only `/talent/my-orders` with Bangla approval/payment/delivery statuses, last update and next actions
+- [x] Branded teal/coral Talent SVG and desktop/mobile navigation shortcuts
 - [ ] Admin moderation, cancellation/refund/dispute, order messaging and file attachments
 - [ ] Completed-order reviews, payout/release policy, compliance and end-to-end provider testing

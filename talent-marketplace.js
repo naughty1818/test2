@@ -109,6 +109,21 @@ module.exports = function attachTalentMarketplace({ app, pool, withTransaction, 
       res.status(201).json({ order: { id, status: 'awaiting_provider', amountBdt: Number(row.price_bdt) } });
     } catch (error) { next(error); }
   });
+  app.get('/api/me/talent/purchases', requireAuth, async (req,res,next) => {
+    try {
+      const result = await pool.query(`SELECT o.id,o.status,o.amount_bdt,o.created_at,o.updated_at,o.paid_at,
+        o.provider_accepted_at,o.completed_at,o.contract_snapshot,o.buyer_brief,
+        COALESCE(p.display_name,u.google_name,'Atharo Creator') AS provider_name,p.handle AS provider_handle,
+        latest_activity.event_type AS latest_event_type,latest_activity.details AS latest_event_details,latest_activity.created_at AS latest_event_at,
+        delivery.note AS delivery_note,delivery.delivery_url,delivery.created_at AS delivery_at
+        FROM talent_orders o JOIN app_users u ON u.google_sub=o.provider_sub
+        LEFT JOIN profiles p ON p.sub=o.provider_sub
+        LEFT JOIN LATERAL (SELECT event_type,details,created_at FROM talent_order_events WHERE order_id=o.id ORDER BY created_at DESC,id DESC LIMIT 1) latest_activity ON TRUE
+        LEFT JOIN LATERAL (SELECT note,delivery_url,created_at FROM talent_deliverables WHERE order_id=o.id ORDER BY created_at DESC,id DESC LIMIT 1) delivery ON TRUE
+        WHERE o.buyer_sub=$1 ORDER BY o.updated_at DESC LIMIT 100`,[req.auth.session.sub]);
+      res.json({ purchases:result.rows.map(r=>({id:r.id,status:r.status,amountBdt:Number(r.amount_bdt),createdAt:r.created_at,updatedAt:r.updated_at,paidAt:r.paid_at,providerAcceptedAt:r.provider_accepted_at,completedAt:r.completed_at,contract:r.contract_snapshot,brief:r.buyer_brief,providerName:r.provider_name,providerHandle:r.provider_handle||'',latestEvent:r.latest_event_type?{type:r.latest_event_type,details:r.latest_event_details,createdAt:r.latest_event_at}:null,delivery:r.delivery_at?{note:r.delivery_note,url:r.delivery_url,createdAt:r.delivery_at}:null})) });
+    } catch(error) { next(error); }
+  });
   app.get('/api/me/talent/orders', requireAuth, async (req, res, next) => {
     try {
       const result = await pool.query(`SELECT o.id,o.status,o.amount_bdt,o.created_at,o.contract_snapshot,o.buyer_brief,
@@ -147,7 +162,7 @@ module.exports = function attachTalentMarketplace({ app, pool, withTransaction, 
         order_id:publicOrderId(order.id),amount:Number(order.amount_bdt),customer_phone:phone,customer_email:req.auth.session.email,
         customer_name:req.auth.session.name||'Atharo Talent buyer',brand_id:payBrand,
         webhook_url:process.env.NOGORPAY_TALENT_WEBHOOK_URL||`${origin}/api/nogorpay/talent-webhook`,
-        redirect_url:`${origin}/talent/orders?payment=return&order_id=${encodeURIComponent(order.id)}`,
+        redirect_url:`${origin}/talent/my-orders?payment=return&order_id=${encodeURIComponent(order.id)}`,
         cancel_url:`${origin}/talent/orders?payment=cancelled`
       }) });
       const data = paymentData(body), paymentUrl = data.payment_url || data.paymentUrl || body.payment_url, invoiceId = data.invoice_id || data.invoiceId || body.invoice_id;
