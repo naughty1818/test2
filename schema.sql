@@ -818,7 +818,8 @@ CREATE TABLE IF NOT EXISTS talent_listings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS talent_listings_public_idx ON talent_listings(category,updated_at DESC) WHERE status='published';
-CREATE INDEX IF NOT EXISTS talent_listings_search_idx ON talent_listings USING GIN(to_tsvector('simple',title||' '||description||' '||array_to_string(skills,' ')));
+CREATE INDEX IF NOT EXISTS talent_listings_search_idx ON talent_listings USING GIN(to_tsvector('simple',title||' '||description));
+CREATE INDEX IF NOT EXISTS talent_listings_skills_idx ON talent_listings USING GIN(skills);
 CREATE TABLE IF NOT EXISTS talent_packages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   listing_id UUID NOT NULL REFERENCES talent_listings(id) ON DELETE CASCADE,

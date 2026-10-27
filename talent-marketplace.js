@@ -48,7 +48,7 @@ module.exports = function attachTalentMarketplace({ app, pool, withTransaction, 
       const clauses = ["l.status='published'", "u.account_status='active'"];
       const params = [];
       const q = safe(req.query.q, 120);
-      if (q) { params.push(q); clauses.push(`(to_tsvector('simple',l.title||' '||l.description||' '||array_to_string(l.skills,' ')) @@ plainto_tsquery('simple',$${params.length}) OR l.category ILIKE '%'||$${params.length}||'%')`); }
+      if (q) { params.push(q); clauses.push(`(to_tsvector('simple',l.title||' '||l.description) @@ plainto_tsquery('simple',$${params.length}) OR l.skills && string_to_array($${params.length},' ') OR l.category ILIKE '%'||$${params.length}||'%')`); }
       if (CATEGORIES.has(String(req.query.category))) { params.push(String(req.query.category)); clauses.push(`l.category=$${params.length}`); }
       const result = await listingQuery(clauses.join(' AND '), params);
       res.json({ listings: result.rows.map(shape) });
