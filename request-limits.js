@@ -1,13 +1,20 @@
 'use strict';
 const { rateLimit } = require('express-rate-limit');
+const { RedisStore } = require('rate-limit-redis');
+const { createClient } = require('redis');
+
+const redisUrl = String(process.env.REDIS_URL || '').trim();
+const redisClient = redisUrl ? createClient({ url: redisUrl }) : null;
+if (redisClient) redisClient.on('error', error => console.error('Redis rate-limit store error:', error.message));
 
 const RETRY_AFTER_SECONDS = windowMs => Math.max(1, Math.ceil(windowMs / 1000));
-function createLimiter({ windowMs, limit, message }) {
+function createLimiter({ windowMs, limit, message }, store) {
   return rateLimit({
     windowMs,
     limit,
     standardHeaders: true,
     legacyHeaders: false,
+    ...(store ? { store, passOnStoreError: true } : {}),
     skip: req => req.method === 'OPTIONS',
     handler: (req, res) => {
       const retryAfterSeconds = RETRY_AFTER_SECONDS(windowMs);
@@ -16,7 +23,13 @@ function createLimiter({ windowMs, limit, message }) {
     }
   });
 }
-
+function storeFor(prefix) {
+  if (!redisClient) return undefined;
+  return new RedisStore({
+    prefix: `atharo:rate-limit:${prefix}:`,
+    sendCommand: (...args) => redisClient.sendCommand(args)
+  });
+}
 function attachRequestLimits(app, overrides = {}) {
   const settings = {
     api: { windowMs: 60_000, limit: 300, message: 'অনেকগুলো request হয়েছে। এক মিনিট পরে আবার চেষ্টা করুন।', ...overrides.api },
@@ -25,16 +38,28 @@ function attachRequestLimits(app, overrides = {}) {
     checkout: { windowMs: 10 * 60_000, limit: 20, message: 'অল্প সময়ে অনেক payment request হয়েছে। কিছুক্ষণ পরে আবার চেষ্টা করুন।', ...overrides.checkout }
   };
 
-  app.use('/auth/google', createLimiter(settings.oauth));
+  app.use('/auth/google', createLimiter(settings.oauth, storeFor('oauth')));
   // A generous baseline leaves room for page loads, playback and parallel API calls.
-  app.use('/api', createLimiter(settings.api));
-  app.use('/api/upload-url', createLimiter(settings.upload));
-  const checkoutLimiter = createLimiter(settings.checkout);
+  app.use('/api', createLimiter(settings.api, storeFor('api')));
+  app.use('/api/upload-url', createLimiter(settings.upload, storeFor('upload')));
+  const checkoutLimiter = createLimiter(settings.checkout, storeFor('checkout'));
   app.use('/api', (req, res, next) => {
     const checkout = req.method === 'POST' && /^\/(?:premium\/(?:videos|playlists)\/[^/]+\/purchase|me\/talent\/orders\/[^/]+\/checkout)$/.test(req.path);
     if (checkout) return checkoutLimiter(req, res, next);
     next();
   });
 }
+async function connectRequestLimitStore() {
+  if (!redisClient) {
+    console.warn('REDIS_URL is not set; rate limits use per-process memory and are not shared across instances.');
+    return false;
+  }
+  if (!redisClient.isOpen) await redisClient.connect();
+  console.log('Shared Redis rate-limit store connected.');
+  return true;
+}
+async function closeRequestLimitStore() {
+  if (redisClient?.isOpen) await redisClient.quit();
+}
 
-module.exports = { attachRequestLimits, createLimiter };
+module.exports = { attachRequestLimits, createLimiter, connectRequestLimitStore, closeRequestLimitStore };

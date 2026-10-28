@@ -51,7 +51,8 @@ const s3 = new S3Client({
   responseChecksumValidation: 'WHEN_REQUIRED'
 });
 const app = express();
-require('./request-limits').attachRequestLimits(app);
+const requestLimits = require('./request-limits');
+requestLimits.attachRequestLimits(app);
 const server = http.createServer(app);
 const io = new SocketServer(server, {
   serveClient: true,
@@ -1078,6 +1079,7 @@ app.use((error, req, res, next) => {
 
 async function start() {
   await initializeDatabase();
+  await requestLimits.connectRequestLimitStore();
   if (process.env.MIGRATE_R2_JSON_ON_START !== 'false') {
     const migration = require('./scripts/migrate-r2-json');
     try {
