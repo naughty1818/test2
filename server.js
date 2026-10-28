@@ -51,6 +51,7 @@ const s3 = new S3Client({
   responseChecksumValidation: 'WHEN_REQUIRED'
 });
 const app = express();
+require('./request-limits').attachRequestLimits(app);
 const server = http.createServer(app);
 const io = new SocketServer(server, {
   serveClient: true,
