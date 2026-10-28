@@ -6,6 +6,19 @@ const { createClient } = require('redis');
 const redisUrl = String(process.env.REDIS_URL || '').trim();
 const redisClient = redisUrl ? createClient({ url: redisUrl }) : null;
 if (redisClient) redisClient.on('error', error => console.error('Redis rate-limit store error:', error.message));
+let redisConnectPromise;
+
+function ensureRedisConnected() {
+  if (!redisClient) return Promise.reject(new Error('REDIS_URL is not configured'));
+  if (redisClient.isReady) return Promise.resolve();
+  if (!redisConnectPromise) {
+    redisConnectPromise = redisClient.connect().catch(error => {
+      redisConnectPromise = undefined;
+      throw error;
+    });
+  }
+  return redisConnectPromise;
+}
 
 const RETRY_AFTER_SECONDS = windowMs => Math.max(1, Math.ceil(windowMs / 1000));
 function createLimiter({ windowMs, limit, message }, store) {
@@ -27,7 +40,10 @@ function storeFor(prefix) {
   if (!redisClient) return undefined;
   return new RedisStore({
     prefix: `atharo:rate-limit:${prefix}:`,
-    sendCommand: (...args) => redisClient.sendCommand(args)
+    sendCommand: async (...args) => {
+      await ensureRedisConnected();
+      return redisClient.sendCommand(args);
+    }
   });
 }
 function attachRequestLimits(app, overrides = {}) {
@@ -54,9 +70,14 @@ async function connectRequestLimitStore() {
     console.warn('REDIS_URL is not set; rate limits use per-process memory and are not shared across instances.');
     return false;
   }
-  if (!redisClient.isOpen) await redisClient.connect();
-  console.log('Shared Redis rate-limit store connected.');
-  return true;
+  try {
+    await ensureRedisConnected();
+    console.log('Shared Redis rate-limit store connected.');
+    return true;
+  } catch (error) {
+    console.error('Could not connect to Redis; rate limits will fail open until it is available:', error.message);
+    return false;
+  }
 }
 async function closeRequestLimitStore() {
   if (redisClient?.isOpen) await redisClient.quit();
