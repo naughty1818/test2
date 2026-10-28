@@ -1,7 +1,9 @@
 'use strict';
 const { rateLimit } = require('express-rate-limit');
+const { ipKeyGenerator } = require('express-rate-limit');
 const { RedisStore } = require('rate-limit-redis');
 const { createClient } = require('redis');
+const net = require('node:net');
 
 const redisUrl = String(process.env.REDIS_URL || '').trim();
 const redisClient = redisUrl ? createClient({ url: redisUrl }) : null;
@@ -21,10 +23,16 @@ function ensureRedisConnected() {
 }
 
 const RETRY_AFTER_SECONDS = windowMs => Math.max(1, Math.ceil(windowMs / 1000));
+function clientIpKeyGenerator(req) {
+  const cloudflareIp = req.get?.('cf-connecting-ip') || req.headers?.['cf-connecting-ip'];
+  const clientIp = typeof cloudflareIp === 'string' && net.isIP(cloudflareIp) ? cloudflareIp : req.ip;
+  return ipKeyGenerator(clientIp);
+}
 function createLimiter({ windowMs, limit, message }, store) {
   return rateLimit({
     windowMs,
     limit,
+    keyGenerator: clientIpKeyGenerator,
     standardHeaders: true,
     legacyHeaders: false,
     ...(store ? { store, passOnStoreError: true } : {}),
@@ -83,4 +91,4 @@ async function closeRequestLimitStore() {
   if (redisClient?.isOpen) await redisClient.quit();
 }
 
-module.exports = { attachRequestLimits, createLimiter, connectRequestLimitStore, closeRequestLimitStore };
+module.exports = { attachRequestLimits, createLimiter, clientIpKeyGenerator, connectRequestLimitStore, closeRequestLimitStore };

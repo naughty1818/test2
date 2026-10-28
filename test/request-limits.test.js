@@ -3,7 +3,18 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const express = require('express');
-const { attachRequestLimits } = require('../request-limits');
+const { attachRequestLimits, clientIpKeyGenerator } = require('../request-limits');
+
+test('rate-limit keys use valid Cloudflare visitor IP instead of changing proxy IPs', () => {
+  const a = { ip: '203.0.113.10', get: name => name === 'cf-connecting-ip' ? '198.51.100.42' : undefined };
+  const b = { ip: '203.0.113.11', get: name => name === 'cf-connecting-ip' ? '198.51.100.42' : undefined };
+  assert.equal(clientIpKeyGenerator(a), clientIpKeyGenerator(b));
+});
+
+test('rate-limit keys ignore malformed Cloudflare IP headers and use Express IP', () => {
+  const req = { ip: '198.51.100.8', get: name => name === 'cf-connecting-ip' ? 'not-an-ip' : undefined };
+  assert.equal(clientIpKeyGenerator(req), '198.51.100.8');
+});
 
 test('upload and checkout limits return retry guidance after the configured request count', async t => {
   const app = express();
