@@ -116,9 +116,10 @@ function attachSmsPayments({ app, pool, withTransaction, requireAuth, requireAct
   }
 
   app.post('/api/sms-webhook', async (req, res, next) => {
-    const sender = String(req.body?.sender || req.body?.from || '').slice(0, 120);
+    const bearer = String(req.get('authorization') || '').match(/^Bearer\s+(.+)$/i)?.[1] || '';
+    const sender = String(req.body?.sender || req.body?.from || req.body?.address || '').slice(0, 120);
     const ipHash = crypto.createHash('sha256').update(String(req.ip || '')).digest('hex').slice(0, 16);
-    if (!timingSafeApiKey(apiKey, req.get('x-api-key'))) { await pool.query("INSERT INTO sms_ingest_log(sender,outcome,created_at) VALUES($1,'bad_key',NOW())", [sender || ipHash]).catch(() => {}); return res.status(401).json({ error: 'অনুমতি নেই।' }); }
+    if (!timingSafeApiKey(apiKey, req.get('x-api-key') || bearer)) { await pool.query("INSERT INTO sms_ingest_log(sender,outcome,created_at) VALUES($1,'bad_key',NOW())", [sender || ipHash]).catch(() => {}); return res.status(401).json({ error: 'অনুমতি নেই।' }); }
     try {
       const parsed = parseSms(sender, req.body?.body || req.body?.text);
       if (!parsed || !parsed.senderPhone) { await pool.query("INSERT INTO sms_ingest_log(sender,outcome) VALUES($1,'parse_failed')", [sender]); return res.json({ saved: false }); }
