@@ -1020,3 +1020,17 @@ DELETE FROM sms_ingest_log WHERE received_at < NOW() - INTERVAL '30 days';
 UPDATE premium_playlist_orders SET payment_provider='sms_manual' WHERE status='pending' AND payment_provider='nogorpay' AND provider_invoice_id IS NULL;
 UPDATE premium_video_orders SET payment_provider='sms_manual' WHERE status='pending' AND payment_provider='nogorpay' AND provider_invoice_id IS NULL;
 UPDATE shop_orders SET payment_provider='sms_manual' WHERE payment_status='pending' AND payment_provider='nogorpay' AND provider_invoice_id IS NULL;
+
+
+-- Admin-managed manual payment provider configuration.
+CREATE TABLE IF NOT EXISTS payment_provider_settings (
+  provider TEXT PRIMARY KEY CHECK (provider IN ('bkash','nagad','rocket','upay','islamiBank','banglaQr')),
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  receiver_account TEXT NOT NULL DEFAULT '',
+  qr_object_name TEXT,
+  updated_by_email TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+INSERT INTO payment_provider_settings(provider) VALUES
+  ('bkash'),('nagad'),('rocket'),('upay'),('islamiBank'),('banglaQr')
+ON CONFLICT (provider) DO NOTHING;

@@ -1020,7 +1020,7 @@ require('./creator-studio')({ app, pool, requireAuth, requireActive, requireChan
 require('./premium-marketplace')({ app, pool, withTransaction, requireAuth, requireActive, requireChannel, loadSession, validUuid, safeText, notifyAdmin });
 require('./shop-approval')({ app, pool, withTransaction, requireAuth, requireActive, safeText, validVideoId });
 require('./talent-marketplace')({ app, pool, withTransaction, requireAuth, requireActive, requireChannel, validUuid });
-require('./sms-payments').attachSmsPayments({ app, pool, withTransaction, requireAuth, requireActive, loadSession, notifyAdmin });
+require('./sms-payments').attachSmsPayments({ app, pool, withTransaction, requireAuth, requireActive, loadSession, notifyAdmin, s3, bucket: R2_BUCKET });
 
 io.use(async (socket, next) => {
   try {

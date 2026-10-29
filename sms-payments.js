@@ -1,6 +1,8 @@
 'use strict';
 
 const crypto = require('crypto');
+const { GetObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 const PHONE_RE = /^01[3-9]\d{8}$/;
 const TRX_RE = /^[A-Z0-9]{6,15}$/;
@@ -60,12 +62,18 @@ function timingSafeApiKey(expected, supplied) {
   return a.length > 0 && a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-function attachSmsPayments({ app, pool, withTransaction, requireAuth, requireActive, loadSession, notifyAdmin }) {
+function attachSmsPayments({ app, pool, withTransaction, requireAuth, requireActive, loadSession, notifyAdmin, s3, bucket }) {
   const apiKey = process.env.SMS_WEBHOOK_API_KEY || '';
   const windowHours = Math.max(1, Number(process.env.SMS_PAYMENT_WINDOW_HOURS || 24));
   const ownerOnly = String(process.env.SMS_MANUAL_OWNER_ONLY || 'false').toLowerCase() === 'true';
-  const receiverPayload = () => ({ bkash: process.env.PAYMENT_RECEIVER_BKASH || '', nagad: process.env.PAYMENT_RECEIVER_NAGAD || '' });
-  app.get('/api/payments/options', requireAuth, async (req, res) => res.json({ receivers: { bkash: process.env.PAYMENT_RECEIVER_BKASH || '', nagad: process.env.PAYMENT_RECEIVER_NAGAD || '', rocket: process.env.PAYMENT_RECEIVER_ROCKET || '', upay: process.env.PAYMENT_RECEIVER_UPAY || '', islamiBank: process.env.PAYMENT_RECEIVER_ISLAMI_BANK || '' }, banglaQrUrl: process.env.PAYMENT_BANGLA_QR_URL || '' }));
+  const providerIds = ['bkash','nagad','rocket','upay','islamiBank','banglaQr'];
+  const providerEnv = { bkash:'PAYMENT_RECEIVER_BKASH', nagad:'PAYMENT_RECEIVER_NAGAD', rocket:'PAYMENT_RECEIVER_ROCKET', upay:'PAYMENT_RECEIVER_UPAY', islamiBank:'PAYMENT_RECEIVER_ISLAMI_BANK' };
+  async function providerRows() {
+    const rows = (await pool.query('SELECT provider,enabled,receiver_account,qr_object_name,updated_at FROM payment_provider_settings ORDER BY provider')).rows;
+    const byId = new Map(rows.map(row => [row.provider, row]));
+    return providerIds.map(provider => ({ provider, enabled: byId.get(provider)?.enabled !== false, receiverAccount: byId.get(provider)?.receiver_account || process.env[providerEnv[provider]] || '', qrObjectName: byId.get(provider)?.qr_object_name || null, updatedAt: byId.get(provider)?.updated_at || null }));
+  }
+  app.get('/api/payments/options', requireAuth, async (req, res, next) => { try { const rows = await providerRows(); let banglaQrUrl = process.env.PAYMENT_BANGLA_QR_URL || ''; const qr = rows.find(row => row.provider === 'banglaQr'); if (qr?.qrObjectName && s3 && bucket) banglaQrUrl = await getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: qr.qrObjectName }), { expiresIn: 60 * 60 }); res.json({ providers: rows.map(row => ({ provider: row.provider, enabled: row.enabled, receiverAccount: row.receiverAccount })), receivers: Object.fromEntries(rows.filter(row => row.provider !== 'banglaQr').map(row => [row.provider, row.receiverAccount])), banglaQrUrl }); } catch (error) { next(error); } });
   const authAdmin = (...roles) => async (req, res, next) => {
     try {
       req.auth = req.auth || await loadSession(req);
@@ -80,6 +88,10 @@ function attachSmsPayments({ app, pool, withTransaction, requireAuth, requireAct
       next();
     } catch (error) { next(error); }
   };
+  app.get('/api/admin/payment-settings', authAdmin(), async (req, res, next) => { try { res.json({ providers: await providerRows() }); } catch (error) { next(error); } });
+  app.put('/api/admin/payment-settings', authAdmin(), async (req, res, next) => { try { const incoming = Array.isArray(req.body?.providers) ? req.body.providers : []; const valid = incoming.filter(item => providerIds.includes(String(item?.provider))); await withTransaction(async client => { for (const item of valid) { const provider = String(item.provider), enabled = item.enabled !== false, receiver = provider === 'banglaQr' ? '' : String(item.receiverAccount || '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 120); await client.query('UPDATE payment_provider_settings SET enabled=$2,receiver_account=$3,updated_by_email=$4,updated_at=NOW() WHERE provider=$1', [provider, enabled, receiver, req.admin.email]); } await client.query("INSERT INTO admin_audit_logs(actor_email,actor_role,action,target_type,target_id,reason,metadata) VALUES($1,$2,'payment_settings_updated','payment_provider_settings',NULL,'Admin updated manual payment provider settings',$3::jsonb)", [req.admin.email, req.admin.role, JSON.stringify({ providers: valid.map(item => String(item.provider)) })]); }); res.json({ ok: true, providers: await providerRows() }); } catch (error) { next(error); } });
+  app.post('/api/admin/payment-settings/qr-upload-url', authAdmin(), async (req, res, next) => { try { const contentType = String(req.body?.contentType || '').toLowerCase(), size = Number(req.body?.size); if (!/^image\/(png|jpeg|webp)$/.test(contentType) || !Number.isSafeInteger(size) || size <= 0 || size > 5 * 1024 * 1024) return res.status(400).json({ error: 'শুধু PNG, JPEG বা WebP image (সর্বোচ্চ ৫ MB) দিন।' }); const ext = contentType.split('/')[1].replace('jpeg','jpg'), objectName = `payment/bangla-qr/${crypto.randomUUID()}.${ext}`, uploadUrl = await getSignedUrl(s3, new PutObjectCommand({ Bucket: bucket, Key: objectName, ContentType: contentType }), { expiresIn: 15 * 60 }); res.json({ uploadUrl, objectName }); } catch (error) { next(error); } });
+  app.post('/api/admin/payment-settings/qr', authAdmin(), async (req, res, next) => { try { const objectName = String(req.body?.objectName || ''); if (!/^payment\/bangla-qr\/[0-9a-f-]+\.(png|jpg|webp)$/i.test(objectName)) return res.status(400).json({ error: 'Invalid QR upload.' }); await pool.query("UPDATE payment_provider_settings SET qr_object_name=$1,enabled=TRUE,updated_by_email=$2,updated_at=NOW() WHERE provider='banglaQr'", [objectName, req.admin.email]); res.json({ ok: true }); } catch (error) { next(error); } });
   const suffix = value => String(value || '').slice(-4);
   const normalizeClaim = (kind, id) => ({ premium: 'premium', shop: 'shop', talent: 'talent' }[kind] ? String(kind) : null);
 
