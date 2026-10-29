@@ -84,7 +84,7 @@ function attachSmsPayments({ app, pool, withTransaction, requireAuth, requireAct
 
   async function completeOrder(client, kind, orderId, trxId) {
     if (kind === 'premium') {
-      const found = await client.query(`SELECT o.*,COALESCE(p.owner_sub,v.owner_sub) AS creator_sub FROM premium_playlist_orders o LEFT JOIN playlists p ON p.id=o.playlist_id LEFT JOIN videos v ON v.id=o.video_id WHERE o.id=$1 FOR UPDATE`, [orderId]);
+      const found = await client.query(`SELECT o.*,COALESCE(p.owner_sub,v.owner_sub) AS creator_sub FROM premium_playlist_orders o LEFT JOIN playlists p ON p.id=o.playlist_id LEFT JOIN videos v ON v.id=o.video_id WHERE o.id=$1 FOR UPDATE OF o`, [orderId]);
       if (!found.rowCount) throw Object.assign(new Error('অর্ডার পাওয়া যায়নি।'), { status: 404 });
       const order = found.rows[0]; if (order.status === 'paid') return;
       const settings = (await client.query('SELECT video_commission_percent,playlist_commission_percent FROM platform_settings WHERE id=1')).rows[0] || {};
@@ -106,7 +106,7 @@ function attachSmsPayments({ app, pool, withTransaction, requireAuth, requireAct
   }
 
   async function matchClaims(client, transaction) {
-    const claims = await client.query(`SELECT c.*, CASE c.order_kind WHEN 'premium' THEN o.amount_bdt WHEN 'shop' THEN s.total_amount_bdt WHEN 'talent' THEN t.amount_bdt END AS order_amount, CASE c.order_kind WHEN 'premium' THEN o.created_at WHEN 'shop' THEN s.created_at WHEN 'talent' THEN t.created_at END AS order_created_at FROM sms_payment_claims c LEFT JOIN premium_playlist_orders o ON c.order_kind='premium' AND o.id=c.order_id LEFT JOIN shop_orders s ON c.order_kind='shop' AND s.id=c.order_id LEFT JOIN talent_orders t ON c.order_kind='talent' AND t.id=c.order_id WHERE c.status='pending' AND c.trx_id=$1 AND c.phone=$2 FOR UPDATE`, [transaction.trx_id, transaction.sender_phone]);
+    const claims = await client.query(`SELECT c.*, CASE c.order_kind WHEN 'premium' THEN o.amount_bdt WHEN 'shop' THEN s.total_amount_bdt WHEN 'talent' THEN t.amount_bdt END AS order_amount, CASE c.order_kind WHEN 'premium' THEN o.created_at WHEN 'shop' THEN s.created_at WHEN 'talent' THEN t.created_at END AS order_created_at FROM sms_payment_claims c LEFT JOIN premium_playlist_orders o ON c.order_kind='premium' AND o.id=c.order_id LEFT JOIN shop_orders s ON c.order_kind='shop' AND s.id=c.order_id LEFT JOIN talent_orders t ON c.order_kind='talent' AND t.id=c.order_id WHERE c.status='pending' AND c.trx_id=$1 AND c.phone=$2 FOR UPDATE OF c`, [transaction.trx_id, transaction.sender_phone]);
     for (const claim of claims.rows) {
       if (Math.abs(Number(claim.order_amount) - Number(transaction.amount_bdt)) > 0.009 || new Date(transaction.received_at) < new Date(new Date(claim.order_created_at).getTime() - 10 * 60 * 1000)) continue;
       await client.query("UPDATE sms_transactions SET status='used',used_order_kind=$2,used_order_id=$3,used_at=NOW() WHERE id=$1 AND status='unused'", [transaction.id, claim.order_kind, claim.order_id]);
