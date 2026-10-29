@@ -65,6 +65,7 @@ function attachSmsPayments({ app, pool, withTransaction, requireAuth, requireAct
   const windowHours = Math.max(1, Number(process.env.SMS_PAYMENT_WINDOW_HOURS || 24));
   const ownerOnly = String(process.env.SMS_MANUAL_OWNER_ONLY || 'false').toLowerCase() === 'true';
   const receiverPayload = () => ({ bkash: process.env.PAYMENT_RECEIVER_BKASH || '', nagad: process.env.PAYMENT_RECEIVER_NAGAD || '' });
+  app.get('/api/payments/options', requireAuth, async (req, res) => res.json({ receivers: { bkash: process.env.PAYMENT_RECEIVER_BKASH || '', nagad: process.env.PAYMENT_RECEIVER_NAGAD || '', rocket: process.env.PAYMENT_RECEIVER_ROCKET || '', upay: process.env.PAYMENT_RECEIVER_UPAY || '', islamiBank: process.env.PAYMENT_RECEIVER_ISLAMI_BANK || '' }, banglaQrUrl: process.env.PAYMENT_BANGLA_QR_URL || '' }));
   const authAdmin = (...roles) => async (req, res, next) => {
     try {
       req.auth = req.auth || await loadSession(req);
