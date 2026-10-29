@@ -2,7 +2,7 @@
 
 const crypto = require('crypto');
 
-module.exports = function attachCreatorStudio({ app, pool, requireAuth, requireActive, requireChannel, requireValidId, validUuid, safeText, normalizeCategory, normalizeVisibility }) {
+module.exports = function attachCreatorStudio({ app, pool, requireAuth, requireActive, requireChannel, requireValidId, validUuid, safeText, normalizeCategory, normalizeVisibility, notifyAdmin }) {
   const { resolveIslamicFlag } = require('./content-policy');
   app.get('/api/creator/content', requireAuth, requireChannel, async (req, res, next) => {
     try {
@@ -36,6 +36,7 @@ module.exports = function attachCreatorStudio({ app, pool, requireAuth, requireA
       if(!title||!category||!visibility)return res.status(400).json({error:'শিরোনাম, বিভাগ ও visibility ঠিক করে দিন।'});
       const result=await pool.query(`UPDATE videos SET title=$3,description=$4,category=$5,visibility=$6,class_level=$7,subject=$8,syllabus_tags=$9,comments_enabled=COALESCE($10,comments_enabled),scheduled_at=CASE WHEN $11::boolean THEN $12::timestamptz ELSE scheduled_at END,is_islamic=$13,islamic_certification_status=CASE WHEN $13 THEN 'pending' ELSE 'not_applicable' END,islamic_reviewed_by_email=NULL,islamic_review_note='',islamic_reviewed_at=NULL WHERE id=$1 AND owner_sub=$2 RETURNING id,title,description,category,visibility,class_level,subject,syllabus_tags,comments_enabled,scheduled_at,is_islamic,islamic_certification_status`,[id,sub,title,description,category,visibility,classLevel,subject,syllabusTags,commentsEnabled,scheduledAt!==undefined,scheduledAt||null,isIslamic]);
       if(!result.rowCount)return res.status(404).json({error:'নিজের ভিডিওটি পাওয়া যায়নি।'});
+      if(isIslamic)notifyAdmin?.('islamic');
       res.json({video:result.rows[0]});
     } catch(error){next(error);}
   });

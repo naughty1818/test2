@@ -200,6 +200,18 @@ CREATE TABLE IF NOT EXISTS admin_members (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE admin_members ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '[]'::jsonb;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='admin_members_role_check' AND conrelid='admin_members'::regclass) THEN
+    ALTER TABLE admin_members ADD CONSTRAINT admin_members_role_check CHECK (role IN ('admin','moderator','custom'));
+  ELSE
+    IF pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conname='admin_members_role_check' AND conrelid='admin_members'::regclass LIMIT 1)) NOT LIKE '%custom%' THEN
+      ALTER TABLE admin_members DROP CONSTRAINT admin_members_role_check;
+      ALTER TABLE admin_members ADD CONSTRAINT admin_members_role_check CHECK (role IN ('admin','moderator','custom'));
+    END IF;
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS platform_settings (
   id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
   ads_enabled BOOLEAN NOT NULL DEFAULT FALSE,

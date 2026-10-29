@@ -14,6 +14,7 @@ const {
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { pool, initializeDatabase, withTransaction } = require('./db');
 const { normalizeViewerType, normalizeCreatorType, resolveIslamicFlag, isIslamicEligible } = require('./content-policy');
+const { socketAdminModules } = require('./admin-access');
 
 const PORT = Number(process.env.PORT || 3000);
 const MAX_FILE_MB = Number(process.env.MAX_FILE_MB || 500);
@@ -58,6 +59,10 @@ const io = new SocketServer(server, {
   serveClient: true,
   ...(process.env.APP_ORIGIN ? { cors: { origin: process.env.APP_ORIGIN, credentials: true } } : {})
 });
+const notifyAdmin = module => {
+  if (!['reports','withdrawals','islamic'].includes(module)) return;
+  io.to(`admin:${module}`).emit('admin:refresh',{module,at:Date.now()});
+};
 if (process.env.TRUST_PROXY === 'true' || process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
 app.use((req, res, next) => {
   const origin = process.env.APP_ORIGIN;
@@ -979,6 +984,7 @@ app.post('/api/finish', requireAuth, requireActive, requireChannel, async (req, 
       return result.rows[0];
     });
     const video=videoCard({ ...inserted, owner_handle: profile?.handle, owner_name: profile?.display_name, owner_avatar: profile?.avatar_url, owner_verified:profile?.is_verified });
+    if(inserted.is_islamic)notifyAdmin('islamic');
     const subscribers=await pool.query('SELECT subscriber_sub FROM subscriptions WHERE channel_sub=$1',[req.auth.session.sub]);
     for(const row of subscribers.rows)await sendNotification(row.subscriber_sub,req.auth.session.sub,'new_video','New video from '+(profile?.display_name||'a channel'),title,'/watch/'+encodeURIComponent(intent.id));
     res.json({ ok: true, video });
@@ -1008,10 +1014,10 @@ app.delete('/api/videos/:id', requireAuth, requireActive, requireValidId, async 
   } catch (error) { next(error); }
 });
 
-require('./learning')({ app, pool, withTransaction, s3, bucket: R2_BUCKET, requireAuth, requireActive, requireValidId, getVideo, canView, loadSession, safeText, sha, objectHead });
-require('./admin')({ app, requireAuth, requireActive, loadSession, notifyUser:sendNotification, getVideo, signedVideoUrl });
-require('./creator-studio')({ app, pool, requireAuth, requireActive, requireChannel, requireValidId, validUuid, safeText, normalizeCategory, normalizeVisibility });
-require('./premium-marketplace')({ app, pool, withTransaction, requireAuth, requireActive, requireChannel, loadSession, validUuid, safeText });
+require('./learning')({ app, pool, withTransaction, s3, bucket: R2_BUCKET, requireAuth, requireActive, requireValidId, getVideo, canView, loadSession, safeText, sha, objectHead, notifyAdmin });
+require('./admin')({ app, requireAuth, requireActive, loadSession, notifyUser:sendNotification, notifyAdmin, io, getVideo, signedVideoUrl });
+require('./creator-studio')({ app, pool, requireAuth, requireActive, requireChannel, requireValidId, validUuid, safeText, normalizeCategory, normalizeVisibility, notifyAdmin });
+require('./premium-marketplace')({ app, pool, withTransaction, requireAuth, requireActive, requireChannel, loadSession, validUuid, safeText, notifyAdmin });
 require('./shop-approval')({ app, pool, withTransaction, requireAuth, requireActive, safeText, validVideoId });
 require('./talent-marketplace')({ app, pool, withTransaction, requireAuth, requireActive, requireChannel, validUuid });
 
@@ -1019,14 +1025,20 @@ io.use(async (socket, next) => {
   try {
     const raw = verifyValue(parseCookieHeader(socket.handshake.headers.cookie || '').vh_session);
     if (!raw) { socket.data.sub = null; return next(); }
-    const result = await pool.query('SELECT s.sub,u.viewer_type FROM sessions s JOIN app_users u ON u.google_sub=s.sub WHERE s.token_hash=$1 AND s.expires_at>NOW()', [sha(raw)]);
+    const result = await pool.query('SELECT s.sub,u.viewer_type,u.email FROM sessions s JOIN app_users u ON u.google_sub=s.sub WHERE s.token_hash=$1 AND s.expires_at>NOW()', [sha(raw)]);
     socket.data.sub = result.rows[0]?.sub || null;
     socket.data.viewerType = result.rows[0]?.viewer_type || 'normal';
+    socket.data.email = result.rows[0]?.email || null;
     next();
   } catch (error) { next(error); }
 });
 io.on('connection', socket => {
   if(socket.data.sub) socket.join(`user:${socket.data.sub}`);
+  if(socket.data.email)void (async()=>{try{
+    const email=String(socket.data.email).trim().toLowerCase(),owner=String(process.env.OWNER_EMAIL||'').trim().toLowerCase();
+    const row=owner&&email===owner?{role:'owner',permissions:['*']}:(await pool.query('SELECT role,permissions FROM admin_members WHERE email=$1',[email])).rows[0];
+    if(row&&socket.connected){socket.join('admin-user:'+sha(email));socketAdminModules(row.role,row.permissions||[]).forEach(module=>socket.join(`admin:${module}`));}
+  }catch(error){console.error('Could not initialize admin socket permissions:',error.message);}})();
   socket.on('video:join', async id => {
     try {
       if (!socket.data.sub || !validVideoId(id)) return;

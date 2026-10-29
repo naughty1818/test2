@@ -8,7 +8,7 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 module.exports = function registerLearningFeatures({
   app, pool, withTransaction, s3, bucket, requireAuth, requireActive,
-  requireValidId, getVideo, canView, loadSession, safeText, sha, objectHead
+  requireValidId, getVideo, canView, loadSession, safeText, sha, objectHead, notifyAdmin
 }) {
   const LANG_RE = /^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/;
   const REASONS = new Set(['spam','harassment','harmful','copyright','misinformation','other']);
@@ -288,6 +288,7 @@ module.exports = function registerLearningFeatures({
       const id=crypto.randomUUID();
       await pool.query(`INSERT INTO content_reports(id,reporter_sub,target_type,target_id,video_id,channel_sub,comment_id,reason_code,details)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[id,req.auth.session.sub,type,targetId,videoId,channelSub,commentId,reasonCode,details]);
+      notifyAdmin?.('reports');
       res.status(201).json({ok:true,id,status:'open'});
     }catch(error){if(error.code==='23505')return fail(res,409,'এই বিষয়টি নিয়ে তোমার একটি খোলা report আছে।');next(error);}
   });

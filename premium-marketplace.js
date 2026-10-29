@@ -23,7 +23,7 @@ function invoiceFrom(payload) {
   return data.invoice_id || data.invoiceId || payload?.invoice_id || payload?.invoiceId || null;
 }
 
-module.exports = function attachPremiumMarketplace({ app, pool, withTransaction, requireAuth, requireActive, requireChannel, loadSession, validUuid }) {
+module.exports = function attachPremiumMarketplace({ app, pool, withTransaction, requireAuth, requireActive, requireChannel, loadSession, validUuid, notifyAdmin }) {
   const productRow = row => ({
     id: row.id, name: row.name || row.title, title: row.title || row.name, description: row.description || '',
     priceBdt: Number(row.price_bdt) || 0, isPremium: Boolean(row.is_premium), isPublic: Boolean(row.is_public),
@@ -268,6 +268,7 @@ module.exports = function attachPremiumMarketplace({ app, pool, withTransaction,
         await client.query(`INSERT INTO creator_withdrawal_requests(id,creator_sub,amount_bdt,payout_method,payout_details_ciphertext,payment_method,account_number,status) VALUES($1,$2,$3,$4,$5,$4,NULL,'pending')`,[id,sub,money(amount),payout.rows[0].payout_method,payout.rows[0].payout_details_ciphertext]);
         return {id,amountBdt:money(amount),status:'pending',payoutMethod:payout.rows[0].payout_method};
       });
+      notifyAdmin?.('withdrawals');
       res.status(201).json({withdrawal:result});
     }catch(error){next(error);}
   });

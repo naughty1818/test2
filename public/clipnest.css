@@ -1905,3 +1905,32 @@ body.admin-fullscreen { overflow-x:hidden; }
 }
 
 .admin-shell>.console-tabs.admin-tabs { left:auto; right:auto; bottom:auto; }
+
+/* Admin contrast pass: readable dark text on the light workspace */
+.admin-shell,.admin-shell .console-panel,.admin-shell .admin-nav-group { color:#1d3025; }
+.admin-shell .console-heading .section-kicker { color:#175c3d; font-weight:800; }
+.admin-shell .admin-nav-label { color:#53645a; }
+.admin-shell .console-stat-label,.admin-shell .console-stat-note,.admin-shell .console-muted,.admin-shell .console-panel>p,.admin-shell .console-empty,.admin-shell .console-pager,.admin-shell .console-results-summary { color:#53645a; }
+.admin-shell .form-field,.admin-shell .review-card-meta { color:#3f5548; }
+.admin-shell .console-table th { color:#405449; }
+.admin-shell .console-table td { color:#293d31; }
+.admin-shell .console-chart-bar span { color:#53645a; }
+.admin-shell .console-badge { color:#34483b; background:#edf2ee; }
+.admin-shell .console-badge.good { color:#155b38; background:#e2f2e7; }
+.admin-shell .console-badge.warn { color:#704900; background:#fff1cc; }
+.admin-shell .console-badge.bad,.admin-shell .console-danger { color:#8d211b!important; background:#fde8e6; }
+.admin-shell .console-small-button,.admin-shell .console-actions button { color:#33483a; background:#f6faf7; border-color:#cad8ce; }
+.admin-shell .console-small-button:hover,.admin-shell .console-actions button:hover { color:#124d31; background:#e7f2eb; border-color:#78a68b; }
+.admin-shell .primary-cta,.admin-shell .console-form-actions .primary-cta { color:#fff; background:#17683f; border-color:#17683f; }
+.admin-shell .primary-cta:hover,.admin-shell .console-form-actions .primary-cta:hover { color:#fff; background:#105432; border-color:#105432; }
+.admin-shell button:disabled,.admin-shell input:disabled,.admin-shell select:disabled { opacity:1; color:#53645a; background:#e7ece8; border-color:#d4ddd7; cursor:not-allowed; }
+.admin-shell .console-form .form-field input::placeholder,.admin-shell .console-form .form-field textarea::placeholder { color:#5c6d62; opacity:1; }
+.admin-shell :focus-visible { outline:3px solid #17683f; outline-offset:3px; }
+.admin-shell .admin-attention-copy span { color:#53645a; }
+.staff-access-fields[hidden] { display:none!important; }
+.staff-access-fields { display:grid; gap:14px; grid-column:1/-1; }
+.staff-permission-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px 16px; padding:14px; border:1px solid #dce6df; border-radius:12px; background:#f8fbf9; }
+.staff-permission-grid .form-field { display:flex; flex-direction:row; align-items:center; gap:9px; color:#33483a; font-weight:600; }
+.staff-permission-grid input[type=checkbox] { flex:none; }
+.staff-access-summary { color:#405449; }
+@media(max-width:600px){.staff-permission-grid{grid-template-columns:1fr}}

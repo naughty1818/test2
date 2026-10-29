@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { pool, withTransaction } = require('./db');
 const { decryptPayoutDetails } = require('./payout-security');
+const { requiredAdminPermission, hasAdminPermission } = require('./admin-access');
 const {
   DEFAULT_AD_LAYOUTS,
   normalizeAdLayouts,
@@ -10,7 +11,7 @@ const {
   normalizeFeedAdEveryRows
 } = require('./ad-layouts');
 
-module.exports = function registerConsole({ app, requireAuth, requireActive, loadSession, notifyUser, getVideo, signedVideoUrl }) {
+module.exports = function registerConsole({ app, requireAuth, requireActive, loadSession, notifyUser, notifyAdmin, io, getVideo, signedVideoUrl }) {
   const OWNER_EMAIL = String(process.env.OWNER_EMAIL || '').trim().toLowerCase();
   const validUuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
   const validVideoId = value => typeof value === 'string' && (validUuid(value) || /^\d+-[0-9a-f]{8}$/i.test(value));
@@ -41,8 +42,8 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
   async function resolveRole(email) {
     const normalized = emailOf(email);
     if (!normalized) return null;
-    if (OWNER_EMAIL && normalized === OWNER_EMAIL) return { email: normalized, role: 'owner' };
-    const result = await pool.query('SELECT email,role FROM admin_members WHERE email=$1', [normalized]);
+    if (OWNER_EMAIL && normalized === OWNER_EMAIL) return { email: normalized, role: 'owner', permissions: ['*'] };
+    const result = await pool.query('SELECT email,role,permissions FROM admin_members WHERE email=$1', [normalized]);
     return result.rows[0] || null;
   }
 
@@ -54,8 +55,12 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
         if (req.auth.session.emailVerified !== true) return jsonError(res, 403, 'Verified Google account required.');
         const admin = await resolveRole(req.auth.session.email);
         if (!admin) return jsonError(res, 403, 'Admin access নেই। / Admin access required.');
-        if (admin.role !== 'owner' && allowedRoles.length && !allowedRoles.includes(admin.role)) return jsonError(res, 403, 'এই কাজের অনুমতি নেই। / Insufficient admin permission.');
-        if (admin.role !== 'owner' && !allowedRoles.length) return jsonError(res, 403, 'Owner permission required.');
+        if (admin.role === 'custom') {
+          const required=requiredAdminPermission(req.method,req.path);
+          if(!required||!hasAdminPermission(admin.permissions,required))return jsonError(res,403,'এই কাজের অনুমতি নেই। / Insufficient admin permission.');
+        }
+        if (!['owner','custom'].includes(admin.role) && allowedRoles.length && !allowedRoles.includes(admin.role)) return jsonError(res, 403, 'এই কাজের অনুমতি নেই। / Insufficient admin permission.');
+        if (!['owner','custom'].includes(admin.role) && !allowedRoles.length) return jsonError(res, 403, 'Owner permission required.');
         req.admin = admin;
         next();
       } catch (error) { next(error); }
@@ -239,6 +244,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
         return {ownerSub:video.owner_sub,title:video.title};
       });
       if(!result)return jsonError(res,404,'Video not found.');
+      notifyAdmin?.('islamic');
       if(result.ownerSub&&notifyUser)await notifyUser(result.ownerSub,null,'islamic_certification_'+decision,'Islamic video review update',decision==='approved'?`“${result.title}” has been approved for Islamic mode.`:`“${result.title}” was not approved for Islamic mode. Note: ${note}`,'/studio?tab=content');
       res.json({ok:true,decision});
     }catch(error){if(error.status)return jsonError(res,error.status,error.message);next(error);}
@@ -402,7 +408,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
   app.get('/api/admin/me', requireAuth, async (req, res, next) => {
     try {
       const role = await resolveRole(req.auth.session.email);
-      res.json({ role: role?.role || null });
+      res.json({ role: role?.role || null, permissions: role?.permissions || [] });
     } catch (error) { next(error); }
   });
 
@@ -512,7 +518,15 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
         pool.query("SELECT COUNT(*)::bigint AS n FROM app_users WHERE account_status IN ('suspended','banned')")
       ]);
       const s = settings.rows[0] || {}; const ads = adStats.rows[0] || {};
-      res.json({ counts: { users: Number(users.rows[0].n), videos: Number(videos.rows[0].n), activeAccounts: Number(channels.rows[0].n), openStrikes: Number(strikes.rows[0].n), activeCampaigns: Number(campaigns.rows[0].n), pendingReports:Number(reports.rows[0].n), pendingVideoAppeals:Number(appeals.rows[0].n), pendingStrikeAppeals:Number(strikeAppeals.rows[0].n), suspendedAccounts:Number(suspended.rows[0].n) }, ads: { impressions: Number(ads.impressions), clicks: Number(ads.clicks), estimatedCreatorEarningsBdt: Number(ads.creator_estimate) }, settings: { adsEnabled: s.ads_enabled, monetizationEnabled: s.monetization_enabled, creatorSharePercent: s.creator_share_percent === null ? null : Number(s.creator_share_percent) } });
+      const counts={ users:Number(users.rows[0].n),videos:Number(videos.rows[0].n),activeAccounts:Number(channels.rows[0].n),openStrikes:Number(strikes.rows[0].n),activeCampaigns:Number(campaigns.rows[0].n),pendingReports:Number(reports.rows[0].n),pendingVideoAppeals:Number(appeals.rows[0].n),pendingStrikeAppeals:Number(strikeAppeals.rows[0].n),suspendedAccounts:Number(suspended.rows[0].n) };
+      if(req.admin.role==='custom'){
+        const p=req.admin.permissions||[],scoped={};
+        if(hasAdminPermission(p,'reports'))Object.assign(scoped,{pendingReports:counts.pendingReports,pendingVideoAppeals:counts.pendingVideoAppeals,pendingStrikeAppeals:counts.pendingStrikeAppeals});
+        if(hasAdminPermission(p,'content'))Object.assign(scoped,{users:counts.users,videos:counts.videos,activeAccounts:counts.activeAccounts,openStrikes:counts.openStrikes,suspendedAccounts:counts.suspendedAccounts});
+        if(hasAdminPermission(p,'campaigns'))scoped.activeCampaigns=counts.activeCampaigns;
+        return res.json({counts:scoped,...(hasAdminPermission(p,'campaigns')?{ads:{impressions:Number(ads.impressions),clicks:Number(ads.clicks),estimatedCreatorEarningsBdt:Number(ads.creator_estimate)}}:{}),...(hasAdminPermission(p,'settings')?{settings:{adsEnabled:s.ads_enabled,monetizationEnabled:s.monetization_enabled,creatorSharePercent:s.creator_share_percent===null?null:Number(s.creator_share_percent)}}:{})});
+      }
+      res.json({ counts, ads: { impressions: Number(ads.impressions), clicks: Number(ads.clicks), estimatedCreatorEarningsBdt: Number(ads.creator_estimate) }, settings: { adsEnabled: s.ads_enabled, monetizationEnabled: s.monetization_enabled, creatorSharePercent: s.creator_share_percent === null ? null : Number(s.creator_share_percent) } });
     } catch (error) { next(error); }
   });
 
@@ -814,6 +828,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
         return {id:r.id,status};
       });
       if(!result)return jsonError(res,404,'Withdrawal request not found.');
+      notifyAdmin?.('withdrawals');
       res.json({withdrawal:result});
     }catch(error){next(error);}
   });
@@ -859,8 +874,8 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
 
   app.get('/api/admin/members', adminAuth(), async (req, res, next) => {
     try {
-      const result = await pool.query('SELECT email,role,added_by_email,created_at FROM admin_members ORDER BY created_at ASC');
-      const members = result.rows.map(r=>({email:r.email,role:r.role,addedBy:r.added_by_email,createdAt:r.created_at}));
+      const result = await pool.query('SELECT email,role,permissions,added_by_email,created_at FROM admin_members ORDER BY created_at ASC');
+      const members = result.rows.map(r=>({email:r.email,role:r.role,permissions:r.permissions||[],addedBy:r.added_by_email,createdAt:r.created_at}));
       if (OWNER_EMAIL) members.unshift({email:OWNER_EMAIL,role:'owner',addedBy:'bootstrap',createdAt:null,protected:true});
       res.json({members});
     } catch (error) { next(error); }
@@ -868,15 +883,17 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
 
   app.post('/api/admin/members', adminAuth(), async (req, res, next) => {
     try {
-      const email = emailOf(req.body?.email), role = String(req.body?.role || '');
-      if (!validEmail(email) || !['admin','moderator'].includes(role)) return fail(res,'সঠিক email ও Admin/Moderator role দিন।');
+      const email = emailOf(req.body?.email), role = String(req.body?.role || ''), allowed=new Set(['overview','reports','islamic','content','creators','campaigns','withdrawals:view','withdrawals:manage','audit','settings']);
+      const permissions=[...new Set(Array.isArray(req.body?.permissions)?req.body.permissions.filter(p=>typeof p==='string'&&allowed.has(p)):[])];
+      if (!validEmail(email) || !['admin','moderator','custom'].includes(role) || (role==='custom'&&!permissions.length)) return fail(res,'সঠিক email, access type এবং কমপক্ষে একটি অনুমতি বেছে নিন।');
       if (email === OWNER_EMAIL) return fail(res,'Bootstrap owner-কে পরিবর্তন করা যাবে না।');
       await withTransaction(async client => {
-        await client.query(`INSERT INTO admin_members (email,role,added_by_email) VALUES ($1,$2,$3)
-          ON CONFLICT (email) DO UPDATE SET role=EXCLUDED.role,added_by_email=EXCLUDED.added_by_email,updated_at=NOW()`, [email,role,req.admin.email]);
-        await writeAudit(client,req.admin,'grant_admin_role','admin_member',email,'',{role});
+        await client.query(`INSERT INTO admin_members (email,role,permissions,added_by_email) VALUES ($1,$2,$3::jsonb,$4)
+          ON CONFLICT (email) DO UPDATE SET role=EXCLUDED.role,permissions=EXCLUDED.permissions,added_by_email=EXCLUDED.added_by_email,updated_at=NOW()`, [email,role,JSON.stringify(role==='custom'?permissions:[]),req.admin.email]);
+        await writeAudit(client,req.admin,'grant_admin_role','admin_member',email,'',{role,permissions:role==='custom'?permissions:[]});
       });
-      res.status(201).json({ok:true,email,role});
+      const account=await pool.query('SELECT google_sub FROM app_users WHERE email=$1',[email]);if(account.rows[0])io?.to('user:'+account.rows[0].google_sub).emit('admin:access-changed');
+      res.status(201).json({ok:true,email,role,permissions:role==='custom'?permissions:[]});
     } catch (error) { next(error); }
   });
 
@@ -891,6 +908,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
         return true;
       });
       if (!result) return jsonError(res,404,'Admin member পাওয়া যায়নি।');
+      const account=await pool.query('SELECT google_sub FROM app_users WHERE email=$1',[email]);if(account.rows[0])io?.to('user:'+account.rows[0].google_sub).emit('admin:access-changed');
       res.json({ok:true});
     } catch (error) { next(error); }
   });
@@ -959,6 +977,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
         return report;
       });
       if(!updated)return jsonError(res,404,'Report পাওয়া যায়নি।');
+      notifyAdmin?.('reports');
       res.json({ok:true,status,action:status==='action_taken'?action:null});
     }catch(error){if(error.status)return jsonError(res,error.status,error.message);next(error);}
   });
