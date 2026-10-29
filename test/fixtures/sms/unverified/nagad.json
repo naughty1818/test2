@@ -1,0 +1,5 @@
+[
+  {"id":"N1","sender":"NAGAD","body":"Money Received. Amount: Tk 500.00. Sender: 01700000004. TxnID: 7A1B2C3D. Ref: ORDER43. Balance: Tk 1,500.00. 30/10/2026 14:30"},
+  {"id":"N2","sender":"NAGAD","body":"Money Received. Amount: Tk 1,500.00. Sender: 01800000005. TxnID: 9E4F5G6H. Balance: Tk 3,000.00. 30/10/2026 15:50"},
+  {"id":"X4","sender":"NAGAD","body":"Get 5% cashback on your next bill payment. Offer valid till 31/12/2026."}
+]

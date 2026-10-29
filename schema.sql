@@ -534,7 +534,7 @@ CREATE TABLE IF NOT EXISTS premium_video_orders (
   buyer_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE CASCADE,
   amount_bdt NUMERIC(12,2) NOT NULL CHECK (amount_bdt > 0),
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','refunded','failed')),
-  payment_provider TEXT NOT NULL DEFAULT 'nogorpay',
+  payment_provider TEXT NOT NULL DEFAULT 'sms_manual',
   provider_reference TEXT,
   provider_invoice_id TEXT,
   payment_method TEXT,
@@ -807,7 +807,7 @@ CREATE TABLE IF NOT EXISTS shop_order_items (
 );
 CREATE INDEX IF NOT EXISTS shop_orders_buyer_idx ON shop_orders(buyer_sub,created_at DESC);
 CREATE INDEX IF NOT EXISTS shop_order_items_seller_idx ON shop_order_items(seller_sub,order_id);
-ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS payment_provider TEXT NOT NULL DEFAULT 'nogorpay';
+ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS payment_provider TEXT NOT NULL DEFAULT 'sms_manual';
 ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS provider_reference TEXT;
 ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS provider_invoice_id TEXT;
 ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS checkout_url TEXT;
@@ -961,3 +961,62 @@ FROM creator_wallet_ledger WHERE amount_bdt > 0 ON CONFLICT(source,source_ref) D
 INSERT INTO creator_wallet_entries(id,creator_sub,source,source_ref,amount_bdt,description,created_at,metadata)
 SELECT gen_random_uuid(),creator_sub,'withdrawal','withdrawal:'||id::text||':paid',-amount_bdt,'Historical paid withdrawal',COALESCE(paid_at,created_at),jsonb_build_object('withdrawalId',id::text,'migration','legacy_paid')
 FROM creator_withdrawal_requests WHERE status='paid' ON CONFLICT(source,source_ref) DO NOTHING;
+
+
+-- SMS-based manual payment verification (idempotent migration).
+CREATE TABLE IF NOT EXISTS sms_transactions (
+  id BIGSERIAL PRIMARY KEY,
+  provider TEXT NOT NULL CHECK (provider IN ('bkash','nagad')),
+  trx_id TEXT NOT NULL UNIQUE,
+  sender_phone TEXT NOT NULL CHECK (sender_phone ~ '^01[3-9][0-9]{8}$'),
+  amount_bdt NUMERIC(12,2) NOT NULL CHECK (amount_bdt > 0),
+  balance_bdt NUMERIC(12,2),
+  received_at TIMESTAMPTZ NOT NULL,
+  status TEXT NOT NULL DEFAULT 'unused' CHECK (status IN ('unused','used','void')),
+  used_order_kind TEXT CHECK (used_order_kind IN ('premium','shop','talent')),
+  used_order_id UUID,
+  used_at TIMESTAMPTZ,
+  source TEXT NOT NULL DEFAULT 'sms' CHECK (source IN ('sms','manual')),
+  created_by TEXT,
+  note TEXT,
+  device_label TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE sms_transactions ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'sms';
+ALTER TABLE sms_transactions ADD COLUMN IF NOT EXISTS created_by TEXT;
+ALTER TABLE sms_transactions ADD COLUMN IF NOT EXISTS note TEXT;
+ALTER TABLE sms_transactions ADD COLUMN IF NOT EXISTS device_label TEXT;
+CREATE INDEX IF NOT EXISTS sms_transactions_phone_amount_status_idx ON sms_transactions(sender_phone,amount_bdt,status);
+CREATE INDEX IF NOT EXISTS sms_transactions_received_idx ON sms_transactions(received_at DESC);
+
+CREATE TABLE IF NOT EXISTS sms_payment_claims (
+  id BIGSERIAL PRIMARY KEY,
+  order_kind TEXT NOT NULL CHECK (order_kind IN ('premium','shop','talent')),
+  order_id UUID NOT NULL,
+  buyer_sub TEXT NOT NULL REFERENCES app_users(google_sub) ON DELETE CASCADE,
+  phone TEXT NOT NULL CHECK (phone ~ '^01[3-9][0-9]{8}$'),
+  trx_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','matched','rejected','expired')),
+  attempts INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(order_kind,order_id,trx_id)
+);
+CREATE INDEX IF NOT EXISTS sms_payment_claims_pending_idx ON sms_payment_claims(status,created_at);
+CREATE INDEX IF NOT EXISTS sms_payment_claims_match_idx ON sms_payment_claims(trx_id,phone,status);
+
+CREATE TABLE IF NOT EXISTS sms_ingest_log (
+  id BIGSERIAL PRIMARY KEY,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  sender TEXT,
+  outcome TEXT NOT NULL CHECK (outcome IN ('saved','ignored','duplicate','bad_key','parse_failed')),
+  trx_suffix TEXT
+);
+CREATE INDEX IF NOT EXISTS sms_ingest_log_received_idx ON sms_ingest_log(received_at DESC);
+
+ALTER TABLE premium_playlist_orders ALTER COLUMN payment_provider SET DEFAULT 'sms_manual';
+ALTER TABLE premium_video_orders ALTER COLUMN payment_provider SET DEFAULT 'sms_manual';
+ALTER TABLE shop_orders ALTER COLUMN payment_provider SET DEFAULT 'sms_manual';
+DELETE FROM sms_ingest_log WHERE received_at < NOW() - INTERVAL '30 days';
+UPDATE premium_playlist_orders SET payment_provider='sms_manual' WHERE status='pending' AND payment_provider='nogorpay' AND provider_invoice_id IS NULL;
+UPDATE premium_video_orders SET payment_provider='sms_manual' WHERE status='pending' AND payment_provider='nogorpay' AND provider_invoice_id IS NULL;
+UPDATE shop_orders SET payment_provider='sms_manual' WHERE payment_status='pending' AND payment_provider='nogorpay' AND provider_invoice_id IS NULL;

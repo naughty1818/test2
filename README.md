@@ -43,18 +43,18 @@ Node.js/Express-ভিত্তিক বাংলা-first video sharing site�
 
 Owner-এর Platform settings থেকে monetization eligibility-এর **minimum subscriber** ও **minimum watch-hour milestone** বেছে নেওয়া যায় (default: 1,000 subscribers এবং 4,000 watch hours)। Creator Studio-তে channel-এর all-time subscribers এবং pseudonymous watch-session hours-এর বিপরীতে এই দুই milestone-এর green progress fill, eligibility এবং **Apply for monetization** action দেখা যায়। দুই milestone পূরণ ও platform monetization চালু থাকলে creator application পাঠাতে পারেন; Admin Panel থেকে Admin/Owner সেটি approve, pause বা reject করতে পারেন। Eligibility দেখানো হলেও creator monetization approval এবং platform monetization switch আলাদা admin control হিসেবে থাকে।
 
-**Sponsor/ads monetization এখনও estimate-only:** এখানে advertiser billing, contract/invoice বা advertiser-payment reconciliation নেই; CPM-based creator share withdrawable balance নয়। Premium video/playlist purchase-এ configured NogorPay hosted checkout এবং provider verification ব্যবহার হয়; সফল purchase-এর পর Admin-configured video/playlist fee কেটে creator net share ledger-এ যায়। Creator withdrawal request করা যায় এবং Admin/Owner approve/reject করে external/manual transfer শেষে Paid mark করেন—অ্যাপ কোনো bank/mobile-wallet transfer API চালায় না। Production cashout-এর আগে fraud/refund/chargeback handling, platform terms, Bangladesh tax/payment compliance, identity/eligibility review ও payout-provider integration স্থাপন করুন। Payout detail AES-256-GCM encryption-এ রাখা হয়; `PAYOUT_ENCRYPTION_KEY` স্থিরভাবে configure করুন (না থাকলে `SESSION_SECRET` থেকে derive হয়), key পরিবর্তন করলে পুরনো payout detail আর decrypt নাও হতে পারে।
+**Sponsor/ads monetization এখনও estimate-only:** এখানে advertiser billing, contract/invoice বা advertiser-payment reconciliation নেই; CPM-based creator share withdrawable balance নয়। Premium video/playlist purchase-এ configured SMS manual payment hosted checkout এবং provider verification ব্যবহার হয়; সফল purchase-এর পর Admin-configured video/playlist fee কেটে creator net share ledger-এ যায়। Creator withdrawal request করা যায় এবং Admin/Owner approve/reject করে external/manual transfer শেষে Paid mark করেন—অ্যাপ কোনো bank/mobile-wallet transfer API চালায় না। Production cashout-এর আগে fraud/refund/chargeback handling, platform terms, Bangladesh tax/payment compliance, identity/eligibility review ও payout-provider integration স্থাপন করুন। Payout detail AES-256-GCM encryption-এ রাখা হয়; `PAYOUT_ENCRYPTION_KEY` স্থিরভাবে configure করুন (না থাকলে `SESSION_SECRET` থেকে derive হয়), key পরিবর্তন করলে পুরনো payout detail আর decrypt নাও হতে পারে।
 
 ## Atharo Talent marketplace (MVP)
 
 - `/talent`-এ published Talent listings browse/search ও category filter করা যায়; listing-এ skills, scope, packages, delivery days, revisions এবং creator-owned Public Atharo video portfolio দেখা যায়।
 - Creator Studio → **Atharo Talent** থেকে প্রথম MVP-তে একটি package-সহ listing draft বা publish করা যায়। Listing ও order-এর permission server-side creator/buyer ownership দিয়ে যাচাই হয়।
-- Buyer project brief দিয়ে offer পাঠান; provider contract snapshot accept করলে buyer NogorPay checkout করেন। Verified provider status ও exact amount মিললে order `in_progress` হয়—browser redirect payment proof নয়।
+- Buyer project brief দিয়ে offer পাঠান; provider contract snapshot accept করলে buyer SMS manual payment checkout করেন। Verified provider status ও exact amount মিললে order `in_progress` হয়—browser redirect payment proof নয়।
 - Provider deliverable note/HTTPS link জমা দেন; buyer completion accept করতে বা included revision চাইতে পারেন। Completed order creator-এর `talent_earnings`-এ `pending_payout` হিসেবে রেকর্ড হয়।
 - Buyer-এর `/talent/my-orders` page-এ শুধু নিজের কেনা কাজগুলো দেখা যায়; Creator approval, payment-needed, work-in-progress, submitted, revision এবং completed status বাংলায়, সর্বশেষ update, delivery note/link ও পরবর্তী action-সহ দেখায়।
 - `public/assets/talent.svg`-এ teal/coral brand icon; desktop sidebar ও mobile navigation-এ আলাদা **আমার অর্ডার** shortcut আছে।
 - Talent-এর listing/order/event/deliverable/earning schema `schema.sql`-এ idempotently যোগ হয় এবং Express API `talent-marketplace.js`-এ আলাদা module। Existing Shop physical order ও Premium purchase schema অক্ষত থাকে।
-- **সীমাবদ্ধতা:** এই MVP-তে order messaging/file upload, admin dispute/refund, cancellation workflow, reviews, automatic payout ও escrow নেই। `pending_payout` কোনো withdrawable balance নয়। Manual payout/release policy, refund/chargeback handling, compliance review ও dispute operations ঠিক না করে real-market launch করবেন না। NogorPay server credentials এবং Talent webhook URL hosting environment-এ configure করতে হবে.
+- **সীমাবদ্ধতা:** এই MVP-তে order messaging/file upload, admin dispute/refund, cancellation workflow, reviews, automatic payout ও escrow নেই। `pending_payout` কোনো withdrawable balance নয়। Manual payout/release policy, refund/chargeback handling, compliance review ও dispute operations ঠিক না করে real-market launch করবেন না। SMS manual payment server credentials এবং Talent webhook URL hosting environment-এ configure করতে হবে.
 
 ## কোথায় কোন ডেটা থাকে
 
@@ -138,7 +138,7 @@ npm start
 1. GitHub repository থেকে Node Web Service তৈরি করুন; build command `npm install`, start command `npm start`।
 2. Render Environment-এ `.env.example`-এর variables দিন—বিশেষ করে `DATABASE_URL`, সব R2 credential, `SESSION_SECRET`, `NODE_ENV=production`, Google OAuth settings, `APP_ORIGIN` ও `OWNER_EMAIL`। `OWNER_EMAIL`-তে Owner account-এর Google email দিন; trailing space দেবেন না। `APP_ORIGIN`-এ শুধু site origin দিন, যেমন `https://YOUR-SITE.example`।
 3. Google OAuth redirect URI এবং R2 CORS-এ production URL মিলিয়ে দিন।
-4. Deploy-এর পর Render logs-এ schema/migration error আছে কি না দেখুন, তারপর Owner Google account দিয়ে `/admin` access পরীক্ষা করুন। Premium checkout-এর জন্য server-side `NOGORPAY_API_KEY`, brand এবং public webhook URL সেট করুন; payout destination encryption-এর জন্য স্থায়ী `PAYOUT_ENCRYPTION_KEY` দিন।
+4. Deploy-এর পর Render logs-এ schema/migration error আছে কি না দেখুন, তারপর Owner Google account দিয়ে `/admin` access পরীক্ষা করুন। SMS payment-এর জন্য `SMS_WEBHOOK_API_KEY`, `PAYMENT_RECEIVER_BKASH`, `PAYMENT_RECEIVER_NAGAD` এবং `SMS_PAYMENT_WINDOW_HOURS` সেট করুন; payout destination encryption-এর জন্য স্থায়ী `PAYOUT_ENCRYPTION_KEY` দিন।
 5. Ads ও ad-based creator monetization **শুধু নীতিমালা/CPM/share যাচাইয়ের পর** Owner panel-এ চালু করুন। Premium sale commission Admin panel → Platform settings-এ video ও playlist-ভিত্তিক আলাদা ভাবে সেট করুন।
 
 Render Free web service 15 মিনিট inbound traffic না থাকলে sleep করে এবং পরের request-এ wake হতে সময় নেয়; sleep/redeploy-এ live socket connections disconnect হবে, তারপর client reconnect করবে। নিরবচ্ছিন্ন realtime-এর জন্য always-on web service দরকার। একাধিক server instance-এ scale করলে Socket.IO Redis adapter যোগ করতে হবে; বর্তমান setup single Render service/process-এর জন্য।
@@ -162,9 +162,12 @@ Render Free web service 15 মিনিট inbound traffic না থাকল�
 | `APP_ORIGIN` | Production-এ সুপারিশকৃত | OAuth redirect ও Socket.IO allowed origin |
 | `OWNER_EMAIL` | Admin bootstrap-এর জন্য | Verified Google account-এর Owner email; server-side only |
 | `SESSION_SECRET` | হ্যাঁ | Signed session/viewer cookies; অন্তত 32 characters |
-| `NOGORPAY_API_KEY` | Premium checkout-এর জন্য | Hosted payment API key; server-side only |
-| `NOGORPAY_BRAND_ID` | না | NogorPay brand identifier |
-| `NOGORPAY_WEBHOOK_URL` | Production-এ সুপারিশকৃত | Public HTTPS callback URL; ফাঁকা থাকলে `APP_ORIGIN` দিয়ে গঠিত হয় |
+| `SMS_WEBHOOK_API_KEY` | SMS Forwarder-এর জন্য | Android webhook-এর shared secret; server-side only |
+| `PAYMENT_RECEIVER_BKASH` | SMS payment-এর জন্য | ক্রেতাকে দেখানোর bKash নম্বর |
+| `PAYMENT_RECEIVER_NAGAD` | SMS payment-এর জন্য | ক্রেতাকে দেখানোর Nagad নম্বর |
+| `SMS_PAYMENT_WINDOW_HOURS` | না | SMS গ্রহণের বৈধ সময়সীমা; default `24` |
+| `SMS_STALE_MINUTES` | না | Admin sync warning threshold; default `30` |
+| `SMS_MANUAL_OWNER_ONLY` | না | `true` হলে manual admin action শুধু Owner করতে পারবেন |
 | `PAYOUT_ENCRYPTION_KEY` | সুপারিশকৃত | স্থায়ী payout encryption key; unset হলে `SESSION_SECRET` থেকে key derive হয় |
 | `MIGRATE_R2_JSON_ON_START` | না | `false` দিলে startup-এ legacy R2 JSON migration বন্ধ |
 

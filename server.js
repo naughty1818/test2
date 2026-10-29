@@ -60,7 +60,7 @@ const io = new SocketServer(server, {
   ...(process.env.APP_ORIGIN ? { cors: { origin: process.env.APP_ORIGIN, credentials: true } } : {})
 });
 const notifyAdmin = module => {
-  if (!['reports','withdrawals','islamic'].includes(module)) return;
+  if (!['reports','withdrawals','islamic','payments'].includes(module)) return;
   io.to(`admin:${module}`).emit('admin:refresh',{module,at:Date.now()});
 };
 if (process.env.TRUST_PROXY === 'true' || process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
@@ -1020,6 +1020,7 @@ require('./creator-studio')({ app, pool, requireAuth, requireActive, requireChan
 require('./premium-marketplace')({ app, pool, withTransaction, requireAuth, requireActive, requireChannel, loadSession, validUuid, safeText, notifyAdmin });
 require('./shop-approval')({ app, pool, withTransaction, requireAuth, requireActive, safeText, validVideoId });
 require('./talent-marketplace')({ app, pool, withTransaction, requireAuth, requireActive, requireChannel, validUuid });
+require('./sms-payments').attachSmsPayments({ app, pool, withTransaction, requireAuth, requireActive, loadSession, notifyAdmin });
 
 io.use(async (socket, next) => {
   try {

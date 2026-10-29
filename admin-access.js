@@ -11,6 +11,7 @@ function requiredAdminPermission(method, path) {
   if(route.startsWith('/api/admin/campaigns')||route.startsWith('/api/admin/ad-analytics')||route.startsWith('/api/admin/wallet/'))return 'campaigns';
   if(route.startsWith('/api/admin/audit'))return 'audit';
   if(route.startsWith('/api/admin/settings'))return 'settings';
+  if(route.startsWith('/api/admin/sms-payments'))return 'payments';
   if(route.startsWith('/api/admin/members'))return 'staff';
   return null;
 }
@@ -23,12 +24,13 @@ function hasAdminPermission(permissions, required) {
 }
 
 function socketAdminModules(role, permissions=[]) {
-  if(role==='owner'||role==='admin')return ['reports','withdrawals','islamic'];
+  if(role==='owner'||role==='admin')return ['reports','withdrawals','islamic','payments'];
   if(role==='moderator')return ['reports','islamic'];
   const modules=[];
   if(hasAdminPermission(permissions,'reports'))modules.push('reports');
   if(hasAdminPermission(permissions,'withdrawals:view'))modules.push('withdrawals');
   if(hasAdminPermission(permissions,'islamic'))modules.push('islamic');
+  if(hasAdminPermission(permissions,'payments'))modules.push('payments');
   return modules;
 }
 

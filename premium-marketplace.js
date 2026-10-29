@@ -3,25 +3,8 @@
 const crypto = require('crypto');
 const { encryptPayoutDetails } = require('./payout-security');
 
-const NOGORPAY_BASE = String(process.env.NOGORPAY_API_BASE || 'https://api.nogorpay.com/api/v1').replace(/\/$/, '');
-const NOGORPAY_KEY = process.env.NOGORPAY_API_KEY || '';
-const NOGORPAY_BRAND = process.env.NOGORPAY_BRAND_ID || '8ETVNX';
-const NOGORPAY_WEBHOOK = process.env.NOGORPAY_WEBHOOK_URL || '';
 const money = value => Number(Number(value || 0).toFixed(2));
 function publicOrderId(id) { return `ATH-${id.replace(/-/g, '').slice(0, 20).toUpperCase()}`; }
-function extractData(payload) { return payload?.data || payload?.result || payload || {}; }
-function paymentStatus(payload) {
-  const value = String(payload?.status || payload?.data?.status || payload?.event || payload?.data?.event || '').toLowerCase();
-  return ['completed', 'complete', 'paid', 'success', 'successful', 'succeeded'].includes(value);
-}
-function amountFrom(payload) {
-  const data = extractData(payload);
-  return Number(data.amount ?? data.amount_bdt ?? data.paid_amount ?? payload?.amount ?? 0);
-}
-function invoiceFrom(payload) {
-  const data = extractData(payload);
-  return data.invoice_id || data.invoiceId || payload?.invoice_id || payload?.invoiceId || null;
-}
 
 module.exports = function attachPremiumMarketplace({ app, pool, withTransaction, requireAuth, requireActive, requireChannel, loadSession, validUuid, notifyAdmin }) {
   const productRow = row => ({
@@ -31,25 +14,13 @@ module.exports = function attachPremiumMarketplace({ app, pool, withTransaction,
     handle: row.handle || '', avatarUrl: row.avatar_url || null, thumbnailUrl: row.thumbnail_object_name ? `/api/videos/${encodeURIComponent(row.id)}/thumbnail` : null,
     updatedAt: row.updated_at, owned: Boolean(row.owned), sold: Number(row.sold) || 0
   });
-  async function nogorRequest(path, options = {}) {
-    if (!NOGORPAY_KEY) throw Object.assign(new Error('NogorPay integration is not configured on the server.'), { status: 503 });
-    const response = await fetch(`${NOGORPAY_BASE}${path}`, { ...options, headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'NOGORPAY-API-KEY': NOGORPAY_KEY, ...(options.headers || {}) } });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok || body.success === false) throw Object.assign(new Error(body.message || body.error || `NogorPay request failed (${response.status}).`), { status: 502 });
-    return body;
-  }
-  async function verifyNogorOrder(order) {
-    if (!order.provider_invoice_id) return null;
-    return nogorRequest(`/charge/verify/${encodeURIComponent(order.provider_invoice_id)}`, { method: 'GET' });
-  }
   async function grantEntitlement(orderId, providerPayload) {
     return withTransaction(async client => {
       const found = await client.query(`SELECT o.*,COALESCE(p.owner_sub,v.owner_sub) AS creator_sub
         FROM premium_playlist_orders o LEFT JOIN playlists p ON p.id=o.playlist_id LEFT JOIN videos v ON v.id=o.video_id
         WHERE o.id=$1 FOR UPDATE OF o`, [orderId]);
       if (!found.rowCount) return { ok: false, reason: 'order_not_found' };
-      const order = found.rows[0], receivedAmount = amountFrom(providerPayload);
-      if (receivedAmount && Math.abs(receivedAmount - Number(order.amount_bdt)) > 0.009) return { ok: false, reason: 'amount_mismatch' };
+      const order = found.rows[0];
       if (order.status === 'paid') return { ok: true, alreadyPaid: true };
       if (!order.creator_sub) return { ok: false, reason: 'creator_not_found' };
       const settings = await client.query('SELECT video_commission_percent,playlist_commission_percent FROM platform_settings WHERE id=1');
@@ -74,9 +45,6 @@ module.exports = function attachPremiumMarketplace({ app, pool, withTransaction,
     });
   }
   async function createCheckout(req, res, productType, id) {
-    if (!NOGORPAY_KEY || !NOGORPAY_BRAND) return res.status(503).json({ error: 'NogorPay checkout is not configured yet.' });
-    const phone = String(req.body?.customerPhone || '').replace(/[^0-9+]/g, '').slice(0, 20);
-    if (phone.length < 8) return res.status(400).json({ error: 'NogorPay checkout-এর জন্য valid customer phone দিন।' });
     const buyer = req.auth.session.sub;
     const client = await pool.connect();
     let item, orderId;
@@ -92,34 +60,16 @@ module.exports = function attachPremiumMarketplace({ app, pool, withTransaction,
       if (!item || !item.is_premium || !item.is_public) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Premium content not found.' }); }
       if (item.owner_sub === buyer) { await client.query('COMMIT'); return res.json({ owned: true, message: 'Creator access granted.' }); }
       const itemColumn = productType === 'playlist' ? 'playlist_id' : 'video_id';
-      const existing = await client.query(`SELECT id,status,checkout_url FROM premium_playlist_orders WHERE ${itemColumn}=$1 AND buyer_sub=$2 AND status IN ('pending','paid') ORDER BY created_at DESC LIMIT 1`, [id, buyer]);
+      const existing = await client.query(`SELECT id,status FROM premium_playlist_orders WHERE ${itemColumn}=$1 AND buyer_sub=$2 AND status IN ('pending','paid') ORDER BY created_at DESC LIMIT 1`, [id, buyer]);
       if (existing.rows[0]?.status === 'paid') { await client.query('COMMIT'); return res.json({ owned: true, orderId: existing.rows[0].id, message: 'এই content আগে থেকেই কেনা আছে।' }); }
-      if (existing.rows[0]?.checkout_url) { await client.query('COMMIT'); return res.json({ pending: true, orderId: existing.rows[0].id, paymentUrl: existing.rows[0].checkout_url }); }
+      if (existing.rows[0]) { await client.query('COMMIT'); return res.json({ pending: true, manual: true, orderId: existing.rows[0].id, amountBdt: Number(item.price_bdt), receivers: { bkash: process.env.PAYMENT_RECEIVER_BKASH || '', nagad: process.env.PAYMENT_RECEIVER_NAGAD || '' } }); }
       orderId = crypto.randomUUID();
-      await client.query(`INSERT INTO premium_playlist_orders(id,playlist_id,video_id,buyer_sub,amount_bdt,status,payment_provider,provider_reference,payment_method)
-        VALUES($1,$2,$3,$4,$5,'pending','nogorpay',$6,$7)`, [orderId, productType === 'playlist' ? id : null, productType === 'video' ? id : null, buyer, item.price_bdt, publicOrderId(orderId), String(req.body?.paymentMethod || '').slice(0, 40) || null]);
+      await client.query(`INSERT INTO premium_playlist_orders(id,playlist_id,video_id,buyer_sub,amount_bdt,status,payment_provider,provider_reference)
+        VALUES($1,$2,$3,$4,$5,'pending','sms_manual',$6)`, [orderId, productType === 'playlist' ? id : null, productType === 'video' ? id : null, buyer, item.price_bdt, publicOrderId(orderId)]);
       await client.query('COMMIT');
     } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
     finally { client.release(); }
-    const origin = String(process.env.APP_ORIGIN || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
-    const itemPath = productType === 'playlist' ? `/premium/${encodeURIComponent(id)}` : `/premium/video/${encodeURIComponent(id)}`;
-    const webhookUrl = NOGORPAY_WEBHOOK || `${origin}/api/nogorpay/webhook`;
-    try {
-      const body = await nogorRequest('/charge/create', { method: 'POST', body: JSON.stringify({
-        order_id: publicOrderId(orderId), amount: Number(item.price_bdt), customer_phone: phone,
-        customer_email: req.auth.session.email, customer_name: req.auth.session.name || 'Atharo viewer', brand_id: NOGORPAY_BRAND,
-        payment_method: req.body?.paymentMethod || undefined, webhook_url: webhookUrl,
-        redirect_url: `${origin}${itemPath}?payment=return&order_id=${encodeURIComponent(orderId)}`,
-        cancel_url: `${origin}${itemPath}?payment=cancelled`
-      }) });
-      const data = extractData(body), paymentUrl = data.payment_url || data.paymentUrl || body.payment_url, invoiceId = data.invoice_id || data.invoiceId || body.invoice_id;
-      if (!paymentUrl || !invoiceId) throw Object.assign(new Error('NogorPay did not return a checkout URL or invoice id.'), { status: 502 });
-      await pool.query('UPDATE premium_playlist_orders SET provider_invoice_id=$2,checkout_url=$3 WHERE id=$1', [orderId, invoiceId, paymentUrl]);
-      return res.status(201).json({ pending: true, orderId, invoiceId, paymentUrl, amountBdt: Number(item.price_bdt), paymentProvider: 'nogorpay' });
-    } catch (error) {
-      await pool.query("UPDATE premium_playlist_orders SET status='failed' WHERE id=$1 AND status='pending'", [orderId]).catch(() => {});
-      throw error;
-    }
+    return res.status(201).json({ pending: true, manual: true, orderId, orderRef: publicOrderId(orderId), amountBdt: Number(item.price_bdt), receivers: { bkash: process.env.PAYMENT_RECEIVER_BKASH || '', nagad: process.env.PAYMENT_RECEIVER_NAGAD || '' } });
   }
 
   app.get('/api/premium/playlists', async (req, res, next) => {
@@ -180,24 +130,10 @@ module.exports = function attachPremiumMarketplace({ app, pool, withTransaction,
   app.post('/api/premium/playlists/:id/purchase', requireAuth, requireActive, async (req, res, next) => { try { if (!validUuid(req.params.id)) return res.status(400).json({ error: 'Invalid premium playlist id.' }); await createCheckout(req,res,'playlist',req.params.id); } catch (error) { next(error); } });
   app.post('/api/premium/videos/:id/purchase', requireAuth, requireActive, async (req, res, next) => { try { await createCheckout(req,res,'video',req.params.id); } catch (error) { next(error); } });
 
-  app.post('/api/nogorpay/webhook', async (req, res, next) => {
-    try {
-      const payload = req.body || {}, data = extractData(payload), externalOrder = data.order_id || payload.order_id, invoiceId = invoiceFrom(payload);
-      let found = externalOrder ? await pool.query('SELECT * FROM premium_playlist_orders WHERE provider_reference=$1 LIMIT 1', [externalOrder]) : { rowCount:0, rows:[] };
-      if (!found.rowCount && invoiceId) found = await pool.query('SELECT * FROM premium_playlist_orders WHERE provider_invoice_id=$1', [invoiceId]);
-      if (!found.rowCount) return res.status(200).json({ received: true, matched: false });
-      const order = found.rows[0], verified = await verifyNogorOrder(order);
-      if (!verified || !paymentStatus(verified)) return res.status(200).json({ received: true, verified: false });
-      const result = await grantEntitlement(order.id, verified);
-      res.status(200).json({ received: true, ...result });
-    } catch (error) { next(error); }
-  });
   app.get('/api/premium/orders/:id/status', requireAuth, async (req, res, next) => {
     try {
-      const result = await pool.query('SELECT id,status,provider_invoice_id,checkout_url,playlist_id,video_id FROM premium_playlist_orders WHERE id=$1 AND buyer_sub=$2', [req.params.id, req.auth.session.sub]);
+      const result = await pool.query('SELECT id,status,playlist_id,video_id FROM premium_playlist_orders WHERE id=$1 AND buyer_sub=$2', [req.params.id, req.auth.session.sub]);
       if (!result.rowCount) return res.status(404).json({ error: 'Order not found.' });
-      const order = result.rows[0];
-      if (order.status === 'pending' && order.provider_invoice_id && NOGORPAY_KEY) { const verified = await verifyNogorOrder(order).catch(() => null); if (verified && paymentStatus(verified)) await grantEntitlement(order.id, verified); }
       const fresh = await pool.query('SELECT status,playlist_id,video_id FROM premium_playlist_orders WHERE id=$1', [req.params.id]);
       res.json({ status:fresh.rows[0].status, contentType:fresh.rows[0].video_id?'video':'playlist', contentId:fresh.rows[0].video_id||fresh.rows[0].playlist_id, owned:fresh.rows[0].status==='paid' });
     } catch (error) { next(error); }

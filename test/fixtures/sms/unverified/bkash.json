@@ -1,0 +1,10 @@
+[
+  {"id":"B1","sender":"bKash","body":"You have received Tk 500.00 from 01700000001. Ref ORDER42. Fee Tk 0.00. Balance Tk 1,250.75. TrxID AB12CD34EF at 30/10/2026 14:05"},
+  {"id":"B2","sender":"bKash","body":"You have received Tk 1,200.00 from 01800000002. Fee Tk 0.00. Balance Tk 3,450.00. TrxID GH56IJ78KL at 30/10/2026 15:20"},
+  {"id":"B3","sender":"bKash","body":"You have received Tk 49.50 from 01900000003. Fee Tk 0.00. Balance Tk 99.50. TrxID MN90OP12QR at 30/10/2026 16:45"},
+  {"id":"B4","sender":"bKash","body":"You have received deposit from iBanking of Tk 2,000.00 from Example Bank Limited Internet Banking. Fee Tk 0.00. Balance Tk 5,000.00. TrxID ST34UV56WX at 30/10/2026 17:10"},
+  {"id":"X1","sender":"bKash","body":"Cash In Tk 3,260.00 from 01700000006 successful. Fee Tk 0.00. Balance Tk 4,000.00. TrxID YZ78AB90CD at 30/10/2026 12:00"},
+  {"id":"X2","sender":"bKash","body":"Send Money Tk 300.00 to 01700000007 successful. Fee Tk 5.00. Balance Tk 700.00. TrxID EF12GH34IJ at 30/10/2026 12:30"},
+  {"id":"X3","sender":"bKash","body":"Your bKash verification code is 123456. Do not share it with anyone."},
+  {"id":"X5","sender":"UnknownSender","body":"You have received Tk 500.00 from 01700000001. Fee Tk 0.00. Balance Tk 1,250.75. TrxID FAKE123456 at 30/10/2026 14:05"}
+]

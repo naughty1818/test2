@@ -11,17 +11,6 @@ const publicOrderId = id => `ATH-TAL-${id.replace(/-/g, '').slice(0, 20).toUpper
 const paymentData = payload => payload?.data || payload?.result || payload || {};
 
 module.exports = function attachTalentMarketplace({ app, pool, withTransaction, requireAuth, requireActive, requireChannel, validUuid }) {
-  const payKey = process.env.NOGORPAY_API_KEY || '';
-  const payBrand = process.env.NOGORPAY_BRAND_ID || '';
-  const payBase = String(process.env.NOGORPAY_API_BASE || 'https://api.nogorpay.com/api/v1').replace(/\/$/, '');
-  const publicOrigin = req => String(process.env.APP_ORIGIN || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
-  async function paymentRequest(path, options = {}) {
-    if (!payKey || !payBrand) throw Object.assign(new Error('Atharo Talent checkout is not configured.'), { status: 503 });
-    const response = await fetch(`${payBase}${path}`, { ...options, headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'NOGORPAY-API-KEY': payKey, ...(options.headers || {}) } });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok || body.success === false) throw Object.assign(new Error(body.message || body.error || `Payment provider error (${response.status}).`), { status: 502 });
-    return body;
-  }
   const shape = row => ({
     id: row.id, slug: row.slug, title: row.title, description: row.description, category: row.category,
     skills: row.skills || [], requirements: row.requirements || '', status: row.status,
@@ -150,58 +139,18 @@ module.exports = function attachTalentMarketplace({ app, pool, withTransaction, 
   });
   app.post('/api/me/talent/orders/:id/checkout', requireAuth, requireActive, async (req, res, next) => {
     try {
-      const phone = String(req.body?.customerPhone || '').replace(/[^0-9+]/g, '').slice(0, 20);
-      if (phone.length < 8) return res.status(400).json({ error: 'NogorPay checkout-এর জন্য valid phone দিন।' });
       const r = await pool.query("SELECT * FROM talent_orders WHERE id=$1 AND buyer_sub=$2", [req.params.id,req.auth.session.sub]);
       if (!r.rowCount) return res.status(404).json({ error: 'Order not found.' });
       const order = r.rows[0];
       if (order.status !== 'awaiting_payment' && order.status !== 'paid' && order.status !== 'in_progress') return res.status(409).json({ error: 'Provider acceptance না পাওয়া পর্যন্ত checkout করা যাবে না।' });
       if (order.status === 'paid' || order.status === 'in_progress') return res.json({ paid: true, orderId: order.id });
-      if (order.checkout_url && order.provider_invoice_id) return res.json({ pending: true, orderId: order.id, paymentUrl: order.checkout_url });
-      const origin = publicOrigin(req), body = await paymentRequest('/charge/create', { method:'POST', body:JSON.stringify({
-        order_id:publicOrderId(order.id),amount:Number(order.amount_bdt),customer_phone:phone,customer_email:req.auth.session.email,
-        customer_name:req.auth.session.name||'Atharo Talent buyer',brand_id:payBrand,
-        webhook_url:process.env.NOGORPAY_TALENT_WEBHOOK_URL||`${origin}/api/nogorpay/talent-webhook`,
-        redirect_url:`${origin}/talent/my-orders?payment=return&order_id=${encodeURIComponent(order.id)}`,
-        cancel_url:`${origin}/talent/orders?payment=cancelled`
-      }) });
-      const data = paymentData(body), paymentUrl = data.payment_url || data.paymentUrl || body.payment_url, invoiceId = data.invoice_id || data.invoiceId || body.invoice_id;
-      if (!paymentUrl || !invoiceId) throw Object.assign(new Error('NogorPay checkout response অসম্পূর্ণ।'), { status:502 });
-      await pool.query("UPDATE talent_orders SET provider_invoice_id=$2,checkout_url=$3,updated_at=NOW() WHERE id=$1 AND status='awaiting_payment'", [order.id,String(invoiceId),String(paymentUrl)]);
-      res.status(201).json({ pending:true,orderId:order.id,paymentUrl,amountBdt:Number(order.amount_bdt),paymentProvider:'nogorpay' });
+      res.status(201).json({ pending:true,manual:true,orderId:order.id,orderRef:publicOrderId(order.id),amountBdt:Number(order.amount_bdt),receivers:{bkash:process.env.PAYMENT_RECEIVER_BKASH||'',nagad:process.env.PAYMENT_RECEIVER_NAGAD||''} });
     } catch (error) { if (error.status) return res.status(error.status).json({ error:error.message }); next(error); }
-  });
-  async function confirmPayment(invoice, payload = null) {
-    const found = await pool.query('SELECT * FROM talent_orders WHERE provider_invoice_id=$1', [invoice]);
-    if (!found.rowCount) return false;
-    let verified = payload;
-    if (!verified) verified = await paymentRequest(`/charge/verify/${encodeURIComponent(invoice)}`, { method:'GET' });
-    const data = paymentData(verified), status = String(data.status || verified.status || '').toLowerCase();
-    const amount = Number(data.amount ?? data.amount_bdt ?? data.paid_amount ?? 0);
-    const order = found.rows[0];
-    if (!ACTIVE_PAYMENT_STATUSES.has(status) || (amount && Math.abs(amount-Number(order.amount_bdt)) > 0.009)) return false;
-    await withTransaction(async client => {
-      const locked = await client.query('SELECT id,status,amount_bdt FROM talent_orders WHERE id=$1 FOR UPDATE', [order.id]);
-      if (!locked.rowCount || !['awaiting_payment','in_progress','paid'].includes(locked.rows[0].status)) return;
-      if (Math.abs(Number(locked.rows[0].amount_bdt)-Number(order.amount_bdt)) > 0.009) return;
-      await client.query("UPDATE talent_orders SET status=CASE WHEN status='awaiting_payment' THEN 'in_progress' ELSE status END,paid_at=COALESCE(paid_at,NOW()),verified_at=NOW(),provider_reference=COALESCE($2,provider_reference),updated_at=NOW() WHERE id=$1", [order.id,String(data.transaction_id||data.payment_id||'')||null]);
-      await client.query("INSERT INTO talent_order_events(order_id,actor_sub,event_type,details) VALUES($1,NULL,'payment_verified','NogorPay payment verified; work may begin.') ON CONFLICT DO NOTHING", [order.id]);
-    });
-    return true;
-  }
-  app.post('/api/nogorpay/talent-webhook', async (req, res, next) => {
-    try {
-      const data = paymentData(req.body || {}), invoice = String(data.invoice_id || data.invoiceId || req.body?.invoice_id || req.body?.invoiceId || '');
-      if (!invoice) return res.status(400).json({ error:'Invoice id is required.' });
-      const ok = await confirmPayment(invoice);
-      res.json({ ok });
-    } catch (error) { next(error); }
   });
   app.get('/api/me/talent/orders/:id/status', requireAuth, async (req,res,next) => {
     try {
       const r = await pool.query('SELECT id,status,provider_invoice_id FROM talent_orders WHERE id=$1 AND buyer_sub=$2', [req.params.id,req.auth.session.sub]);
       if (!r.rowCount) return res.status(404).json({ error:'Order not found.' });
-      if (r.rows[0].status==='awaiting_payment' && r.rows[0].provider_invoice_id) await confirmPayment(r.rows[0].provider_invoice_id);
       const latest = await pool.query('SELECT status,paid_at FROM talent_orders WHERE id=$1', [req.params.id]);
       res.json({ orderId:req.params.id,status:latest.rows[0].status,paid:Boolean(latest.rows[0].paid_at) });
     } catch (error) { next(error); }
