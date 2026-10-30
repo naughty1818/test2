@@ -758,6 +758,7 @@ CREATE TABLE IF NOT EXISTS products (
   limitations TEXT NOT NULL DEFAULT '',
   delivery_info TEXT NOT NULL DEFAULT '',
   return_policy TEXT NOT NULL DEFAULT '',
+  image_object_name TEXT,
   status TEXT NOT NULL DEFAULT 'pending_review' CHECK (status IN ('draft','pending_review','approved','rejected','hidden','out_of_stock')),
   decision_note TEXT NOT NULL DEFAULT '',
   reviewed_by_email TEXT,
@@ -765,6 +766,8 @@ CREATE TABLE IF NOT EXISTS products (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   reviewed_at TIMESTAMPTZ
 );
+ALTER TABLE products ADD COLUMN IF NOT EXISTS image_object_name TEXT;
+
 CREATE INDEX IF NOT EXISTS products_public_idx ON products(status,created_at DESC) WHERE status='approved';
 CREATE INDEX IF NOT EXISTS products_owner_idx ON products(owner_sub,status,updated_at DESC);
 CREATE INDEX IF NOT EXISTS products_search_idx ON products USING GIN (to_tsvector('simple', name || ' ' || description || ' ' || category));

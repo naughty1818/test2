@@ -2086,3 +2086,4 @@ body.admin-fullscreen { overflow-x:hidden; }
 .studio-insight-card strong { color:#e5f2ec; font-size:15px; line-height:1.35; }
 .studio-insight-card p { margin:0; color:#9aafa4; font-size:11px; line-height:1.65; }
 @media(max-width:760px){.studio-insight-grid{grid-template-columns:1fr;}}
+.shop-studio-product-thumb { width:54px; height:54px; flex:0 0 54px; border-radius:10px; object-fit:cover; border:1px solid #293f34; background:#101e18; }

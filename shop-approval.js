@@ -2,7 +2,7 @@
 
 const crypto = require('crypto');
 
-module.exports = function registerShopApproval({ app, pool, withTransaction, requireAuth, requireActive, safeText, validVideoId }) {
+module.exports = function registerShopApproval({ app, pool, withTransaction, requireAuth, requireActive, safeText, validVideoId, signedUploadUrl, signedObjectUrl, objectHead, deleteStorageObjects }) {
   const normalizeUrl = value => {
     const raw = safeText(value, 2048);
     if (!raw) return null;
@@ -86,6 +86,33 @@ module.exports = function registerShopApproval({ app, pool, withTransaction, req
     return result.rows[0] || null;
   }
 
+  app.get('/api/shop/products/:id/image', async (req, res, next) => {
+    try {
+      const result = await pool.query(`SELECT p.image_object_name FROM products p JOIN shops s ON s.id=p.shop_id WHERE p.id=$1 AND p.status='approved' AND s.status='active'`, [req.params.id]);
+      const key = result.rows[0]?.image_object_name;
+      if (!key || !signedObjectUrl) return res.status(404).end();
+      res.redirect(302, await signedObjectUrl(key));
+    } catch (error) { next(error); }
+  });
+  app.post('/api/creator/shop/products/:id/image-upload-url', requireAuth, requireActive, async (req,res,next)=>{
+    try {
+      const shop=await activeShop(req.auth.session.sub); if(!shop)return res.status(403).json({error:'Approved Shop required.'});
+      const type=safeText(req.body?.contentType,80).toLowerCase(), size=Number(req.body?.size); const ext={ 'image/jpeg':'jpg','image/png':'png','image/webp':'webp' }[type];
+      if(!ext||!Number.isInteger(size)||size<1||size>5*1024*1024)return res.status(400).json({error:'শুধু JPG, PNG বা WebP image · সর্বোচ্চ ৫ MB।'});
+      const product=await pool.query('SELECT id FROM products WHERE id=$1 AND owner_sub=$2',[req.params.id,req.auth.session.sub]); if(!product.rowCount)return res.status(404).json({error:'Product not found.'});
+      const objectName=`shop-products/${req.params.id}-${crypto.randomBytes(12).toString('hex')}.${ext}`;
+      res.json({uploadUrl:await signedUploadUrl(objectName,type),objectName,maxBytes:5*1024*1024});
+    } catch(error){next(error);}
+  });
+  app.put('/api/creator/shop/products/:id/image', requireAuth, requireActive, async (req,res,next)=>{
+    try {
+      const objectName=safeText(req.body?.objectName,240); if(!/^shop-products\/[0-9a-f-]{36}-[0-9a-f]{24}\.(jpg|png|webp)$/.test(objectName))return res.status(400).json({error:'Invalid product image upload.'});
+      const product=await pool.query('SELECT id,image_object_name FROM products WHERE id=$1 AND owner_sub=$2',[req.params.id,req.auth.session.sub]); if(!product.rowCount)return res.status(404).json({error:'Product not found.'});
+      const head=await objectHead(objectName); if(!head||Number(head.ContentLength)>5*1024*1024||!['image/jpeg','image/png','image/webp'].includes(String(head.ContentType||'').toLowerCase()))return res.status(400).json({error:'Uploaded image validation failed.'});
+      await pool.query('UPDATE products SET image_object_name=$2,updated_at=NOW() WHERE id=$1',[req.params.id,objectName]); if(product.rows[0].image_object_name&&product.rows[0].image_object_name!==objectName)await deleteStorageObjects([product.rows[0].image_object_name]);
+      res.json({ok:true,imageUrl:`/api/shop/products/${req.params.id}/image`});
+    } catch(error){next(error);}
+  });
   app.get('/api/shop/products', async (req, res, next) => {
     try {
       const q = safeText(req.query?.q, 120);

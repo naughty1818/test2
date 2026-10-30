@@ -29,7 +29,8 @@
   async function request(path, options) { return context().jsonFetch(path, options); }
   function productArt(product, large = false) {
     const art = $('div', { class: `shop-product-art${large ? ' shop-product-art-large' : ''}` });
-    if (product.videoId) art.append($('img', { src: `/api/videos/${encodeURIComponent(product.videoId)}/thumbnail`, alt: product.name || '', loading: 'lazy' }));
+    if (product.imageUrl) art.append($('img', { src: product.imageUrl, alt: product.name || '', loading: 'lazy' }));
+    else if (product.videoId) art.append($('img', { src: `/api/videos/${encodeURIComponent(product.videoId)}/thumbnail`, alt: product.name || '', loading: 'lazy' }));
     art.append($('span', { text: product.category ? product.category.slice(0, 1) : '◆' }));
     return art;
   }

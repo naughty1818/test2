@@ -376,6 +376,9 @@ async function sendNotification(recipientSub, actorSub, kind, title, detail = ''
 async function signedVideoUrl(objectName) {
   return getSignedUrl(s3, new GetObjectCommand({ Bucket: R2_BUCKET, Key: objectName }), { expiresIn: 60 * 60 });
 }
+async function signedUploadUrl(objectName, contentType) {
+  return getSignedUrl(s3, new PutObjectCommand({ Bucket: R2_BUCKET, Key: objectName, ContentType: contentType }), { expiresIn: 15 * 60 });
+}
 async function objectHead(key) {
   try { return await s3.send(new HeadObjectCommand({ Bucket: R2_BUCKET, Key: key })); }
   catch (error) { if (error.name === 'NotFound' || error.name === 'NoSuchKey' || error.$metadata?.httpStatusCode === 404) return null; throw error; }
@@ -1018,7 +1021,7 @@ require('./learning')({ app, pool, withTransaction, s3, bucket: R2_BUCKET, requi
 require('./admin')({ app, requireAuth, requireActive, loadSession, notifyUser:sendNotification, notifyAdmin, io, getVideo, signedVideoUrl });
 require('./creator-studio')({ app, pool, requireAuth, requireActive, requireChannel, requireValidId, validUuid, safeText, normalizeCategory, normalizeVisibility, notifyAdmin });
 require('./premium-marketplace')({ app, pool, withTransaction, requireAuth, requireActive, requireChannel, loadSession, validUuid, safeText, notifyAdmin });
-require('./shop-approval')({ app, pool, withTransaction, requireAuth, requireActive, safeText, validVideoId });
+require('./shop-approval')({ app, pool, withTransaction, requireAuth, requireActive, safeText, validVideoId, s3, bucket: R2_BUCKET, signedUploadUrl, signedObjectUrl: signedVideoUrl, objectHead, deleteStorageObjects });
 require('./talent-marketplace')({ app, pool, withTransaction, requireAuth, requireActive, requireChannel, validUuid });
 require('./sms-payments').attachSmsPayments({ app, pool, withTransaction, requireAuth, requireActive, loadSession, notifyAdmin, s3, bucket: R2_BUCKET });
 
