@@ -812,6 +812,7 @@ ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS provider_reference TEXT;
 ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS provider_invoice_id TEXT;
 ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS checkout_url TEXT;
 ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
+ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS status_note TEXT NOT NULL DEFAULT '';
 ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
 CREATE UNIQUE INDEX IF NOT EXISTS shop_orders_provider_invoice_idx ON shop_orders(provider_invoice_id) WHERE provider_invoice_id IS NOT NULL;
 
