@@ -45,11 +45,11 @@ module.exports = function attachCreatorStudio({ app, pool, requireAuth, requireA
     try {
       const term=safeText(req.query.q,100), sub=req.auth.session.sub;
       const result=await pool.query(`SELECT c.id,c.video_id,c.parent_id,c.body,c.created_at,c.creator_pinned,c.creator_hidden,v.title AS video_title,
-        p.handle,p.display_name,COALESCE(NULLIF(p.display_name,''),NULLIF(u.google_name,''),'Atharo দর্শক') AS author_name
+        EXISTS(SELECT 1 FROM comments r WHERE r.parent_id=c.id) AS replied,p.handle,p.display_name,COALESCE(NULLIF(p.display_name,''),NULLIF(u.google_name,''),'Atharo দর্শক') AS author_name
         FROM comments c JOIN videos v ON v.id=c.video_id JOIN app_users u ON u.google_sub=c.author_sub LEFT JOIN profiles p ON p.sub=c.author_sub
         WHERE v.owner_sub=$1 AND ($2='' OR c.body ILIKE '%'||$2||'%' OR v.title ILIKE '%'||$2||'%')
         ORDER BY c.creator_pinned DESC,c.created_at DESC LIMIT 200`,[sub,term]);
-      res.json({comments:result.rows.map(c=>({id:c.id,videoId:c.video_id,parentId:c.parent_id,body:c.body,createdAt:c.created_at,videoTitle:c.video_title,authorName:c.author_name,handle:c.handle,pinned:Boolean(c.creator_pinned),hidden:Boolean(c.creator_hidden)}))});
+      res.json({comments:result.rows.map(c=>({id:c.id,videoId:c.video_id,parentId:c.parent_id,body:c.body,createdAt:c.created_at,videoTitle:c.video_title,authorName:c.author_name,handle:c.handle,pinned:Boolean(c.creator_pinned),hidden:Boolean(c.creator_hidden),replied:Boolean(c.replied)}))});
     }catch(error){next(error);}
   });
 
