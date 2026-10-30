@@ -1,14 +1,14 @@
-# SMS manual payment
+# SMS payment verification
 
-Atharo-তে hosted checkout নেই। ক্রেতা configured bKash বা Nagad নম্বরে Send Money করেন। Android ফোনের SMS Forwarder অ্যাপ `POST /api/sms-webhook`-এ JSON পাঠায়; সার্ভার template-based parser দিয়ে শুধু গ্রহণ করা টাকা শনাক্ত করে। ক্রেতা নিজের ফোন নম্বর ও TrxID দিলে order-এর server-side amount-এর সঙ্গে যাচাই হয়।
+Atharo-তে hosted checkout নেই। ক্রেতা প্রথমে payment method বেছে configured bKash বা Nagad নম্বরে Send Money করেন। Android ফোনের SMS Forwarder অ্যাপ `POST /api/sms-webhook`-এ JSON পাঠায়; সার্ভার template-based parser দিয়ে শুধু গ্রহণ করা টাকা শনাক্ত করে। ক্রেতার TrxID আর দিতে হয় না: method + নিজের phone + exact order amount + সর্বশেষ ১০ মিনিটের unused SMS মিললেই order automatic paid হয়। একাধিক candidate থাকলে নিরাপত্তার জন্য payment pending থাকে।
 
 ## Environment
 
-`SMS_WEBHOOK_API_KEY`, `PAYMENT_RECEIVER_BKASH`, `PAYMENT_RECEIVER_NAGAD`, `SMS_PAYMENT_WINDOW_HOURS` (default 24), `SMS_STALE_MINUTES` (default 30), এবং `SMS_MANUAL_OWNER_ONLY` (default false)।
+`SMS_WEBHOOK_API_KEY`, `PAYMENT_RECEIVER_BKASH`, `PAYMENT_RECEIVER_NAGAD`, `SMS_PAYMENT_WINDOW_HOURS` (default 24), `SMS_STALE_MINUTES` (default 30), এবং `SMS_MANUAL_OWNER_ONLY` (default false)। Optional admin pull sync-এর জন্য `SMS_FORWARDER_SYNC_URL` configure করুন; endpoint-কে `{messages:[{sender,body,deviceLabel}]}` JSON দিতে হবে।
 
 ## Android SMS Forwarder
 
-Webhook URL: `https://your-domain.example/api/sms-webhook`। POST body: `{ "sender": "bKash", "body": "...", "timestamp": "..." }`; header: `x-api-key`। অ্যাপকে incoming SMS ও background permission দিন। SMS body database বা log-এ রাখা হয় না।
+Webhook URL: `https://your-domain.example/api/sms-webhook`। POST body: `{ "sender": "bKash", "body": "...", "timestamp": "..." }`; header: `x-api-key`। অ্যাপকে incoming SMS ও background permission দিন। Admin panel-এর **Sync phone SMS** button configured `SMS_FORWARDER_SYNC_URL`-এ ফোন online কিনা check করে এবং returned messages একই parser দিয়ে database-এ নেয়। URL configure না থাকলে button শুধু configuration notice দেখাবে; server নিজে থেকে Android inbox পড়তে পারে না।
 
 ## Parser templates
 
@@ -18,4 +18,4 @@ Provider ও message type-এর named capture templates `sms-payments.js`-এ�
 
 ## Troubleshooting
 
-Admin SMS Payments summary-তে last sync, saved transaction, unused/used count এবং pending claim দেখা যায়। `sms_ingest_log`-এ body ছাড়া `saved`, `duplicate`, `bad_key` ও `parse_failed` outcome রাখা হয়। App request আসছে কিন্তু parse হচ্ছে না হলে sender label, received-money wording এবং Bangladesh local timestamp যাচাই করুন।
+Admin SMS Payments summary-তে last sync, saved transaction, unused/used count এবং pending claim দেখা যায়। Admin manual SMS form-এ provider, sender phone, amount, TrxID ও reason দিয়ে record যোগ করলে pending claim matching চালু হয়। `sms_ingest_log`-এ body ছাড়া `saved`, `duplicate`, `bad_key` ও `parse_failed` outcome রাখা হয়। App request আসছে কিন্তু parse হচ্ছে না হলে sender label, received-money wording এবং Bangladesh local timestamp যাচাই করুন।

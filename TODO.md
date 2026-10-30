@@ -21,3 +21,9 @@
 - [x] Branded teal/coral Talent SVG and desktop/mobile navigation shortcuts
 - [ ] Admin moderation, cancellation/refund/dispute, order messaging and file attachments
 - [ ] Completed-order reviews, payout/release policy, compliance and end-to-end provider testing
+
+## Payment checkout refresh
+- [x] Payment checkout begins with a method-selection screen, then shows the selected provider-specific interface inspired by the supplied bKash/Nagad/Upay references.
+- [x] Customer verification no longer asks for TrxID; server matches selected SMS provider + customer phone + exact order amount + unused SMS received within the latest 10 minutes.
+- [x] Admin payment panel includes manual SMS entry and a Sync phone SMS action; manual entries reuse the same pending-claim matching path.
+- [ ] Configure and validate the Android forwarder `SMS_FORWARDER_SYNC_URL` contract in production; without it, server-side code cannot directly read a phone inbox.

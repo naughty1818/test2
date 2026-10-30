@@ -50,3 +50,10 @@ Three possible styles: **Editorial cinema ledger** (0.06), **Warm creator bazaar
 - Creator Studio shows premium playlist sales count, gross sales, creator estimate and recent orders.
 - Purchase and access checks are server-side and ownership is scoped to the authenticated account.
 - UI is responsive and uses existing Atharo visual system.
+
+## Payment verification refresh (2026-10)
+
+- Checkout opens with provider selection, then renders the selected provider interface using the supplied payment screenshots as visual references.
+- The customer submits only the sender phone number. Server-side verification requires the selected SMS provider, exact order amount, the same phone number, an unused transaction, and a received timestamp within the latest 10 minutes; ambiguous matches remain pending.
+- Admin can manually add a bKash/Nagad SMS record and it is passed through the same pending-claim matcher.
+- Admin can press **Sync phone SMS**. When `SMS_FORWARDER_SYNC_URL` is configured, the server checks the forwarder and imports its returned messages through the existing parser; otherwise the panel explains that a server cannot directly read an Android inbox.
