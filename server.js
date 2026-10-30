@@ -250,7 +250,7 @@ async function requireChannel(req, res, next) {
     req.auth = req.auth || await loadSession(req);
     if (!req.auth) return jsonError(res, 401, 'Authentication required / লগইন আবশ্যক।');
     if (req.auth.session.accountStatus !== 'active') return jsonError(res,403,'This account is restricted.',{code:'account_restricted'});
-    if (!req.auth.profile) return jsonError(res,403,'An approved channel is required before you can upload or use Creator Studio.',{code:'channel_required'});
+    if (!req.auth.profile) return jsonError(res,403,'An approved channel is required before you can upload or use Atharo Studio.',{code:'channel_required'});
     next();
   } catch (error) { next(error); }
 }

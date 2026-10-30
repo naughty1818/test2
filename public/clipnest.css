@@ -1081,7 +1081,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible 
   .feed-section .video-card-featured .video-title { font-size:15px; }
   .feed-section .video-card-featured .creator-avatar { width:38px; height:38px; }
 }
-/* Creator Studio is a dedicated workspace, not nested beside the consumer sidebar. */
+/* Atharo Studio is a dedicated workspace, not nested beside the consumer sidebar. */
 body.studio-fullscreen .page-layout { display:block; max-width:none; padding:0 38px; }
 body.studio-fullscreen .sidebar,body.studio-fullscreen .mobile-bottom-nav,body.studio-fullscreen .mobile-menu-trigger { display:none !important; }
 body.studio-fullscreen .main-content { width:100%; padding:24px 0 52px; }
@@ -2071,3 +2071,8 @@ body.admin-fullscreen { overflow-x:hidden; }
 .shop-order-toolbar { display:flex; justify-content:flex-end; margin:0 0 12px; }
 .shop-order-filter { min-height:36px; padding:0 10px; border:1px solid #2b493d; border-radius:9px; color:#dcebe3; background:#0e1b16; font-size:11px; }
 .shop-order-note { margin:0; padding:9px 11px; border-left:3px solid #d4a94f; color:#dbc795; background:#262116; font-size:11px; }
+
+/* Atharo Studio information architecture */
+.studio-nav-group-label { margin:12px 9px 3px; color:#6f9986; font:800 9px/1 Inter,system-ui,sans-serif; letter-spacing:.14em; text-transform:uppercase; }
+.studio-nav-group-label:first-child { margin-top:3px; }
+@media(max-width:900px){.studio-nav{align-items:center;gap:5px}.studio-nav-group-label{align-self:center;margin:0 3px;color:#628777;white-space:nowrap}.studio-nav-group-label:not(:first-child){margin-left:10px}.studio-nav button{flex:0 0 auto}}

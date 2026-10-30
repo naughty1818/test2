@@ -42,7 +42,7 @@
   const safeAppealText = t => String(t||'').slice(0,2000);
 
   async function renderStudio(app,ctx) {
-    app.replaceChildren(heading('CREATOR STUDIO','তোমার channel-এর পরিসংখ্যান','Views, engagement, subscriber growth এবং ad performance এক জায়গায় দেখো।'));
+    app.replaceChildren(heading('ATHARO STUDIO','তোমার channel-এর পরিসংখ্যান','Views, engagement, subscriber growth এবং ad performance এক জায়গায় দেখো।'));
     const range=select([['7','৭ দিন'],['30','৩০ দিন'],['90','৯০ দিন']],'30');
     const rangeWrap=el('div',{class:'console-panel'},[el('div',{class:'console-form'},[field('সময়সীমা',range)])]); app.append(rangeWrap,el('div',{class:'console-grid'},[stat('পরিসরের views','…'),stat('মোট subscribers','…'),stat('মোট likes','…'),stat('ভিডিও', '…')]));
     const loading=panel('পরিসংখ্যান','তথ্য লোড হচ্ছে…',empty('একটু অপেক্ষা করো।')); app.append(loading);
@@ -53,7 +53,7 @@
         const learningVideos=learning.videos||[],learningById=new Map(learningVideos.map(item=>[item.id,item]));
         const playSessions=learningVideos.reduce((sum,item)=>sum+(Number(item.sessions)||0),0);
         const avgCompletion=playSessions?learningVideos.reduce((sum,item)=>sum+(Number(item.averageCompletion)||0)*(Number(item.sessions)||0),0)/playSessions:0;
-        app.replaceChildren(heading('CREATOR STUDIO','তোমার channel-এর পরিসংখ্যান','Views, engagement, subscriber growth এবং ad performance এক জায়গায় দেখো।'),rangeWrap,
+        app.replaceChildren(heading('ATHARO STUDIO','তোমার channel-এর পরিসংখ্যান','Views, engagement, subscriber growth এবং ad performance এক জায়গায় দেখো।'),rangeWrap,
           el('div',{class:'console-grid'},[stat('মোট views',num(totals.views),'নির্বাচিত সময়ের chart নিচে'),stat('Subscribers',num(totals.subscribers),'বর্তমান channel followers'),stat('মোট likes',num(totals.likes),'সব ভিডিও মিলিয়ে'),stat('ভিডিও',num(totals.videos),'আপলোড করা সব ভিডিও'),stat('Watch time',num(Math.round((Number(learning.watchSeconds)||0)/3600))+' ঘণ্টা','Best-effort sampled watch time'),stat('Play sessions',num(playSessions),'Pseudonymous; unique people নয়'),stat('গড় completion',Math.round(avgCompletion*100)+'%','Sampled retention')]));
         rangeWrap.querySelector('select').value=String(data.days||range.value);
         const points=(data.viewsByDay||[]).slice(-14); const max=Math.max(1,...points.map(x=>Number(x.views)||0));
@@ -85,7 +85,7 @@
           return tr(cell(content),cell(statusBadge(item.status)));
         });
         app.append(panel('Copyright notices','Internal moderation records. Appeal পাঠালে site admin review করবে.',strikeRows.length?table(['Notice','Status'],strikeRows):empty('কোনো active strike নেই।')));
-      } catch(error) { app.replaceChildren(heading('CREATOR STUDIO','তথ্য লোড হয়নি','আবার চেষ্টা করো।'),el('div',{class:'console-notice',text:error.message})); }
+      } catch(error) { app.replaceChildren(heading('ATHARO STUDIO','তথ্য লোড হয়নি','আবার চেষ্টা করো।'),el('div',{class:'console-notice',text:error.message})); }
     }
     range.addEventListener('change',load);
     await load();
