@@ -2089,3 +2089,52 @@ body.admin-fullscreen { overflow-x:hidden; }
 .shop-studio-product-thumb { width:54px; height:54px; flex:0 0 54px; border-radius:10px; object-fit:cover; border:1px solid #293f34; background:#101e18; }
 .payment-expiry { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; padding:10px 12px; border:1px solid #e8c878; border-radius:10px; color:#8a6512; background:#fff8df; }
 .payment-countdown { font-variant-numeric:tabular-nums; letter-spacing:.08em; }
+/* Atharo Studio — Admin console visual parity */
+body.studio-fullscreen { background:#07120f; color:#e5f2ec; }
+body.studio-fullscreen .page-layout { background:#07120f; }
+body.studio-fullscreen .studio-hero { border-color:#293f34; background:linear-gradient(135deg,#11261d,#0b1712); box-shadow:0 14px 34px #0004; }
+body.studio-fullscreen .studio-hero h1,
+body.studio-fullscreen .console-heading h1,
+body.studio-fullscreen .console-heading h2 { color:#eff9f3; }
+body.studio-fullscreen .studio-hero p,
+body.studio-fullscreen .console-heading p { color:#9aafa4; }
+body.studio-fullscreen .studio-nav { border-color:#293f34; background:#0d1b15; box-shadow:0 8px 24px #0003; }
+body.studio-fullscreen .studio-nav button { color:#adbbb3; }
+body.studio-fullscreen .studio-nav button:hover,
+body.studio-fullscreen .studio-nav button.active { color:#9af0d9; background:#153329; }
+body.studio-fullscreen .studio-nav-group-label { color:#708b7d; letter-spacing:.12em; }
+body.studio-fullscreen .studio-content .console-panel,
+body.studio-fullscreen .studio-content .console-stat,
+body.studio-fullscreen .studio-content .milestone-progress,
+body.studio-fullscreen .studio-content .milestone-apply { border-color:#293f34; background:#112019; box-shadow:0 8px 24px #0003; }
+body.studio-fullscreen .studio-content .console-panel>p,
+body.studio-fullscreen .studio-content .console-muted,
+body.studio-fullscreen .studio-content .console-stat-label,
+body.studio-fullscreen .studio-content .console-stat-note { color:#9aafa4; }
+body.studio-fullscreen .studio-content .console-stat-value { color:#eff9f3; }
+body.studio-fullscreen .studio-content .console-table th { color:#8ea99b; background:#0d1b15; border-bottom-color:#293f34; }
+body.studio-fullscreen .studio-content .console-table td { color:#dcebe3; border-bottom-color:#20372d; }
+body.studio-fullscreen .studio-content .console-table tr:hover td { background:#142a20; }
+body.studio-fullscreen .studio-content input,
+body.studio-fullscreen .studio-content textarea,
+body.studio-fullscreen .studio-content select { color:#e5f2ec; background:#0a1712; border-color:#2b4338; }
+body.studio-fullscreen .studio-content input:focus,
+body.studio-fullscreen .studio-content textarea:focus,
+body.studio-fullscreen .studio-content select:focus { border-color:#20c2a2; box-shadow:0 0 0 3px #16b89b22; outline:0; }
+body.studio-fullscreen .studio-content .primary-cta { color:#05221a; background:#21c5a3; box-shadow:0 8px 22px #0b6e5838; }
+body.studio-fullscreen .studio-content .primary-cta:hover { background:#56d9bb; }
+body.studio-fullscreen .studio-content .outline-cta,
+body.studio-fullscreen .studio-content .console-small-button,
+body.studio-fullscreen .studio-content .console-actions button { color:#c7dbd0; background:#101e18; border-color:#2a4136; }
+body.studio-fullscreen .studio-content .outline-cta:hover,
+body.studio-fullscreen .studio-content .console-small-button:hover,
+body.studio-fullscreen .studio-content .console-actions button:hover { color:#9af0d9; background:#153329; border-color:#28745f; }
+body.studio-fullscreen .studio-content .studio-notification { border-bottom-color:#20372d; }
+body.studio-fullscreen .studio-content .studio-notification-icon { color:#8ce9d1; background:#153b30; }
+body.studio-fullscreen .studio-content .studio-content-summary .studio-summary-pill,
+body.studio-fullscreen .studio-content .studio-insight-card { border-color:#293f34; background:#0e1b16; }
+body.studio-fullscreen .studio-content .studio-summary-pill strong { color:#d4a94f; }
+body.studio-fullscreen .studio-content .console-badge.good { color:#9af0d9; border-color:#28745f; background:#12372d; }
+body.studio-fullscreen .studio-content .console-badge.warn { color:#e8c878; border-color:#705d2c; background:#2b2512; }
+body.studio-fullscreen .studio-content .console-badge.bad { color:#f09a93; border-color:#713a36; background:#2b1715; }
+@media(max-width:760px){body.studio-fullscreen .studio-hero{box-shadow:0 8px 20px #0004;}body.studio-fullscreen .studio-content .console-panel{box-shadow:0 6px 16px #0003;}}
