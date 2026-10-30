@@ -144,7 +144,7 @@ module.exports = function attachTalentMarketplace({ app, pool, withTransaction, 
       const order = r.rows[0];
       if (order.status !== 'awaiting_payment' && order.status !== 'paid' && order.status !== 'in_progress') return res.status(409).json({ error: 'Provider acceptance না পাওয়া পর্যন্ত checkout করা যাবে না।' });
       if (order.status === 'paid' || order.status === 'in_progress') return res.json({ paid: true, orderId: order.id });
-      res.status(201).json({ pending:true,manual:true,orderId:order.id,orderRef:publicOrderId(order.id),amountBdt:Number(order.amount_bdt),receivers:{bkash:process.env.PAYMENT_RECEIVER_BKASH||'',nagad:process.env.PAYMENT_RECEIVER_NAGAD||''} });
+      res.status(201).json({ pending:true,manual:true,orderId:order.id,orderRef:publicOrderId(order.id),amountBdt:Number(order.amount_bdt),createdAt:order.created_at,receivers:{bkash:process.env.PAYMENT_RECEIVER_BKASH||'',nagad:process.env.PAYMENT_RECEIVER_NAGAD||''} });
     } catch (error) { if (error.status) return res.status(error.status).json({ error:error.message }); next(error); }
   });
   app.get('/api/me/talent/orders/:id/status', requireAuth, async (req,res,next) => {

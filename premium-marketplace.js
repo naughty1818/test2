@@ -60,16 +60,16 @@ module.exports = function attachPremiumMarketplace({ app, pool, withTransaction,
       if (!item || !item.is_premium || !item.is_public) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Premium content not found.' }); }
       if (item.owner_sub === buyer) { await client.query('COMMIT'); return res.json({ owned: true, message: 'Creator access granted.' }); }
       const itemColumn = productType === 'playlist' ? 'playlist_id' : 'video_id';
-      const existing = await client.query(`SELECT id,status FROM premium_playlist_orders WHERE ${itemColumn}=$1 AND buyer_sub=$2 AND status IN ('pending','paid') ORDER BY created_at DESC LIMIT 1`, [id, buyer]);
+      const existing = await client.query(`SELECT id,status,created_at FROM premium_playlist_orders WHERE ${itemColumn}=$1 AND buyer_sub=$2 AND status IN ('pending','paid') ORDER BY created_at DESC LIMIT 1`, [id, buyer]);
       if (existing.rows[0]?.status === 'paid') { await client.query('COMMIT'); return res.json({ owned: true, orderId: existing.rows[0].id, message: 'এই content আগে থেকেই কেনা আছে।' }); }
-      if (existing.rows[0]) { await client.query('COMMIT'); return res.json({ pending: true, manual: true, orderId: existing.rows[0].id, amountBdt: Number(item.price_bdt), receivers: { bkash: process.env.PAYMENT_RECEIVER_BKASH || '', nagad: process.env.PAYMENT_RECEIVER_NAGAD || '' } }); }
+      if (existing.rows[0]) { await client.query('COMMIT'); return res.json({ pending: true, manual: true, orderId: existing.rows[0].id, amountBdt: Number(item.price_bdt), createdAt: existing.rows[0].created_at, receivers: { bkash: process.env.PAYMENT_RECEIVER_BKASH || '', nagad: process.env.PAYMENT_RECEIVER_NAGAD || '' } }); }
       orderId = crypto.randomUUID();
       await client.query(`INSERT INTO premium_playlist_orders(id,playlist_id,video_id,buyer_sub,amount_bdt,status,payment_provider,provider_reference)
         VALUES($1,$2,$3,$4,$5,'pending','sms_manual',$6)`, [orderId, productType === 'playlist' ? id : null, productType === 'video' ? id : null, buyer, item.price_bdt, publicOrderId(orderId)]);
       await client.query('COMMIT');
     } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
     finally { client.release(); }
-    return res.status(201).json({ pending: true, manual: true, orderId, orderRef: publicOrderId(orderId), amountBdt: Number(item.price_bdt), receivers: { bkash: process.env.PAYMENT_RECEIVER_BKASH || '', nagad: process.env.PAYMENT_RECEIVER_NAGAD || '' } });
+    return res.status(201).json({ pending: true, manual: true, orderId, orderRef: publicOrderId(orderId), amountBdt: Number(item.price_bdt), createdAt: new Date().toISOString(), receivers: { bkash: process.env.PAYMENT_RECEIVER_BKASH || '', nagad: process.env.PAYMENT_RECEIVER_NAGAD || '' } });
   }
 
   app.get('/api/premium/playlists', async (req, res, next) => {

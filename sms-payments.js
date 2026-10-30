@@ -148,8 +148,8 @@ function attachSmsPayments({ app, pool, withTransaction, requireAuth, requireAct
   });
 
   app.post('/api/payments/sms/verify', requireAuth, requireActive, async (req, res, next) => {
-    const orderKind = normalizeClaim(req.body?.orderKind, req.body?.orderId), orderId = String(req.body?.orderId || ''), provider = String(req.body?.provider || '').toLowerCase(), phone = normalizePhone(req.body?.phone);
-    if (!orderKind || !orderId || !PROVIDERS.has(provider) || !PHONE_RE.test(phone)) return res.status(400).json({ error: 'Payment method এবং সঠিক বাংলাদেশি ফোন নম্বর দিন।' });
+    const orderKind = normalizeClaim(req.body?.orderKind, req.body?.orderId), orderId = String(req.body?.orderId || ''), provider = String(req.body?.provider || '').toLowerCase(), phone = normalizePhone(req.body?.phone), trxId = String(req.body?.trxId || '').trim().toUpperCase();
+    if (!orderKind || !orderId || !PROVIDERS.has(provider) || !PHONE_RE.test(phone) || (trxId && !TRX_RE.test(trxId))) return res.status(400).json({ error: 'Payment method, ফোন নম্বর এবং valid TrxID দিন।' });
     try {
       const result = await withTransaction(async client => {
         const table = { premium: 'premium_playlist_orders', shop: 'shop_orders', talent: 'talent_orders' }[orderKind];
@@ -158,8 +158,10 @@ function attachSmsPayments({ app, pool, withTransaction, requireAuth, requireAct
         const pending = { premium: "status='pending'", shop: "payment_status='pending'", talent: "status='awaiting_payment'" }[orderKind];
         const order = await client.query(`SELECT id,${amountColumn} AS amount,created_at FROM ${table} WHERE id=$1 AND ${ownerColumn}=$2 AND ${pending} FOR UPDATE`, [orderId, req.auth.session.sub]);
         if (!order.rowCount) return { ok: false, message: 'অর্ডারটি যাচাই করা যাচ্ছে না।' };
-        const tx = await client.query(`SELECT * FROM sms_transactions WHERE provider=$1 AND sender_phone=$2 AND status='unused' AND amount_bdt=$3 AND received_at>=NOW()-INTERVAL '10 minutes' AND received_at>=NOW()-($4 * INTERVAL '1 hour') ORDER BY received_at DESC FOR UPDATE`, [provider, phone, order.rows[0].amount, windowHours]);
-        if (tx.rowCount > 1) return { ok: false, message: 'একই amount-এর একাধিক সাম্প্রতিক SMS পাওয়া গেছে। কিছুক্ষণ পরে আবার চেষ্টা করুন।' };
+        if (Date.now() > new Date(order.rows[0].created_at).getTime() + 10 * 60 * 1000) return { ok: false, expired: true, message: 'এই payment window-এর ১০ মিনিট শেষ হয়েছে। নতুন checkout করে আবার চেষ্টা করুন।' };
+        const tx = await client.query(`SELECT * FROM sms_transactions WHERE provider=$1 AND sender_phone=$2 AND status='unused' AND amount_bdt=$3 AND received_at>=NOW()-INTERVAL '10 minutes' AND received_at>=NOW()-($4 * INTERVAL '1 hour') AND ($5='' OR trx_id=$5) ORDER BY received_at DESC FOR UPDATE`, [provider, phone, order.rows[0].amount, windowHours, trxId]);
+        if (tx.rowCount > 1 && !trxId) return { ok: false, needsTrxId: true, message: 'এই amount ও নম্বরের একাধিক SMS পাওয়া গেছে। SMS-এর TrxID লিখে আবার যাচাই করুন।' };
+        if (!tx.rowCount && trxId) return { ok: false, needsTrxId: true, message: 'এই TrxID, নম্বর ও amount-এর সাম্প্রতিক SMS পাওয়া যায়নি। TrxID ঠিক আছে কি না দেখুন।' };
         const row = tx.rows[0], valid = Boolean(row) && new Date(row.received_at) >= new Date(new Date(order.rows[0].created_at).getTime() - 10 * 60 * 1000);
         if (!row) return { ok: false, message: 'সর্বশেষ ১০ মিনিটে এই নম্বর, amount ও method-এর SMS পাওয়া যায়নি।' };
         await client.query('INSERT INTO sms_payment_claims(order_kind,order_id,buyer_sub,phone,trx_id,status,attempts) VALUES($1,$2,$3,$4,$5,$6,1) ON CONFLICT(order_kind,order_id,trx_id) DO UPDATE SET attempts=sms_payment_claims.attempts+1', [orderKind, orderId, req.auth.session.sub, phone, row.trx_id, valid ? 'matched' : 'pending']);
