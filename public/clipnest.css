@@ -2081,3 +2081,8 @@ body.admin-fullscreen { overflow-x:hidden; }
 .studio-summary-pill strong { color:#d4a94f; font-size:18px; }
 .studio-summary-pill small { color:#8ea99b; font-size:9px; }
 @media(max-width:760px){.studio-content-summary{grid-template-columns:repeat(2,minmax(0,1fr));}}
+.studio-insight-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.studio-insight-card { display:flex; flex-direction:column; gap:7px; min-height:112px; padding:16px; border:1px solid #293f34; border-radius:15px; background:#0e1b16; }
+.studio-insight-card strong { color:#e5f2ec; font-size:15px; line-height:1.35; }
+.studio-insight-card p { margin:0; color:#9aafa4; font-size:11px; line-height:1.65; }
+@media(max-width:760px){.studio-insight-grid{grid-template-columns:1fr;}}
