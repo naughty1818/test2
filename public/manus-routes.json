@@ -61,6 +61,22 @@
       "title": "Playlist"
     },
     {
+      "path": "/shop",
+      "title": "Atharo Shop"
+    },
+    {
+      "path": "/shop/product/:id",
+      "title": "Shop product"
+    },
+    {
+      "path": "/shop/cart",
+      "title": "Shop cart"
+    },
+    {
+      "path": "/shop/orders",
+      "title": "My Shop orders"
+    },
+    {
       "path": "/talent",
       "title": "Atharo Talent marketplace"
     },

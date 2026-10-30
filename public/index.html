@@ -143,6 +143,7 @@
   <script src="/console.js?v=admin-live-duties-2"></script>
   <script src="/studio.js?v=atharo-talent-1"></script>
   <script src="/talent.js?v=atharo-bottom-icons-1"></script>
+  <script src="/shop.js?v=shop-ui-1"></script>
   <script>
   'use strict';
   const app = document.getElementById('app');
@@ -1183,12 +1184,20 @@
     }catch(error){videoShelf.replaceChildren(emptyState('Premium catalog লোড হয়নি',error.message));}
   }
   async function renderShop(token) {
-    updateNav('/shop');
-    const page=$('section',{class:'premium-page'}),hero=$('header',{class:'premium-hero'},[$('div',{},[$('span',{class:'section-kicker premium-kicker',text:'ATHARO · SHOP'}),$('h1',{text:'ভিডিও দেখো, উদ্যোক্তাদের পণ্য আবিষ্কার করো'}),$('p',{text:'প্রতিটি Shop seller Admin-approved। পণ্যের ভালো দিক, সীমাবদ্ধতা ও বিস্তারিত দেখে বুঝে কিনুন।'})])]),shelf=$('div',{class:'premium-catalog'});page.append(hero,$('section',{class:'premium-section'},[$('div',{class:'page-heading'},[$('div',{},[$('span',{class:'section-kicker',text:'APPROVED PRODUCTS'}),$('h2',{text:'নতুন পণ্য'})])]),shelf]));setPage([page]);
-    try{const data=await jsonFetch('/api/shop/products');if(token!==state.routeToken)return;const products=data.products||[];if(!products.length){shelf.append(emptyState('এখনো approved product নেই','উদ্যোক্তারা product submit করলে Admin review-এর পর এখানে দেখা যাবে।','Creator Studio','/studio?tab=shop'));return;}products.forEach(p=>{const card=$('article',{class:'premium-card'},[$('div',{class:'premium-card-top'},[$('span',{class:'premium-badge',text:'VERIFIED SHOP'}),$('span',{class:'premium-price',text:'৳ '+number(p.priceBdt)})]),$('div',{class:'premium-art',text:'🛍'}),$('div',{class:'premium-card-copy'},[$('span',{class:'section-kicker',text:p.shopName||'Atharo seller'}),$('h2',{text:p.name}),$('p',{text:p.description}),$('div',{class:'premium-card-meta'},[$('span',{text:p.category}),$('span',{text:'স্টক '+number(p.stockQuantity)})])]),$('button',{class:'primary-cta',text:'কার্টে যোগ করো',onClick:async()=>{if(!state.session.user){notify('কার্টে যোগ করতে আগে লগইন করো।','error');navigate('/login');return;}try{await jsonFetch('/api/me/cart',{method:'POST',body:{productId:p.id,quantity:1}});notify('পণ্যটি কার্টে যোগ হয়েছে।');if(location.pathname==='/shop')await renderShopCart(page);}catch(error){notify(error.message,'error');}}})]);shelf.append(card);});if(state.session.user)await renderShopCart(page);}catch(error){shelf.append(emptyState('Shop catalog লোড হয়নি',error.message));}
+    window.AtharoShopContext={jsonFetch,notify,navigate,session:state.session};
+    return window.AtharoShop.renderCatalog(app);
   }
-  async function renderShopCart(page){
-    const old=page.querySelector('.shop-cart-panel');if(old)old.remove();const data=await jsonFetch('/api/me/cart'),items=data.items||[];if(!items.length)return;const total=items.reduce((sum,item)=>sum+Number(item.priceBdt)*Number(item.quantity),0),address=$('textarea',{rows:'2',required:'',placeholder:'ডেলিভারি ঠিকানা'}),panel=$('section',{class:'console-panel shop-cart-panel'},[$('h2',{text:'তোমার Cart'}),$('p',{text:number(items.length)+'টি পণ্য · মোট ৳ '+number(total)}),$('div',{class:'studio-notification-list'},items.map(item=>$('div',{class:'studio-notification'},[$('span',{text:item.name+' × '+item.quantity}),$('strong',{text:'৳ '+number(Number(item.priceBdt)*Number(item.quantity))})]))),$('label',{class:'form-field'},[$('span',{text:'Delivery address'}),address])]);const checkout=$('button',{class:'primary-cta',text:'Order তৈরি করে payment করো'});checkout.addEventListener('click',async()=>{checkout.disabled=true;try{const order=await jsonFetch('/api/me/orders',{method:'POST',body:{shippingAddress:address.value.trim()}}),payment=await jsonFetch('/api/me/orders/'+encodeURIComponent(order.order.id)+'/checkout',{method:'POST',body:{}});payment.orderKind='shop';payment.returnPath='/shop';await showSmsPaymentModal(payment);}catch(error){notify(error.message,'error');checkout.disabled=false;}});panel.append($('div',{class:'console-form-actions'},[checkout]));page.append(panel);
+  async function renderShopProduct(id) {
+    window.AtharoShopContext={jsonFetch,notify,navigate,session:state.session};
+    return window.AtharoShop.renderDetail(app,id);
+  }
+  async function renderShopCart() {
+    window.AtharoShopContext={jsonFetch,notify,navigate,session:state.session};
+    return window.AtharoShop.renderCart(app);
+  }
+  async function renderShopOrders() {
+    window.AtharoShopContext={jsonFetch,notify,navigate,session:state.session};
+    return window.AtharoShop.renderOrders(app);
   }
   async function renderPremiumDetail(id,token) {
     const page=$('section',{class:'premium-page'});setPage([page]);
@@ -1236,6 +1245,9 @@
     if (path === '/premium') { document.title='Premium creator playlists · Atharo'; return renderPremium(token); }
     if (path === '/payment') { document.title='Payment · Atharo'; if(!state.session.user)return renderLogin('Payment করতে আগে লগইন করো।'); return renderPaymentPage(token); }
     if (path === '/shop') { document.title='Shop · Atharo'; return renderShop(token); }
+    if (path === '/shop/cart') { document.title='Cart · Atharo Shop'; return renderShopCart(); }
+    if (path === '/shop/orders') { document.title='আমার Shop অর্ডার · Atharo'; return renderShopOrders(); }
+    if (path.startsWith('/shop/product/')) { const id=decodeURIComponent(path.slice('/shop/product/'.length)); document.title='Product · Atharo Shop'; return renderShopProduct(id); }
     if (path === '/talent') { document.title='Atharo Talent · দক্ষ মানুষ খুঁজুন'; window.AtharoTalentContext={jsonFetch,notify,navigate,session:state.session}; return window.AtharoTalent.renderCatalog(app); }
     if (path === '/talent/orders') { document.title='Talent orders · Atharo'; window.AtharoTalentContext={jsonFetch,notify,navigate,session:state.session}; if(!state.session.user)return renderLogin('Talent order দেখতে আগে লগইন করুন।'); return window.AtharoTalent.renderOrders(app); }
     if (path === '/talent/my-orders') { document.title='আমার Talent অর্ডার · Atharo'; window.AtharoTalentContext={jsonFetch,notify,navigate,session:state.session}; if(!state.session.user)return renderLogin('নিজের Talent order দেখতে আগে লগইন করুন।'); return window.AtharoTalent.renderMyOrders(app); }
