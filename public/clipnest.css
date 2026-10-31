@@ -2202,3 +2202,30 @@ body.studio-fullscreen .studio-content .console-badge.bad { color:#a13d3d; borde
 body.studio-fullscreen .studio-content .studio-notification { border-bottom-color:#e1ebe5; }
 body.studio-fullscreen .studio-content .studio-notification-icon { color:#087252; background:#e5f8ef; }
 @media(max-width:900px){body.studio-fullscreen .studio-layout{grid-template-columns:1fr}body.studio-fullscreen .studio-nav{position:static;min-height:0;flex-direction:row;align-items:center;gap:4px;padding:8px 12px;overflow-x:auto}body.studio-fullscreen .studio-nav-brand{display:flex;flex:0 0 auto;min-height:42px;margin:0 8px 0 0;padding:6px 10px;border-radius:8px}body.studio-fullscreen .studio-nav-brand img{width:24px;height:24px}body.studio-fullscreen .studio-nav-brand strong,body.studio-fullscreen .studio-nav-brand span{display:none}body.studio-fullscreen .studio-nav-group-label{display:none}body.studio-fullscreen .studio-nav button{flex:0 0 auto;width:auto;min-height:40px;padding:7px 9px}body.studio-fullscreen .studio-nav-label{max-width:110px}body.studio-fullscreen .studio-content{padding:22px 15px 36px}}
+/* Atharo Studio — light canvas contrast correction */
+body.studio-fullscreen .studio-content,
+body.studio-fullscreen .studio-content .console-heading,
+body.studio-fullscreen .studio-content .console-heading h1,
+body.studio-fullscreen .studio-content .console-heading h2,
+body.studio-fullscreen .studio-content .console-heading h3 { color:#1d2b24; }
+body.studio-fullscreen .studio-content .section-kicker,
+body.studio-fullscreen .studio-content .hero-eyebrow { color:#087252; }
+body.studio-fullscreen .studio-content p,
+body.studio-fullscreen .studio-content .console-panel>p,
+body.studio-fullscreen .studio-content .console-muted,
+body.studio-fullscreen .studio-content .studio-inline-note,
+body.studio-fullscreen .studio-content .studio-resource span,
+body.studio-fullscreen .studio-content .studio-notification p,
+body.studio-fullscreen .studio-content .studio-hero p { color:#52675d; }
+body.studio-fullscreen .studio-content .console-panel h2,
+body.studio-fullscreen .studio-content .console-stat-value,
+body.studio-fullscreen .studio-content .console-table td strong,
+body.studio-fullscreen .studio-content .studio-resource strong { color:#1d2b24; }
+body.studio-fullscreen .studio-content .console-stat-label,
+body.studio-fullscreen .studio-content .console-stat-note,
+body.studio-fullscreen .studio-content .console-table th { color:#52675d; }
+body.studio-fullscreen .studio-content .console-table td { color:#354a3e; }
+body.studio-fullscreen .studio-content .studio-resource,
+body.studio-fullscreen .studio-content .studio-cover-preview { color:#1d2b24; }
+body.studio-fullscreen .studio-content a:not(.primary-cta):not(.outline-cta) { color:#087252; }
+body.studio-fullscreen .studio-content a:not(.primary-cta):not(.outline-cta):hover { color:#045b41; }
