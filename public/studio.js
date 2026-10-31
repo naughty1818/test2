@@ -2,7 +2,7 @@
 (() => {
   const tabGroups=[['WORKSPACE',[['overview','⌂','Overview']]],['PUBLISH',[['content','▤','Content'],['playlists','▣','Playlists'],['premium','◇','Premium sales']]],['ENGAGE',[['comments','◌','Comments'],['audience','◎','Audience'],['notifications','♧','Activity']]],['EARN',[['wallet','৳','Wallet'],['shop','◇','Shop'],['talent','✦','Atharo Talent']]],['MANAGE',[['channel','◉','Channel'],['resources','✳','Atharo guide'],['copyright','◇','Copyright & Safety']]]];
   const tabs=tabGroups.flatMap(([,items])=>items);
-  function visibleTabGroups(caps={}){return tabGroups.map(([group,items])=>[group,items.filter(([id])=>id!=='wallet'||caps.monetized).filter(([id])=>id!=='shop'||caps.shop).filter(([id])=>id!=='talent'||caps.talent).filter(([id])=>id!=='premium'||caps.premium)]).filter(([,items])=>items.length);}
+  function visibleTabGroups(caps={}){return tabGroups.map(([group,items])=>[group,items.filter(([id])=>id!=='shop'||caps.shop).filter(([id])=>id!=='talent'||caps.talent).filter(([id])=>id!=='premium'||caps.premium)]).filter(([,items])=>items.length);}
   const categories=['ভ্রমণ','রান্না','ক্রিয়েটর','গল্প','শেখা','অন্যান্য'];
   const visibilities=['Public','Unlisted','Private'];
   let ctx,root,active='overview',days=30,cache={analytics:null,learning:null,content:null,audience:null,comments:null,notifications:null,playlists:null,premium:null,shop:null,strikes:null};
