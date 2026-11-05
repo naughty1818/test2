@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const { encryptPayoutDetails } = require('./payout-security');
+const { canSellPremium } = require('./account-policies');
 
 const money = value => Number(Number(value || 0).toFixed(2));
 function publicOrderId(id) { return `ATH-${id.replace(/-/g, '').slice(0, 20).toUpperCase()}`; }
@@ -213,6 +214,8 @@ module.exports = function attachPremiumMarketplace({ app, pool, withTransaction,
       const premium=Boolean(req.body?.isPremium),price=Number(req.body?.priceBdt);
       if(premium&&(!Number.isFinite(price)||price<=0||price>1000000))return res.status(400).json({error:'Premium price 1 থেকে 1,000,000 BDT-এর মধ্যে দিন।'});
       if(premium){
+        const owner=await pool.query('SELECT channel_type FROM profiles WHERE sub=$1',[req.auth.session.sub]);
+        if(!owner.rowCount||!canSellPremium(owner.rows[0].channel_type))return res.status(403).json({error:'Premium sales are available only to Personal Creator and Education channels.'});
         const visibility=await pool.query('SELECT visibility FROM videos WHERE id=$1 AND owner_sub=$2',[req.params.id,req.auth.session.sub]);
         if(!visibility.rowCount)return res.status(404).json({error:'Creator video not found.'});
         if(visibility.rows[0].visibility!=='Public')return res.status(400).json({error:'Premium video publish করতে visibility Public করুন।'});
@@ -221,5 +224,26 @@ module.exports = function attachPremiumMarketplace({ app, pool, withTransaction,
       if(!result.rowCount)return res.status(404).json({error:'Creator video not found.'});
       res.json({video:{id:result.rows[0].id,title:result.rows[0].title,isPremium:Boolean(result.rows[0].is_premium),priceBdt:Number(result.rows[0].price_bdt)||0}});
     }catch(error){next(error);}
+  });
+  app.patch('/api/creator/premium/playlists/:id',requireAuth,requireActive,requireChannel,async(req,res,next)=>{
+    try{
+      if(!validUuid(req.params.id))return res.status(400).json({error:'Invalid playlist id.'});
+      const premium=Boolean(req.body?.isPremium),price=Number(req.body?.priceBdt),previewIds=Array.isArray(req.body?.previewVideoIds)?[...new Set(req.body.previewVideoIds.map(String))]:[];
+      if(premium&&(!Number.isFinite(price)||price<=0||price>1000000))return res.status(400).json({error:'Premium playlist price 1 থেকে 1,000,000 BDT-এর মধ্যে দিন।'});
+      if(premium){
+        const owner=await pool.query('SELECT channel_type FROM profiles WHERE sub=$1',[req.auth.session.sub]);
+        if(!owner.rowCount||!canSellPremium(owner.rows[0].channel_type))return res.status(403).json({error:'Premium sales are available only to Personal Creator and Education channels.'});
+      }
+      const saved=await withTransaction(async client=>{
+        const playlist=await client.query('SELECT id,is_public FROM playlists WHERE id=$1 AND owner_sub=$2 AND is_creator_playlist=TRUE FOR UPDATE',[req.params.id,req.auth.session.sub]);
+        if(!playlist.rowCount)throw Object.assign(new Error('Creator playlist not found.'),{status:404});
+        if(premium&&!playlist.rows[0].is_public)throw Object.assign(new Error('Premium series বিক্রি করতে playlist Public করুন।'),{status:400});
+        const members=await client.query('SELECT video_id FROM playlist_items WHERE playlist_id=$1',[req.params.id]);
+        if(previewIds.some(id=>!members.rows.some(row=>row.video_id===id)))throw Object.assign(new Error('Free preview-এ শুধু এই playlist-এর video বেছে নিন.'),{status:400});
+        await client.query('UPDATE playlist_items SET is_preview=(video_id=ANY($2::text[])) WHERE playlist_id=$1',[req.params.id,previewIds]);
+        return (await client.query(`UPDATE playlists SET is_premium=$3,price_bdt=$4,updated_at=NOW() WHERE id=$1 AND owner_sub=$2 RETURNING id,name,is_premium,price_bdt,is_public`,[req.params.id,req.auth.session.sub,premium,premium?price.toFixed(2):'0'])).rows[0];
+      });
+      res.json({playlist:{id:saved.id,name:saved.name,isPremium:Boolean(saved.is_premium),priceBdt:Number(saved.price_bdt)||0,isPublic:Boolean(saved.is_public),previewVideoIds:previewIds}});
+    }catch(error){if(error.status)return res.status(error.status).json({error:error.message});next(error);}
   });
 };

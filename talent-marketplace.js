@@ -4,6 +4,7 @@ const crypto = require('crypto');
 
 const CATEGORIES = new Set(['software-development', 'web-design', 'tutoring', 'graphic-design', 'writing-translation', 'video-editing', 'other']);
 const STATUSES = new Set(['draft', 'published', 'paused']);
+const TALENT_SELLER_TYPES = new Set(['personal','education']);
 const ACTIVE_PAYMENT_STATUSES = new Set(['completed', 'complete', 'paid', 'success', 'successful', 'succeeded']);
 const safe = (value, max) => String(value || '').trim().slice(0, max);
 const money = value => Number(Number(value || 0).toFixed(2));
@@ -18,6 +19,7 @@ module.exports = function attachTalentMarketplace({ app, pool, withTransaction, 
     handle: row.handle || '', avatarUrl: row.avatar_url || null, packages: row.packages || [],
     portfolio: row.portfolio || [], createdAt: row.created_at
   });
+  const requireTalentSeller=(req,res,next)=>TALENT_SELLER_TYPES.has(req.auth?.profile?.channel_type)?next():res.status(403).json({error:'Talent service listings are available only to Personal Creator and Education channels.'});
   function cleanPackages(input) {
     if (!Array.isArray(input) || input.length < 1 || input.length > 3) throw Object.assign(new Error('১ থেকে ৩টি package যোগ করুন।'), { status: 400 });
     return input.map((p, i) => {
@@ -50,13 +52,13 @@ module.exports = function attachTalentMarketplace({ app, pool, withTransaction, 
       res.json({ listing: shape(result.rows[0]) });
     } catch (error) { next(error); }
   });
-  app.get('/api/creator/talent/listings', requireAuth, requireChannel, async (req, res, next) => {
+  app.get('/api/creator/talent/listings', requireAuth, requireChannel, requireTalentSeller, async (req, res, next) => {
     try {
       const result = await listingQuery('l.provider_sub=$1', [req.auth.session.sub]);
       res.json({ listings: result.rows.map(shape) });
     } catch (error) { next(error); }
   });
-  app.post('/api/creator/talent/listings', requireAuth, requireActive, requireChannel, async (req, res, next) => {
+  app.post('/api/creator/talent/listings', requireAuth, requireActive, requireChannel, requireTalentSeller, async (req, res, next) => {
     try {
       const title = safe(req.body?.title, 120), description = safe(req.body?.description, 4000), category = safe(req.body?.category, 50), requirements = safe(req.body?.requirements, 2000);
       const skills = Array.isArray(req.body?.skills) ? [...new Set(req.body.skills.map(x => safe(x, 40)).filter(Boolean))].slice(0, 12) : [];
@@ -124,7 +126,7 @@ module.exports = function attachTalentMarketplace({ app, pool, withTransaction, 
       res.json({ orders: result.rows.map(r => ({ id:r.id,status:r.status,amountBdt:Number(r.amount_bdt),createdAt:r.created_at,contract:r.contract_snapshot,brief:r.buyer_brief,role:r.role,otherName:r.other_name||'Atharo user',otherHandle:r.other_handle||'' })) });
     } catch (error) { next(error); }
   });
-  app.post('/api/creator/talent/orders/:id/accept', requireAuth, requireActive, requireChannel, async (req, res, next) => {
+  app.post('/api/creator/talent/orders/:id/accept', requireAuth, requireActive, requireChannel, requireTalentSeller, async (req, res, next) => {
     try {
       if (!validUuid(req.params.id)) return res.status(400).json({ error: 'Invalid order id.' });
       const changed = await withTransaction(async client => {
@@ -155,7 +157,7 @@ module.exports = function attachTalentMarketplace({ app, pool, withTransaction, 
       res.json({ orderId:req.params.id,status:latest.rows[0].status,paid:Boolean(latest.rows[0].paid_at) });
     } catch (error) { next(error); }
   });
-  app.post('/api/creator/talent/orders/:id/submit', requireAuth, requireActive, requireChannel, async (req,res,next) => {
+  app.post('/api/creator/talent/orders/:id/submit', requireAuth, requireActive, requireChannel, requireTalentSeller, async (req,res,next) => {
     try {
       const note = safe(req.body?.note,2000), url = safe(req.body?.deliveryUrl,2048);
       if (note.length < 5 && !/^https:\/\//i.test(url)) return res.status(400).json({ error:'কাজের নোট বা HTTPS delivery link দিন।' });

@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { pool, withTransaction } = require('./db');
 const { decryptPayoutDetails } = require('./payout-security');
 const { requiredAdminPermission, hasAdminPermission } = require('./admin-access');
+const { canEarnAdRevenue, canReceiveCampaign } = require('./account-policies');
 const {
   DEFAULT_AD_LAYOUTS,
   normalizeAdLayouts,
@@ -93,6 +94,10 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
         const a=locked.rows[0];if(a.status!=='pending')throw Object.assign(new Error('This application has already been decided.'),{status:409});
         let handle=null;
         if(decision==='approved'){
+          await client.query('SELECT pg_advisory_xact_lock(hashtext(LOWER($1)))',[a.channel_name.trim()]);
+          const duplicate=await client.query(`SELECT 1 FROM profiles WHERE LOWER(BTRIM(display_name))=LOWER(BTRIM($1)) AND sub<>$2
+            UNION ALL SELECT 1 FROM channel_applications WHERE LOWER(BTRIM(channel_name))=LOWER(BTRIM($1)) AND status='pending' AND user_sub<>$2 LIMIT 1`,[a.channel_name,a.user_sub]);
+          if(duplicate.rowCount)throw Object.assign(new Error('Channel name is already in use. Ask the applicant to choose a unique name.'),{status:409});
           const user=await client.query('SELECT email,google_name,google_picture FROM app_users WHERE google_sub=$1 FOR UPDATE',[a.user_sub]);
           if(!user.rowCount)throw Object.assign(new Error('Applicant account was not found.'),{status:404});
           const base=makeHandle(user.rows[0].email||a.channel_name);
@@ -283,8 +288,13 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const placement = String(req.query.placement || '');
       const device = ['mobile','desktop'].includes(String(req.query.device || '')) ? String(req.query.device) : (/Mobile|Android|iPhone|iPad/i.test(req.get('user-agent') || '') ? 'mobile' : 'desktop');
       const channelHandle = req.query.handle ? String(req.query.handle).replace(/^@/,'').trim() : null;
+      const auth=await loadSession(req),viewerType=auth?.session.viewerType||'normal';
       if (!['feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'].includes(placement)) return fail(res, 'Invalid ad placement.');
       if (placement === 'channel' && !channelHandle) return fail(res, 'Channel handle is required.');
+      if(placement==='channel'){
+        const channel=await pool.query('SELECT channel_type FROM profiles WHERE LOWER(handle)=LOWER($1)',[channelHandle]);
+        if(!channel.rowCount||channel.rows[0].channel_type==='organization')return res.json({ad:null,settings:{placement}});
+      }
       const settings = await pool.query('SELECT ads_enabled,ad_feed_enabled,ad_watch_sidebar_enabled,ad_channel_enabled,ad_sticky_enabled,ad_postroll_enabled,ad_l_banner_enabled,l_banner_duration_seconds,l_banner_skippable,feed_ad_every_rows,ad_layout_settings FROM platform_settings WHERE id=1');
       const settingKey = {feed:'ad_feed_enabled',watch_sidebar:'ad_watch_sidebar_enabled',channel:'ad_channel_enabled',sticky_banner:'ad_sticky_enabled',postroll:'ad_postroll_enabled',l_banner:'ad_l_banner_enabled'}[placement];
       const settingsRow = settings.rows[0] || {};
@@ -293,7 +303,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       if (!settingsRow.ads_enabled || !settingsRow[settingKey]) return res.json({ ad: null, settings: responseSettings });
       // Caps count UTC-month impression events; ad_monthly_serves only smooths rotation.
       const row = await withTransaction(async client => {
-        const candidates = await client.query(`SELECT c.id,c.title,c.sponsor_name,c.placement,c.creative_url,c.desktop_creative_url,c.mobile_creative_url,c.destination_url,
+        const candidates = await client.query(`SELECT c.id,c.title,c.sponsor_name,c.placement,c.is_islamic,c.creative_url,c.desktop_creative_url,c.mobile_creative_url,c.destination_url,
             c.l_bottom_creative_url,c.l_bottom_destination_url,c.monthly_impression_cap,
             COALESCE(ms.served_count,0)::int AS monthly_served,
             COALESCE(mi.impression_count,0)::int AS monthly_impressions
@@ -304,13 +314,13 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
             WHERE e.campaign_id=c.id AND e.event_type='impression'
               AND e.created_at >= (DATE_TRUNC('month',NOW() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
           ) mi ON TRUE
-          WHERE c.placement=$1 AND c.status='active'
+          WHERE c.placement=$1 AND c.status='active' AND (c.is_islamic=TRUE OR $2='normal')
             AND (c.starts_at IS NULL OR c.starts_at<=NOW()) AND (c.ends_at IS NULL OR c.ends_at>NOW())
             AND (c.monthly_impression_cap IS NULL OR COALESCE(mi.impression_count,0)<c.monthly_impression_cap)
           ORDER BY COALESCE(ms.served_count,0) ASC,
             (SELECT COUNT(*) FROM ad_events e WHERE e.campaign_id=c.id AND e.event_type='impression') ASC,
             c.created_at ASC
-          LIMIT 1 FOR UPDATE OF c SKIP LOCKED`, [placement]);
+          LIMIT 1 FOR UPDATE OF c SKIP LOCKED`, [placement,viewerType]);
         const candidate=candidates.rows[0];
         if(!candidate)return null;
         const reserved=await client.query(`INSERT INTO ad_monthly_serves(campaign_id,month_start,served_count)
@@ -326,6 +336,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
         title: row.title,
         sponsorName: row.sponsor_name,
         placement: row.placement,
+        isIslamic: Boolean(row.is_islamic),
         creativeUrl: device === 'mobile' ? (row.mobile_creative_url || row.creative_url) : (row.desktop_creative_url || row.creative_url),
         desktopCreativeUrl: row.desktop_creative_url || row.creative_url,
         mobileCreativeUrl: row.mobile_creative_url || row.creative_url,
@@ -350,25 +361,29 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const channelHandle = req.body?.channelHandle ? String(req.body.channelHandle).replace(/^@/,'').trim() : null;
       if (!validUuid(campaignId) || !['impression','click'].includes(eventType)) return fail(res, 'Invalid ad event.');
       if (videoId && !validVideoId(videoId)) return fail(res, 'Invalid video id.');
-      const campaignResult = await pool.query(`SELECT id,cpm_bdt,placement FROM ad_campaigns WHERE id=$1 AND status='active'
+      const campaignResult = await pool.query(`SELECT id,cpm_bdt,placement,is_islamic FROM ad_campaigns WHERE id=$1 AND status='active'
         AND (starts_at IS NULL OR starts_at<=NOW()) AND (ends_at IS NULL OR ends_at>NOW())`, [campaignId]);
       if (!campaignResult.rowCount) return jsonError(res, 404, 'Ad campaign unavailable.');
+      const auth=await loadSession(req),viewerType=auth?.session.viewerType||'normal';
+      if(!canReceiveCampaign({viewerType,isIslamic:campaignResult.rows[0].is_islamic}))return jsonError(res,404,'Ad campaign unavailable.');
       const placement = campaignResult.rows[0].placement;
       if ((placement === 'watch_sidebar' && !videoId) || (['feed','sticky_banner','postroll','l_banner'].includes(placement) && (videoId || channelHandle)) || (placement === 'channel' && (!channelHandle || videoId))) return fail(res, 'Ad placement and context do not match.');
       let creatorSub = null;
       let creatorEligible = false;
       if (channelHandle) {
-        const channel = await pool.query(`SELECT p.sub,p.monetization_status FROM profiles p WHERE lower(p.handle)=lower($1)`, [channelHandle]);
+        const channel = await pool.query(`SELECT p.sub,p.monetization_status,p.channel_type FROM profiles p WHERE lower(p.handle)=lower($1)`, [channelHandle]);
         if (!channel.rowCount) return jsonError(res, 404, 'Ad channel context unavailable.');
         creatorSub = channel.rows[0].sub || null;
-        creatorEligible = channel.rows[0].monetization_status === 'enabled';
+        creatorEligible = canEarnAdRevenue({channelType:channel.rows[0].channel_type,creatorStatus:channel.rows[0].monetization_status,monetizationEnabled:true});
       } else if (videoId) {
-        const video = await pool.query(`SELECT v.owner_sub,v.visibility,v.moderation_status,u.account_status,p.monetization_status
+        const video = await pool.query(`SELECT v.owner_sub,v.visibility,v.moderation_status,v.is_premium,
+            EXISTS(SELECT 1 FROM playlist_items pi JOIN playlists pl ON pl.id=pi.playlist_id WHERE pi.video_id=v.id AND pl.owner_sub=v.owner_sub AND pl.is_premium=TRUE) AS is_in_premium_playlist,
+            u.account_status,p.monetization_status,p.channel_type
           FROM videos v LEFT JOIN app_users u ON u.google_sub=v.owner_sub LEFT JOIN profiles p ON p.sub=v.owner_sub WHERE v.id=$1`, [videoId]);
         const row = video.rows[0];
         if (!row || row.visibility !== 'Public' || row.moderation_status !== 'active' || row.account_status !== 'active') return jsonError(res, 404, 'Ad video context unavailable.');
         creatorSub = row.owner_sub || null;
-        creatorEligible = row.monetization_status === 'enabled';
+        creatorEligible = canEarnAdRevenue({channelType:row.channel_type,isPremium:Boolean(row.is_premium||row.is_in_premium_playlist),creatorStatus:row.monetization_status,monetizationEnabled:true});
       }
       const settingsResult = await pool.query('SELECT monetization_enabled,creator_share_percent FROM platform_settings WHERE id=1');
       const settings = settingsResult.rows[0] || {};
@@ -458,13 +473,14 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
   app.post('/api/creator/monetization/apply', requireAuth, async (req, res, next) => {
     try {
       const result = await withTransaction(async client => {
-        const check = await client.query(`SELECT p.monetization_status,p.monetization_applied_at,s.monetization_enabled,
+        const check = await client.query(`SELECT p.monetization_status,p.monetization_applied_at,p.channel_type,s.monetization_enabled,
             s.monetization_min_subscribers,s.monetization_min_watch_hours,
             (SELECT COUNT(*) FROM subscriptions WHERE channel_sub=$1) AS subscribers,
             (SELECT COALESCE(SUM(vws.watch_seconds),0) FROM video_watch_sessions vws JOIN videos v ON v.id=vws.video_id WHERE v.owner_sub=$1) AS watch_seconds
           FROM profiles p CROSS JOIN platform_settings s WHERE p.sub=$1 AND s.id=1 FOR UPDATE`, [req.auth.session.sub]);
         if (!check.rowCount) throw Object.assign(new Error('Creator channel not found.'), { status: 404 });
         const row = check.rows[0];
+        if(!['personal','education'].includes(row.channel_type))throw Object.assign(new Error('Ad monetization is available only to Personal Creator and Education channels.'),{status:403});
         if (!row.monetization_enabled) throw Object.assign(new Error('Platform monetization is not enabled yet.'), { status: 409 });
         if (row.monetization_status === 'enabled') throw Object.assign(new Error('Monetization is already approved.'), { status: 409 });
         const subscribers = Number(row.subscribers) || 0;
@@ -654,6 +670,10 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       const reason = clean(req.body?.reason, 1000);
       if (!['pending','enabled','paused','rejected'].includes(status)) return fail(res, 'Invalid monetization status.');
       const result = await withTransaction(async client => {
+        if(status==='enabled'){
+          const creator=await client.query('SELECT channel_type FROM profiles WHERE sub=$1 FOR UPDATE',[sub]);
+          if(creator.rowCount&&!['personal','education'].includes(creator.rows[0].channel_type))throw Object.assign(new Error('Only Personal Creator and Education channels can be approved for ad monetization.'),{status:403});
+        }
         const update = await client.query("UPDATE profiles SET monetization_status=$2,monetization_applied_at=CASE WHEN $2='rejected' THEN NULL ELSE monetization_applied_at END,updated_at=NOW() WHERE sub=$1 RETURNING handle", [sub,status]);
         if (!update.rowCount) return false;
         await writeAudit(client,req.admin,'creator_monetization','creator',sub,reason,{status,handle:update.rows[0].handle});
@@ -661,14 +681,14 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       });
       if (!result) return jsonError(res,404,'Creator পাওয়া যায়নি।');
       res.json({ok:true,status});
-    } catch (error) { next(error); }
+    } catch (error) { if(error.status)return jsonError(res,error.status,error.message);next(error); }
   });
 
   app.get('/api/admin/campaigns', adminAuth('admin'), async (req, res, next) => {
     try {
       const q=clean(req.query.q,120),pattern='%'+q.replace(/[\\%_]/g,'\\$&'), status=['all','draft','active','paused'].includes(String(req.query.status||''))?String(req.query.status):'all';
       const page=Math.max(1,Number.parseInt(req.query.page||'1',10)||1),limit=Math.min(50,Math.max(10,Number.parseInt(req.query.limit||'20',10)||20)),offset=(page-1)*limit;
-      const result = await pool.query(`SELECT c.id,c.title,c.sponsor_name,c.placement,c.creative_url,c.desktop_creative_url,c.mobile_creative_url,c.destination_url,
+      const result = await pool.query(`SELECT c.id,c.title,c.sponsor_name,c.placement,c.is_islamic,c.creative_url,c.desktop_creative_url,c.mobile_creative_url,c.destination_url,
           c.l_bottom_creative_url,c.l_bottom_destination_url,c.monthly_impression_cap,
           COALESCE(ms.served_count,0)::bigint AS monthly_served,COALESCE(mi.impression_count,0)::bigint AS monthly_impressions,
           c.cpm_bdt,c.status,c.starts_at,c.ends_at,c.created_at,
@@ -685,14 +705,14 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
         WHERE ($1='all' OR c.status=$1) AND (c.title ILIKE $2 OR c.sponsor_name ILIKE $2)
         GROUP BY c.id,ms.served_count,mi.impression_count ORDER BY c.created_at DESC LIMIT $3 OFFSET $4`,[status,pattern,limit,offset]);
       const total=await pool.query(`SELECT COUNT(*)::bigint AS n FROM ad_campaigns c WHERE ($1='all' OR c.status=$1) AND (c.title ILIKE $2 OR c.sponsor_name ILIKE $2)`,[status,pattern]);
-      res.json({page,limit,total:Number(total.rows[0].n),pages:Math.ceil(Number(total.rows[0].n)/limit),campaigns: result.rows.map(r=>({id:r.id,title:r.title,sponsorName:r.sponsor_name,placement:r.placement,creativeUrl:r.creative_url,desktopCreativeUrl:r.desktop_creative_url||r.creative_url,mobileCreativeUrl:r.mobile_creative_url||r.creative_url,destinationUrl:r.destination_url,bottomCreativeUrl:r.l_bottom_creative_url,bottomDestinationUrl:r.l_bottom_destination_url,monthlyImpressionCap:r.monthly_impression_cap===null?null:Number(r.monthly_impression_cap),monthlyServed:Number(r.monthly_served||0),monthlyImpressions:Number(r.monthly_impressions||0),cpmBdt:Number(r.cpm_bdt),status:r.status,startsAt:r.starts_at,endsAt:r.ends_at,createdAt:r.created_at,impressions:Number(r.impressions),clicks:Number(r.clicks)})) });
+      res.json({page,limit,total:Number(total.rows[0].n),pages:Math.ceil(Number(total.rows[0].n)/limit),campaigns: result.rows.map(r=>({id:r.id,title:r.title,sponsorName:r.sponsor_name,placement:r.placement,isIslamic:Boolean(r.is_islamic),creativeUrl:r.creative_url,desktopCreativeUrl:r.desktop_creative_url||r.creative_url,mobileCreativeUrl:r.mobile_creative_url||r.creative_url,destinationUrl:r.destination_url,bottomCreativeUrl:r.l_bottom_creative_url,bottomDestinationUrl:r.l_bottom_destination_url,monthlyImpressionCap:r.monthly_impression_cap===null?null:Number(r.monthly_impression_cap),monthlyServed:Number(r.monthly_served||0),monthlyImpressions:Number(r.monthly_impressions||0),cpmBdt:Number(r.cpm_bdt),status:r.status,startsAt:r.starts_at,endsAt:r.ends_at,createdAt:r.created_at,impressions:Number(r.impressions),clicks:Number(r.clicks)})) });
     } catch (error) { next(error); }
   });
 
   app.post('/api/admin/campaigns', adminAuth('admin'), async (req, res, next) => {
     try {
       const title = clean(req.body?.title,120), sponsor = clean(req.body?.sponsorName,120);
-      const placement = String(req.body?.placement || ''), desktopCreativeUrl = safeUrl(req.body?.desktopCreativeUrl || req.body?.creativeUrl), mobileCreativeUrl = safeUrl(req.body?.mobileCreativeUrl || req.body?.desktopCreativeUrl || req.body?.creativeUrl), creativeUrl = desktopCreativeUrl, destinationUrl = safeUrl(req.body?.destinationUrl);
+      const placement = String(req.body?.placement || ''), isIslamic=req.body?.isIslamic===true, desktopCreativeUrl = safeUrl(req.body?.desktopCreativeUrl || req.body?.creativeUrl), mobileCreativeUrl = safeUrl(req.body?.mobileCreativeUrl || req.body?.desktopCreativeUrl || req.body?.creativeUrl), creativeUrl = desktopCreativeUrl, destinationUrl = safeUrl(req.body?.destinationUrl);
       const bottomCreativeUrl = placement === 'l_banner' ? safeUrl(req.body?.bottomCreativeUrl) : null;
       const bottomDestinationUrl = placement === 'l_banner' ? safeUrl(req.body?.bottomDestinationUrl) : null;
       let monthlyImpressionCap;
@@ -705,9 +725,9 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       if ((startsAt && Number.isNaN(startsAt.getTime())) || (endsAt && Number.isNaN(endsAt.getTime())) || (startsAt && endsAt && endsAt <= startsAt)) return fail(res, 'Campaign date range ঠিক নয়।');
       const id = crypto.randomUUID();
       await withTransaction(async client => {
-        await client.query(`INSERT INTO ad_campaigns (id,title,sponsor_name,placement,creative_url,desktop_creative_url,mobile_creative_url,destination_url,l_bottom_creative_url,l_bottom_destination_url,monthly_impression_cap,cpm_bdt,status,starts_at,ends_at,created_by_email)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'paused',$13,$14,$15)`, [id,title,sponsor,placement,desktopCreativeUrl,desktopCreativeUrl,mobileCreativeUrl,destinationUrl,bottomCreativeUrl,bottomDestinationUrl,monthlyImpressionCap,cpm,startsAt,endsAt,req.admin.email]);
-        await writeAudit(client,req.admin,'create_campaign','ad_campaign',id,'Campaign created paused.',{title,sponsor,placement,cpmBdt:cpm,monthlyImpressionCap});
+        await client.query(`INSERT INTO ad_campaigns (id,title,sponsor_name,placement,is_islamic,creative_url,desktop_creative_url,mobile_creative_url,destination_url,l_bottom_creative_url,l_bottom_destination_url,monthly_impression_cap,cpm_bdt,status,starts_at,ends_at,created_by_email)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'paused',$14,$15,$16)`, [id,title,sponsor,placement,isIslamic,desktopCreativeUrl,desktopCreativeUrl,mobileCreativeUrl,destinationUrl,bottomCreativeUrl,bottomDestinationUrl,monthlyImpressionCap,cpm,startsAt,endsAt,req.admin.email]);
+        await writeAudit(client,req.admin,'create_campaign','ad_campaign',id,'Campaign created paused.',{title,sponsor,placement,isIslamic,cpmBdt:cpm,monthlyImpressionCap});
       });
       res.status(201).json({ok:true,id,status:'paused'});
     } catch (error) { next(error); }
@@ -716,7 +736,7 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
   app.put('/api/admin/campaigns/:id', adminAuth('admin'), async (req,res,next)=>{
     try{
       if(!validUuid(req.params.id))return fail(res,'Invalid campaign id.');
-      const title=clean(req.body?.title,120),sponsor=clean(req.body?.sponsorName,120),placement=String(req.body?.placement||''),desktopCreativeUrl=safeUrl(req.body?.desktopCreativeUrl||req.body?.creativeUrl),mobileCreativeUrl=safeUrl(req.body?.mobileCreativeUrl||req.body?.desktopCreativeUrl||req.body?.creativeUrl),creativeUrl=desktopCreativeUrl,destinationUrl=safeUrl(req.body?.destinationUrl),bottomCreativeUrl=placement==='l_banner'?safeUrl(req.body?.bottomCreativeUrl):null,bottomDestinationUrl=placement==='l_banner'?safeUrl(req.body?.bottomDestinationUrl):null,cpm=Number(req.body?.cpmBdt),startsAt=req.body?.startsAt?new Date(req.body.startsAt):null,endsAt=req.body?.endsAt?new Date(req.body.endsAt):null;
+      const title=clean(req.body?.title,120),sponsor=clean(req.body?.sponsorName,120),placement=String(req.body?.placement||''),isIslamic=req.body?.isIslamic===true,desktopCreativeUrl=safeUrl(req.body?.desktopCreativeUrl||req.body?.creativeUrl),mobileCreativeUrl=safeUrl(req.body?.mobileCreativeUrl||req.body?.desktopCreativeUrl||req.body?.creativeUrl),creativeUrl=desktopCreativeUrl,destinationUrl=safeUrl(req.body?.destinationUrl),bottomCreativeUrl=placement==='l_banner'?safeUrl(req.body?.bottomCreativeUrl):null,bottomDestinationUrl=placement==='l_banner'?safeUrl(req.body?.bottomDestinationUrl):null,cpm=Number(req.body?.cpmBdt),startsAt=req.body?.startsAt?new Date(req.body.startsAt):null,endsAt=req.body?.endsAt?new Date(req.body.endsAt):null;
       const monthlyCapProvided = Object.prototype.hasOwnProperty.call(req.body || {},'monthlyImpressionCap');
       let monthlyImpressionCap = null;
       try { if(monthlyCapProvided)monthlyImpressionCap=normalizeMonthlyImpressionCap(req.body.monthlyImpressionCap); }
@@ -724,9 +744,9 @@ module.exports = function registerConsole({ app, requireAuth, requireActive, loa
       if(!title||!sponsor||!['feed','watch_sidebar','channel','sticky_banner','postroll','l_banner'].includes(placement)||!desktopCreativeUrl||!mobileCreativeUrl||!destinationUrl||(placement==='l_banner'&&(!bottomCreativeUrl||!bottomDestinationUrl))||!Number.isFinite(cpm)||cpm<0||cpm>1000000)return fail(res,'Campaign fields, PC/phone HTTPS creative URLs সঠিকভাবে দিন। L-shape-এর নিচের image ও landing URL-ও দিন।');
       if((startsAt&&Number.isNaN(startsAt.getTime()))||(endsAt&&Number.isNaN(endsAt.getTime()))||(startsAt&&endsAt&&endsAt<=startsAt))return fail(res,'Campaign date range ঠিক নয়।');
       const result=await withTransaction(async client=>{
-        const changed=await client.query(`UPDATE ad_campaigns SET title=$2,sponsor_name=$3,placement=$4,creative_url=$5,desktop_creative_url=$6,mobile_creative_url=$7,destination_url=$8,l_bottom_creative_url=$9,l_bottom_destination_url=$10,monthly_impression_cap=CASE WHEN $11 THEN $12 ELSE monthly_impression_cap END,cpm_bdt=$13,starts_at=$14,ends_at=$15,updated_at=NOW() WHERE id=$1 RETURNING id`,[req.params.id,title,sponsor,placement,desktopCreativeUrl,desktopCreativeUrl,mobileCreativeUrl,destinationUrl,bottomCreativeUrl,bottomDestinationUrl,monthlyCapProvided,monthlyImpressionCap,cpm,startsAt,endsAt]);
+        const changed=await client.query(`UPDATE ad_campaigns SET title=$2,sponsor_name=$3,placement=$4,is_islamic=$5,creative_url=$6,desktop_creative_url=$7,mobile_creative_url=$8,destination_url=$9,l_bottom_creative_url=$10,l_bottom_destination_url=$11,monthly_impression_cap=CASE WHEN $12 THEN $13 ELSE monthly_impression_cap END,cpm_bdt=$14,starts_at=$15,ends_at=$16,updated_at=NOW() WHERE id=$1 RETURNING id`,[req.params.id,title,sponsor,placement,isIslamic,desktopCreativeUrl,desktopCreativeUrl,mobileCreativeUrl,destinationUrl,bottomCreativeUrl,bottomDestinationUrl,monthlyCapProvided,monthlyImpressionCap,cpm,startsAt,endsAt]);
         if(!changed.rowCount)return false;
-        await writeAudit(client,req.admin,'edit_campaign','ad_campaign',req.params.id,'Campaign details updated.',{title,sponsor,placement,cpmBdt:cpm,monthlyImpressionCap:monthlyCapProvided?monthlyImpressionCap:undefined});
+        await writeAudit(client,req.admin,'edit_campaign','ad_campaign',req.params.id,'Campaign details updated.',{title,sponsor,placement,isIslamic,cpmBdt:cpm,monthlyImpressionCap:monthlyCapProvided?monthlyImpressionCap:undefined});
         return true;
       });
       if(!result)return jsonError(res,404,'Campaign পাওয়া যায়নি।');

@@ -271,6 +271,7 @@ CREATE TABLE IF NOT EXISTS ad_campaigns (
   title TEXT NOT NULL CHECK (char_length(title) BETWEEN 1 AND 120),
   sponsor_name TEXT NOT NULL CHECK (char_length(sponsor_name) BETWEEN 1 AND 120),
   placement TEXT NOT NULL CHECK (placement IN ('feed','watch_sidebar','channel','sticky_banner','postroll','l_banner')),
+  is_islamic BOOLEAN NOT NULL DEFAULT FALSE,
   creative_url TEXT NOT NULL,
   desktop_creative_url TEXT,
   mobile_creative_url TEXT,
@@ -292,6 +293,7 @@ ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS l_bottom_destination_url TEXT;
 ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS desktop_creative_url TEXT;
 ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS mobile_creative_url TEXT;
 ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS monthly_impression_cap INTEGER;
+ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS is_islamic BOOLEAN NOT NULL DEFAULT FALSE;
 UPDATE ad_campaigns SET desktop_creative_url=COALESCE(desktop_creative_url,creative_url),mobile_creative_url=COALESCE(mobile_creative_url,creative_url)
   WHERE desktop_creative_url IS NULL OR mobile_creative_url IS NULL;
 UPDATE ad_campaigns SET l_bottom_creative_url=COALESCE(l_bottom_creative_url,creative_url),
@@ -584,6 +586,11 @@ CREATE TABLE IF NOT EXISTS channel_applications (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   reviewed_at TIMESTAMPTZ
 );
+DO $$ BEGIN
+  ALTER TABLE channel_applications DROP CONSTRAINT IF EXISTS channel_applications_channel_type_check;
+  ALTER TABLE channel_applications ADD CONSTRAINT channel_applications_channel_type_check
+    CHECK (channel_type IN ('personal','education','business','organization','other'));
+EXCEPTION WHEN undefined_table THEN NULL; END $$;
 ALTER TABLE channel_applications ADD COLUMN IF NOT EXISTS creator_type TEXT NOT NULL DEFAULT 'normal';
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'channel_applications_creator_type_check') THEN

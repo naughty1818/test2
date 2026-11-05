@@ -14,6 +14,7 @@ const {
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { pool, initializeDatabase, withTransaction } = require('./db');
 const { normalizeViewerType, normalizeCreatorType, resolveIslamicFlag, isIslamicEligible } = require('./content-policy');
+const { isAllowedChannelType } = require('./account-policies');
 const { socketAdminModules } = require('./admin-access');
 
 const PORT = Number(process.env.PORT || 3000);
@@ -534,20 +535,26 @@ app.get('/api/me/channel-application', requireAuth, async (req,res,next)=>{
 });
 app.post('/api/me/channel-application', requireAuth, requireActive, async (req,res,next)=>{
   try {
-    const sub=req.auth.session.sub,name=safeText(req.body?.channelName,120),type=String(req.body?.channelType||''),creatorType=normalizeCreatorType(String(req.body?.creatorType||'normal')),platform=safeText(req.body?.otherPlatformName,80),rawUrl=safeText(req.body?.otherPlatformUrl,2048),hasOther=Boolean(req.body?.hasOtherPlatform);
+    const sub=req.auth.session.sub,name=safeText(req.body?.channelName,120),type=String(req.body?.channelType||'').trim().toLowerCase(),creatorType=normalizeCreatorType(String(req.body?.creatorType||'normal')),platform=safeText(req.body?.otherPlatformName,80),rawUrl=safeText(req.body?.otherPlatformUrl,2048),hasOther=Boolean(req.body?.hasOtherPlatform);
     if(name.length<2)return jsonError(res,400,'Channel name must contain at least 2 characters.');
-    if(!['personal','education','business','organization','other'].includes(type))return jsonError(res,400,'Choose a valid channel type.');
+    if(!isAllowedChannelType(type))return jsonError(res,400,'Choose Personal creator, Education, Business, or Organization.');
     if(!creatorType)return jsonError(res,400,'Choose Islamic, Normal, or Mixed creator type.');
     let platformUrl=null;
     if(hasOther){if(!platform||!rawUrl)return jsonError(res,400,'Provide both the platform name and channel link.');try{const parsed=new URL(rawUrl);if(parsed.protocol!=='https:'||parsed.username||parsed.password)return jsonError(res,400,'Other platform link must be a valid HTTPS URL.');platformUrl=parsed.toString().slice(0,2048);}catch(_){return jsonError(res,400,'Add a valid HTTPS link for the other platform.');}}
     else if(platform||rawUrl)return jsonError(res,400,'Uncheck other-platform presence or provide both its name and link.');
-    if((await pool.query('SELECT 1 FROM profiles WHERE sub=$1',[sub])).rowCount)return jsonError(res,409,'This account already has an approved channel.');
-    const existing=await pool.query(`SELECT id,status,decision_note,created_at FROM channel_applications WHERE user_sub=$1 ORDER BY created_at DESC LIMIT 1`,[sub]);
-    if(existing.rows[0]?.status==='pending')return jsonError(res,409,'You already have a pending channel application.',{application:existing.rows[0]});
     const id=crypto.randomUUID();
-    const saved=await pool.query(`INSERT INTO channel_applications(id,user_sub,channel_name,channel_type,creator_type,other_platform_name,other_platform_url) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,channel_name,channel_type,creator_type,other_platform_name,other_platform_url,status,decision_note,created_at`,[id,sub,name,type,creatorType,platform,platformUrl]);
-    res.status(201).json({application:saved.rows[0]});
-  } catch(error){if(error.code==='23505')return jsonError(res,409,'You already have a pending channel application.');next(error);}
+    const saved=await withTransaction(async client=>{
+      await client.query('SELECT pg_advisory_xact_lock(hashtext(LOWER($1)))',[name.trim()]);
+      if((await client.query('SELECT 1 FROM profiles WHERE sub=$1',[sub])).rowCount)throw Object.assign(new Error('This account already has an approved channel.'),{status:409});
+      const existing=await client.query(`SELECT id,status,decision_note,created_at FROM channel_applications WHERE user_sub=$1 AND status='pending' ORDER BY created_at DESC LIMIT 1`,[sub]);
+      if(existing.rowCount)throw Object.assign(new Error('You already have a pending channel application.'),{status:409,application:existing.rows[0]});
+      const duplicate=await client.query(`SELECT 1 FROM profiles WHERE LOWER(BTRIM(display_name))=LOWER(BTRIM($1)) AND sub<>$2
+        UNION ALL SELECT 1 FROM channel_applications WHERE LOWER(BTRIM(channel_name))=LOWER(BTRIM($1)) AND status='pending' AND user_sub<>$2 LIMIT 1`,[name,sub]);
+      if(duplicate.rowCount)throw Object.assign(new Error('এই Channel name আগে থেকেই নেওয়া হয়েছে। অন্য নাম বেছে নিন।'),{status:409});
+      return (await client.query(`INSERT INTO channel_applications(id,user_sub,channel_name,channel_type,creator_type,other_platform_name,other_platform_url) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,channel_name,channel_type,creator_type,other_platform_name,other_platform_url,status,decision_note,created_at`,[id,sub,name,type,creatorType,platform,platformUrl])).rows[0];
+    });
+    res.status(201).json({application:saved});
+  } catch(error){if(error.status)return jsonError(res,error.status,error.message,{application:error.application});if(error.code==='23505')return jsonError(res,409,'You already have a pending channel application.');next(error);}
 });
 
 app.post('/api/me/profile', requireAuth, requireActive, requireChannel, async (req, res, next) => {
@@ -565,12 +572,16 @@ app.post('/api/me/profile', requireAuth, requireActive, requireChannel, async (r
     if (conflict.rowCount) return jsonError(res, 409, 'That handle is already taken / এই handle নেওয়া আছে।', { suggestedHandle: `${requestedHandle.slice(0, 24)}-${crypto.randomBytes(2).toString('hex')}` });
     if (!existing) return jsonError(res,403,'Channel approval is required before creating a channel profile.',{code:'channel_required'});
     const profile = await withTransaction(async client => {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext(LOWER($1)))',[displayName.trim()]);
+      const duplicate=await client.query(`SELECT 1 FROM profiles WHERE LOWER(BTRIM(display_name))=LOWER(BTRIM($1)) AND sub<>$2
+        UNION ALL SELECT 1 FROM channel_applications WHERE LOWER(BTRIM(channel_name))=LOWER(BTRIM($1)) AND status='pending' AND user_sub<>$2 LIMIT 1`,[displayName,req.auth.session.sub]);
+      if(duplicate.rowCount)throw Object.assign(new Error('এই Channel name আগে থেকেই নেওয়া হয়েছে। অন্য নাম বেছে নিন।'),{status:409});
       const result = await client.query(`UPDATE profiles SET handle=$2,display_name=$3,bio=$4,avatar_url=COALESCE($5,avatar_url),cover_url=COALESCE($6,cover_url),updated_at=NOW() WHERE sub=$1 RETURNING sub,handle,display_name,bio,avatar_url,cover_url,channel_type,creator_type,is_verified`,
         [req.auth.session.sub, requestedHandle, displayName, bio, avatarUrl, coverUrl]);
       return result.rows[0];
     });
     res.json({ profile: publicProfile(profile) });
-  } catch (error) { next(error); }
+  } catch (error) { if(error.status)return jsonError(res,error.status,error.message);next(error); }
 });
 
 app.get('/api/channels', async (req, res, next) => {

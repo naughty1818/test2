@@ -2288,3 +2288,22 @@ body.studio-fullscreen .studio-content .console-actions button:hover { color:#14
 #app.studio-admin-shell .admin-return-link:hover { color:#17683f; background:#edf8f1; border-color:#78a68b; }
 #app.studio-admin-shell .admin-toolbar-actions .console-small-button { color:#33483a; background:#f6faf7; border-color:#cad8ce; }
 #app.studio-admin-shell .admin-toolbar-actions .console-small-button:hover { color:#124d31; background:#e7f2eb; border-color:#78a68b; }
+
+/* Channel-type identities and account settings disclosure */
+.channel-type-badge{display:inline-flex;width:max-content;align-items:center;border:1px solid #c9e8d9;border-radius:999px;padding:5px 10px;background:#eff9f3;color:#13734b;font-size:12px;font-weight:800;letter-spacing:.02em}
+.channel-purpose{display:flex;flex-direction:column;gap:4px;margin:14px 0 20px;padding:14px 17px;border:1px solid #dcece3;border-left:4px solid #148b61;border-radius:12px;background:#f6fbf8}
+.channel-purpose p{margin:0;color:#4b6256}
+.channel-purpose-education{border-color:#dbe8f8;border-left-color:#3876c6;background:#f5f9ff}
+.channel-purpose-education strong,.channel-cover-education .cover-caption{color:#215b9d}
+.channel-purpose-business{border-color:#f4e4c7;border-left-color:#c98621;background:#fffaf1}
+.channel-purpose-business strong,.channel-cover-business .cover-caption{color:#8c5b0c}
+.channel-purpose-organization{border-color:#dbe1e8;border-left-color:#53677d;background:#f5f7fa}
+.channel-purpose-organization strong,.channel-cover-organization .cover-caption{color:#3d526a}
+.channel-purpose-organization p{font-weight:600}
+.account-settings-toggle{width:100%;min-height:40px;text-align:left;font-weight:800}
+.account-settings-panel{display:flex;flex-direction:column;gap:7px;padding:8px;border:1px solid var(--border,#d8e3dc);border-radius:10px;background:var(--surface,#f8fbf9)}
+.account-settings-panel[hidden]{display:none}
+.account-settings-panel .account-language-control{display:flex!important}
+.account-settings-panel .settings-danger-actions{display:flex;flex-direction:column;gap:5px;padding-top:5px;border-top:1px solid var(--border,#d8e3dc)}
+.account-settings-panel .settings-danger-actions button{width:100%;text-align:left}
+@media(max-width:760px){.channel-purpose{margin:10px 0 16px;padding:12px}.channel-type-badge{font-size:11px}}

@@ -42,6 +42,8 @@ module.exports = function registerShopApproval({ app, pool, withTransaction, req
   app.post('/api/me/shop-application', requireAuth, requireActive, async (req, res, next) => {
     try {
       const sub = req.auth.session.sub;
+      const channel=await pool.query('SELECT channel_type FROM profiles WHERE sub=$1',[sub]);
+      if(!channel.rowCount||channel.rows[0].channel_type!=='business')return res.status(403).json({error:'Shop applications are available only to approved Business channels.'});
       const businessName = safeText(req.body?.businessName, 120);
       const fullName = safeText(req.body?.fullName, 120);
       const phone = safeText(req.body?.phone, 40);

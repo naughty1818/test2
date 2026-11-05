@@ -346,23 +346,26 @@
     mobileLanguageSelect=$('select',{class:'language-control-select','aria-label':'Language'},[$('option',{value:'bn',text:'বাংলা'}),$('option',{value:'en',text:'English'})]);
     mobileLanguageSelect.value=languageSelect?.value||'bn';
     mobileLanguageSelect.addEventListener('change',()=>{if(!languageSelect)return;languageSelect.value=mobileLanguageSelect.value;languageSelect.dispatchEvent(new Event('change'));});
-    menu.append($('label',{class:'account-language-control'},[$('span',{text:'Language'}),mobileLanguageSelect]));
-    const viewerTypeControl=$('select',{class:'language-control-select','aria-label':'Viewer type'},[$('option',{value:'normal',text:'Normal · সব ভিডিও'}),$('option',{value:'islamic',text:'Islamic · certified ভিডিও'})]);
+    const viewerTypeControl=$('select',{class:'language-control-select','aria-label':'Viewer account type'},[$('option',{value:'normal',text:'Normal · সব ভিডিও'}),$('option',{value:'islamic',text:'Islamic · certified ভিডিও'})]);
     viewerTypeControl.value=state.session.user.viewerType||'normal';
     viewerTypeControl.addEventListener('change',async()=>{const previous=state.session.user.viewerType||'normal';viewerTypeControl.disabled=true;try{const saved=await jsonFetch('/api/me/preferences',{method:'PATCH',body:{viewerType:viewerTypeControl.value}});state.session.user.viewerType=saved.viewerType;notify(saved.viewerType==='islamic'?'Islamic mode চালু হয়েছে।':'Normal mode চালু হয়েছে।');safeRenderRoute();}catch(error){viewerTypeControl.value=state.session.user.viewerType||previous;notify(error.message,'error');}finally{viewerTypeControl.disabled=false;}});
-    menu.append($('label',{class:'account-language-control'},[$('span',{text:'ভিডিও preference · Viewer type'}),viewerTypeControl]));
+    const settingsPanel=$('div',{class:'account-settings-panel',hidden:true});
+    settingsPanel.append($('label',{class:'account-language-control'},[$('span',{text:'Language'}),mobileLanguageSelect]),$('label',{class:'account-language-control'},[$('span',{text:'ভিডিও preference · Viewer account type'}),viewerTypeControl]));
+    const destructiveActions=$('div',{class:'settings-danger-actions'});
+    if (state.session.profile) destructiveActions.append($('button',{type:'button',class:'logout-item danger-action',text:'Creator account permanently delete',onClick:async()=>{
+      if(!window.confirm('তোমার creator channel, সব video, upload data ও creator playlists স্থায়ীভাবে মুছে যাবে। চালিয়ে যাবেন?'))return;
+      try{await jsonFetch('/api/me/creator',{method:'DELETE'});state.session.profile=null;renderAccount();notify('Creator account স্থায়ীভাবে মুছে ফেলা হয়েছে।');safeRenderRoute();}catch(error){notify(error.message,'error');}
+    }}));
+    destructiveActions.append($('button',{type:'button',class:'logout-item danger-action',text:'User account permanently delete',onClick:async()=>{
+      if(!window.confirm('তোমার সম্পূর্ণ user account, channel, video, subscription ও history স্থায়ীভাবে মুছে যাবে। এই কাজ undo করা যাবে না।'))return;
+      try{await jsonFetch('/api/me/account',{method:'DELETE'});state.session={user:null,profile:null};renderAccount();notify('User account স্থায়ীভাবে মুছে ফেলা হয়েছে।');safeRenderRoute();}catch(error){notify(error.message,'error');}
+    }}));
+    settingsPanel.append(destructiveActions);
+    const settingsToggle=$('button',{type:'button',class:'account-settings-toggle',text:'⚙ Settings','aria-expanded':'false'});
+    settingsToggle.addEventListener('click',()=>{settingsPanel.hidden=!settingsPanel.hidden;settingsToggle.setAttribute('aria-expanded',String(!settingsPanel.hidden));});
+    menu.append(settingsToggle,settingsPanel);
     (state.session.profile ? [['আমার চ্যানেল', '/channel/me'], ['Atharo Studio', '/studio'], ['সাবস্ক্রিপশন', '/subscriptions'], ['প্লেলিস্ট', '/playlists'], ['ভিডিও আপলোড', '/upload']] : [['চ্যানেল তৈরি করুন', '/studio'], ['ভিডিও দেখুন', '/'], ['প্লেলিস্ট', '/playlists']]).forEach(([label, href]) => menu.append($('a', href === '/studio' ? { href, target: '_blank', rel: 'noopener noreferrer', text: label } : { href, 'data-route': '', text: label })));
     if (state.admin?.role) menu.append($('a', { href: '/admin', target: '_blank', rel: 'noopener noreferrer', text: 'Admin control panel' }));
-    if (state.session.profile) menu.append($('button', { type: 'button', class: 'logout-item danger-action', text: 'Creator account permanently delete', onClick: async () => {
-      if (!window.confirm('তোমার creator channel, সব video, upload data ও creator playlists স্থায়ীভাবে মুছে যাবে। চালিয়ে যাবেন?')) return;
-      try { await jsonFetch('/api/me/creator', { method: 'DELETE' }); state.session.profile = null; renderAccount(); notify('Creator account স্থায়ীভাবে মুছে ফেলা হয়েছে।'); safeRenderRoute(); }
-      catch (error) { notify(error.message, 'error'); }
-    } }));
-    menu.append($('button', { type: 'button', class: 'logout-item danger-action', text: 'User account permanently delete', onClick: async () => {
-      if (!window.confirm('তোমার সম্পূর্ণ user account, channel, video, subscription ও history স্থায়ীভাবে মুছে যাবে। এই কাজ undo করা যাবে না।')) return;
-      try { await jsonFetch('/api/me/account', { method: 'DELETE' }); state.session = { user: null, profile: null }; renderAccount(); notify('User account স্থায়ীভাবে মুছে ফেলা হয়েছে।'); safeRenderRoute(); }
-      catch (error) { notify(error.message, 'error'); }
-    } }));
     menu.append($('button', { type: 'button', class: 'logout-item', text: 'লগআউট', onClick: async () => {
       try { await jsonFetch('/auth/logout', { method: 'POST', body: {} }); state.session = { user: null, profile: null }; renderAccount(); notify('লগআউট হয়েছে।'); safeRenderRoute(); }
       catch (error) { notify(error.message, 'error'); }
@@ -986,16 +989,18 @@
       setSeo({ path: '/channel/' + encodeURIComponent(text(profile.handle, handle)), title: (text(profile.displayName, text(profile.handle, 'বাংলা ভিডিও চ্যানেল')).slice(0, 45) + ' | Atharo'), description: text(profile.bio, 'Atharo-তে এই নির্মাতার বাংলা ভিডিও, শিক্ষা ও গল্প দেখুন।').replace(/\s+/g, ' ').slice(0, 155) });
       const own = Boolean(data.isOwner || (state.session.profile?.handle && state.session.profile.handle.toLowerCase() === text(profile.handle, handle).toLowerCase()));
       const page = $('div');
-      const cover = $('div', { class: 'channel-cover', style: profile.coverUrl ? { backgroundImage: `linear-gradient(0deg,#07120fbb,transparent 70%),url("${profile.coverUrl.replace(/["\\]/g, '')}")`, backgroundSize: 'cover', backgroundPosition: 'center' } : {} }, [$('div', { class: 'cover-orbit cover-orbit-one' }), $('div', { class: 'cover-orbit cover-orbit-two' }), $('span', { class: 'cover-caption', text: 'নিজের গল্প, নিজের ভাষায়' })]);
+      const channelType=profile.channelType||'personal',channelDetails=({personal:{label:'Personal creator',caption:'নিজের গল্প, নিজের ভাষায়',intro:'ব্যক্তিগত নির্মাতার গল্প, ভাবনা ও ভিডিও এক জায়গায়।',videos:'সাম্প্রতিক ভিডিও'},education:{label:'Education',caption:'শেখা হোক সবার জন্য',intro:'শিক্ষামূলক ভিডিও, বিষয়ভিত্তিক পাঠ ও শেখার সিরিজ।',videos:'শিক্ষামূলক ভিডিও'},business:{label:'Business',caption:'Business · Shop',intro:'পণ্যের পরিচিতি, ব্যবহারবিধি ও দোকানের আপডেট।',videos:'পণ্য ও ব্যবসার ভিডিও'},organization:{label:'Organization',caption:'Official information & updates',intro:'প্রতিষ্ঠানের নিয়ম, আইন, সেবা ও আনুষ্ঠানিক আপডেট। এই channel বাণিজ্যিক ব্যবহারের জন্য নয়।',videos:'নিয়ম ও আপডেট'}})[channelType]||{label:'Creator',caption:'নিজের গল্প, নিজের ভাষায়',intro:'Atharo channel',videos:'সাম্প্রতিক ভিডিও'};
+      const cover = $('div', { class: 'channel-cover channel-cover-'+channelType, style: profile.coverUrl ? { backgroundImage: `linear-gradient(0deg,#07120fbb,transparent 70%),url("${profile.coverUrl.replace(/["\\]/g, '')}")`, backgroundSize: 'cover', backgroundPosition: 'center' } : {} }, [$('div', { class: 'cover-orbit cover-orbit-one' }), $('div', { class: 'cover-orbit cover-orbit-two' }), $('span', { class: 'cover-caption', text: channelDetails.caption })]);
       const profileSection = $('section', { class: 'channel-profile' }); const name = text(profile.displayName, text(profile.handle, 'Atharo channel'));
       const channelLogo=avatar(name,profile.avatarUrl,'channel-avatar');if(profile.isVerified)channelLogo.classList.add('verified-avatar');profileSection.append(channelLogo);
       const subscriberLabel = $('span', { class: 'channel-subscribers', text: number(data.subscribersCount || 0) + ' জন সাবস্ক্রাইবার' });
-      const channelHeading=$('h1',{},[document.createTextNode(name)]);if(profile.isVerified)channelHeading.append(verifiedMark());profileSection.append($('div',{class:'channel-info'},[channelHeading,$('span',{class:'channel-handle',text:'@'+text(profile.handle,handle)+' · '+number(videos.length)+'টি ভিডিও'}),$('p',{text:text(profile.bio,'বাংলা ভিডিও নির্মাতা। নিজের গল্প শেয়ার করছে Atharo-তে।')}),subscriberLabel]));
+      const channelHeading=$('h1',{},[document.createTextNode(name)]);if(profile.isVerified)channelHeading.append(verifiedMark());profileSection.append($('div',{class:'channel-info'},[$('span',{class:'channel-type-badge',text:channelDetails.label}),channelHeading,$('span',{class:'channel-handle',text:'@'+text(profile.handle,handle)+' · '+number(videos.length)+'টি ভিডিও'}),$('p',{text:text(profile.bio,channelDetails.intro)}),subscriberLabel]));
       const channelActions = $('div', { class: 'channel-actions' });
       if (own) channelActions.append(button('প্রোফাইল সম্পাদনা', 'action-pill', () => { const panel = document.getElementById('profileEdit'); panel.hidden = !panel.hidden; }));
       else channelActions.append(subscribeButton(profile.handle, Boolean(data.subscribed), Number(data.subscribersCount) || 0, result => { subscriberLabel.textContent = number(result.subscribersCount) + ' জন সাবস্ক্রাইবার'; }));
+      if(channelType==='business')channelActions.append(linkButton('Shop দেখুন ↗','/shop','action-pill'));
       channelActions.append(button('↗', 'action-pill icon-only', async () => { try { await navigator.clipboard.writeText(location.href); notify('চ্যানেলের লিংক কপি হয়েছে।'); } catch (_) { notify('লিংক কপি করা যায়নি।', 'error'); } }));
-      profileSection.append(channelActions); page.append(cover, profileSection);
+      profileSection.append(channelActions); page.append(cover, profileSection,$('div',{class:'channel-purpose channel-purpose-'+channelType},[$('strong',{text:channelDetails.label}),$('p',{text:channelDetails.intro})]));
       if (own) {
         const edit = $('form', { class: 'profile-edit-panel', id: 'profileEdit', hidden: true });
         edit.append($('div', { class: 'profile-edit-title' }, [$('strong', { text: 'চ্যানেল পরিচিতি' }), $('span', { text: 'Atharo প্রোফাইল' })]));
@@ -1010,13 +1015,13 @@
         page.append(edit);
       }
       const channelAdSlot = $('div', { class: 'channel-ad-slot' });
-      page.append(channelAdSlot);
-      page.append($('div', { class: 'channel-tabs' }, [button('▤  ভিডিও', 'channel-tab-active'), $('span', { class: 'channel-tab-note', text: 'সাম্প্রতিক প্রকাশনা' }), own ? linkButton('ভিডিও যোগ করো  ↗', '/upload', 'channel-upload-link') : $('span', { class: 'channel-tab-note', text: number(videos.length) + 'টি public video' })]));
+      if(channelType!=='organization')page.append(channelAdSlot);
+      page.append($('div', { class: 'channel-tabs' }, [button('▤  '+channelDetails.videos, 'channel-tab-active'), $('span', { class: 'channel-tab-note', text: channelDetails.label+' · সাম্প্রতিক প্রকাশনা' }), own ? linkButton('ভিডিও যোগ করো  ↗', '/upload', 'channel-upload-link') : $('span', { class: 'channel-tab-note', text: number(videos.length) + 'টি public video' })]));
       if(data.creatorPlaylists?.length){const shelf=$('section',{class:'channel-playlists'},[$('div',{class:'page-heading'},[$('div',{},[$('span',{class:'section-kicker',text:'CREATOR PLAYLISTS'}),$('h2',{text:'Playlists'})])])]);const grid=$('div',{class:'playlist-grid'});data.creatorPlaylists.forEach(pl=>grid.append($('a',{href:'/playlist/'+escapePath(pl.id),'data-route':'',class:'playlist-card'},[$('span',{class:'playlist-art',text:'▤'}),$('span',{class:'playlist-card-copy'},[$('strong',{text:pl.name}),$('small',{text:number(pl.videosCount)+' videos · '+text(pl.description,'')})]),$('span',{class:'playlist-arrow',text:'↗'})])));shelf.append(grid);page.append(shelf);}
       page.append(videoGrid(videos, 'এখনো কোনো প্রকাশিত ভিডিও নেই।'));
       setPage([page]); state.currentChannelHandle = profile.handle;
       if (socket && profile.handle) socket.emit('channel:join', profile.handle);
-      jsonFetch('/api/sponsor/serve?placement=channel&handle='+encodeURIComponent(profile.handle || handle)).then(result => { if (token === state.routeToken && result.ad) channelAdSlot.append(sponsoredCard(result.ad, null, false, profile.handle || handle)); }).catch(() => {});
+      if(channelType!=='organization')jsonFetch('/api/sponsor/serve?placement=channel&handle='+encodeURIComponent(profile.handle || handle)).then(result => { if (token === state.routeToken && result.ad) channelAdSlot.append(sponsoredCard(result.ad, null, false, profile.handle || handle)); }).catch(() => {});
     } catch (error) { if (token === state.routeToken) setPage([emptyState('চ্যানেলটি পাওয়া যায়নি', error.message, 'হোমে ফিরে যাও', '/')]); }
   }
   async function renderChannels(token) {
