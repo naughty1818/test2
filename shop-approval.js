@@ -80,7 +80,7 @@ module.exports = function registerShopApproval({ app, pool, withTransaction, req
     id: row.id, name: row.name, description: row.description, priceBdt: Number(row.price_bdt), stockQuantity: row.stock_quantity,
     category: row.category, goodPoints: row.good_points, limitations: row.limitations, deliveryInfo: row.delivery_info,
     returnPolicy: row.return_policy, status: row.status, decisionNote: row.decision_note, shopId: row.shop_id,
-    shopName: row.business_name, videoId: row.video_id || null, videoSegments: row.video_id ? { good: row.good_start_second, limitation: row.limitation_start_second, details: row.details_start_second } : null,
+    shopName: row.business_name, imageUrl:row.image_object_name?`/api/shop/products/${row.id}/image`:null, videoId: row.video_id || null, videoSegments: row.video_id ? { good: row.good_start_second, limitation: row.limitation_start_second, details: row.details_start_second } : null,
     createdAt: row.created_at, updatedAt: row.updated_at
   });
   async function activeShop(sub) {
@@ -118,10 +118,12 @@ module.exports = function registerShopApproval({ app, pool, withTransaction, req
   app.get('/api/shop/products', async (req, res, next) => {
     try {
       const q = safeText(req.query?.q, 120);
+      const handle = safeText(req.query?.handle, 30).toLowerCase();
       const result = await pool.query(`SELECT p.*,s.business_name,pv.video_id,pv.good_start_second,pv.limitation_start_second,pv.details_start_second
         FROM products p JOIN shops s ON s.id=p.shop_id LEFT JOIN product_videos pv ON pv.product_id=p.id
         WHERE p.status='approved' AND s.status='active' AND ($1='' OR to_tsvector('simple',p.name||' '||p.description||' '||p.category) @@ plainto_tsquery('simple',$1))
-        ORDER BY p.created_at DESC LIMIT 60`, [q]);
+          AND ($2='' OR EXISTS(SELECT 1 FROM profiles cp WHERE cp.sub=p.owner_sub AND LOWER(cp.handle)=LOWER($2)))
+        ORDER BY p.created_at DESC LIMIT 60`, [q,handle]);
       res.json({ products: result.rows.map(productShape) });
     } catch (error) { next(error); }
   });

@@ -609,9 +609,9 @@ app.get('/api/channels/:handle', async (req, res, next) => {
     const [feed, subResult, playlistResult] = await Promise.all([
       loadCards({ ownerSub: row.sub, userSub: auth?.session.sub, viewerType: auth?.session.viewerType || 'normal', limit: MAX_LIST }),
       auth ? pool.query('SELECT 1 FROM subscriptions WHERE subscriber_sub=$1 AND channel_sub=$2', [auth.session.sub, row.sub]) : Promise.resolve({ rowCount: 0 }),
-      pool.query(`SELECT p.id,p.name,p.description,COUNT(i.video_id)::bigint AS videos_count FROM playlists p LEFT JOIN playlist_items i ON i.playlist_id=p.id WHERE p.owner_sub=$1 AND p.is_creator_playlist=TRUE AND p.is_public=TRUE GROUP BY p.id ORDER BY p.updated_at DESC`,[row.sub])
+      pool.query(`SELECT p.id,p.name,p.description,p.is_premium,p.price_bdt,COUNT(i.video_id)::bigint AS videos_count FROM playlists p LEFT JOIN playlist_items i ON i.playlist_id=p.id WHERE p.owner_sub=$1 AND p.is_creator_playlist=TRUE AND p.is_public=TRUE GROUP BY p.id ORDER BY p.updated_at DESC`,[row.sub])
     ]);
-    res.json({ profile: publicProfile(row), videos: feed.videos.filter(video => video.visibility === 'Public'), creatorPlaylists:playlistResult.rows.map(p=>({id:p.id,name:p.name,description:p.description,videosCount:Number(p.videos_count)})), subscribersCount: Number(row.subscribers_count), subscribed: subResult.rowCount > 0, isOwner: auth?.session.sub === row.sub });
+    res.json({ profile: publicProfile(row), videos: feed.videos.filter(video => video.visibility === 'Public'), creatorPlaylists:playlistResult.rows.map(p=>({id:p.id,name:p.name,description:p.description,isPremium:Boolean(p.is_premium),priceBdt:Number(p.price_bdt)||0,videosCount:Number(p.videos_count)})), subscribersCount: Number(row.subscribers_count), subscribed: subResult.rowCount > 0, isOwner: auth?.session.sub === row.sub });
   } catch (error) { next(error); }
 });
 app.post('/api/channels/:handle/subscribe', requireAuth, requireActive, async (req, res, next) => {

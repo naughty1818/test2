@@ -12,6 +12,6 @@ test('admin panel overrides global #app dark-theme typography with readable colo
 
 test('admin task bar uses a green background and assets are cache-busted',()=>{
   assert.match(css,/#app\.admin-shell>\.console-tabs\.admin-tabs\s*\{[^}]*background:#17683f/);
-  assert.match(html,/clipnest\.css\?v=admin-green-contrast-3/);
+  assert.match(html,/clipnest\.css\?v=creator-channel-experience-1/);
   assert.match(html,/console\.js\?v=admin-live-duties-2/);
 });
