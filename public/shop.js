@@ -29,8 +29,14 @@
   async function request(path, options) { return context().jsonFetch(path, options); }
   function productArt(product, large = false) {
     const art = $('div', { class: `shop-product-art${large ? ' shop-product-art-large' : ''}` });
-    if (product.imageUrl) art.append($('img', { src: product.imageUrl, alt: product.name || '', loading: 'lazy' }));
-    else if (product.videoId) art.append($('img', { src: `/api/videos/${encodeURIComponent(product.videoId)}/thumbnail`, alt: product.name || '', loading: 'lazy' }));
+    const src = product.imageUrl || (product.videoId ? `/api/videos/${encodeURIComponent(product.videoId)}/thumbnail` : '');
+    if (src) {
+      art.classList.add('image-loading');
+      const image = $('img', { src, alt: product.name || '', loading: large ? 'eager' : 'lazy', decoding: 'async', fetchpriority: large ? 'high' : 'auto' });
+      image.addEventListener('load', () => art.classList.remove('image-loading'), { once: true });
+      image.addEventListener('error', () => { art.classList.remove('image-loading'); art.classList.add('image-error'); image.remove(); }, { once: true });
+      art.append(image);
+    }
     art.append($('span', { text: product.category ? product.category.slice(0, 1) : '◆' }));
     return art;
   }

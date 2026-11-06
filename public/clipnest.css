@@ -2389,3 +2389,52 @@ body.studio-fullscreen .studio-content .console-actions button:hover { color:#14
 .channel-about-facts dd{margin:5px 0 0;color:#344338;font-size:12px;font-weight:750;overflow-wrap:anywhere}
 @media(max-width:900px){.channel-product-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.channel-subject-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:620px){.channel-cover{height:145px;padding:0 17px 17px}.channel-profile{gap:11px}.channel-actions{width:100%;flex-wrap:wrap}.channel-tabs{gap:10px}.channel-tabs .channel-tab-button{padding:0 9px;font-size:10px}.channel-upload-link{flex:0 0 auto}.channel-tab-content{padding:18px 0 28px}.channel-spotlight{grid-template-columns:1fr}.channel-spotlight-art{min-height:180px;aspect-ratio:16/8}.channel-spotlight-copy{padding:17px}.channel-store-banner{align-items:flex-start;flex-direction:column;padding:18px}.channel-store-link{margin:0}.channel-product-grid{grid-template-columns:1fr 1fr;gap:10px}.channel-product-copy{padding:10px 10px 6px}.channel-product-copy h3{font-size:12px}.channel-product-copy p{font-size:10px}.channel-product-meta{align-items:flex-start;flex-direction:column;gap:3px}.channel-product-actions{align-items:stretch;flex-direction:column;padding:7px 9px 10px}.channel-product-actions .outline-cta,.channel-product-actions .primary-cta{width:100%}.channel-subject-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.organization-updates-list{grid-template-columns:1fr}.channel-about-card{grid-template-columns:1fr;gap:16px;padding:16px}.channel-about-facts{grid-template-columns:1fr 1fr}}
+
+
+/* Image loading states: keep media boxes stable and show a lightweight shimmer until load/error. */
+@keyframes atharo-image-shimmer { to { background-position: -200% 0; } }
+.video-thumb.image-loading,
+.hero-panel.image-loading,
+.shop-product-art.image-loading,
+.channel-spotlight-art.image-loading,
+.channel-product-art.image-loading,
+.premium-art.image-loading,
+.talent-card-image-wrap.image-loading {
+  background-image: linear-gradient(105deg, #ffffff08 25%, #ffffff20 40%, #ffffff08 55%);
+  background-size: 200% 100%;
+  animation: atharo-image-shimmer 1.35s linear infinite;
+}
+.video-thumb.image-loading img,
+.shop-product-art.image-loading img,
+.channel-spotlight-art.image-loading img,
+.channel-product-art.image-loading img,
+.premium-art.image-loading img,
+.talent-card-image-wrap.image-loading img { opacity: 0; }
+.video-thumb img,
+.shop-product-art img,
+.channel-spotlight-art img,
+.channel-product-art img,
+.premium-art img,
+.talent-card-image-wrap img { transition: opacity .2s ease; }
+.image-error { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .video-thumb.image-loading,
+  .hero-panel.image-loading,
+  .shop-product-art.image-loading,
+  .channel-spotlight-art.image-loading,
+  .channel-product-art.image-loading,
+  .premium-art.image-loading,
+  .talent-card-image-wrap.image-loading { animation: none; }
+}
+
+/* Talent catalog rows have predictable geometry so large result sets can be windowed safely. */
+.talent-card { height: 460px; min-height: 0; display: flex; flex-direction: column; }
+.talent-card-image-wrap { position: relative; width: 100%; height: 175px; flex: 0 0 175px; overflow: hidden; background-color: #14281f; }
+.talent-card-image-wrap img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.talent-card-placeholder-label { position: absolute; inset: 0; display: grid; place-items: center; color: #9bc9a2; font-weight: 800; letter-spacing: .12em; }
+.talent-card-copy { min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.talent-card-copy h2 { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.talent-card-copy p { display: -webkit-box; max-height: none; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+.talent-skills { max-height: 2.8em; overflow: hidden; }
+.talent-card-footer { margin-top: auto; }
+.talent-virtual-spacer { grid-column: 1 / -1; min-width: 0; pointer-events: none; }
